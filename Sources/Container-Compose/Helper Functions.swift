@@ -75,45 +75,92 @@ func resolveVariable(_ value: String, with envVars: [String: String]) -> String 
     return resolvedValue
 }
 
+/// A structure representing the result of a command-line process execution.
+struct CommandResult {
+    /// The standard output captured from the process.
+    let stdout: String
 
-/// Executes an external command using `/usr/bin/env`.
+    /// The standard error output captured from the process.
+    let stderr: String
+
+    /// The exit code returned by the process upon termination.
+    let exitCode: Int32
+}
+
+/// Runs a command-line tool asynchronously and captures its output and exit code.
+///
+/// This function uses async/await and `Process` to launch a command-line tool,
+/// returning a `CommandResult` containing the output, error, and exit code upon completion.
+///
 /// - Parameters:
-///   - command: The primary command to execute (e.g., "container").
-///   - arguments: An array of arguments for the command.
-///   - detach: A boolean indicating if the command should be run in a detached mode (for logging purposes here).
-func executeCommand(command: String, arguments: [String], detach: Bool) {
-    let process = Process()
-    process.launchPath = "/usr/bin/env" // Use env to ensure command is found in PATH
-    process.arguments = [command] + arguments
+///   - command: The full path to the executable to run (e.g., `/bin/ls`).
+///   - args: An array of arguments to pass to the command. Defaults to an empty array.
+/// - Returns: A `CommandResult` containing `stdout`, `stderr`, and `exitCode`.
+/// - Throws: An error if the process fails to launch.
+/// - Example:
+/// ```swift
+/// let result = try await runCommand("/bin/echo", args: ["Hello"])
+/// print(result.stdout) // "Hello\n"
+/// ```
+func runCommand(_ command: String, args: [String] = []) async throws -> CommandResult {
+    return try await withCheckedThrowingContinuation { continuation in
+        let process = Process()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
 
-    let outputPipe = Pipe()
-    let errorPipe = Pipe()
-    process.standardOutput = outputPipe
-    process.standardError = errorPipe
+        process.executableURL = URL(fileURLWithPath: command)
+        process.arguments = args
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
 
-    do {
-        try process.run() // Start the process
-        
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-
-        // Print captured stdout and stderr
-        if let output = String(data: outputData, encoding: .utf8), !output.isEmpty {
-            print("Container stdout: \(output)")
-        }
-        if let error = String(data: errorData, encoding: .utf8), !error.isEmpty {
-            fputs("Container stderr: \(error)\n", stderr)
-        }
-
-        process.waitUntilExit() // Wait for the process to complete
-
-        // Check for non-zero exit status
-        if process.terminationStatus != 0 {
-            fputs("Error: Command '\(command) \(arguments.joined(separator: " "))' exited with status \(process.terminationStatus)\n", stderr)
+        do {
+            try process.run()
+        } catch {
+            continuation.resume(throwing: error)
+            return
         }
 
-    } catch {
-        fputs("Error executing command '\(command) \(arguments.joined(separator: " "))': \(error.localizedDescription)\n", stderr)
-        exit(1) // Exit if command execution fails
+        process.terminationHandler = { proc in
+            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+
+            let result = CommandResult(
+                stdout: String(decoding: stdoutData, as: UTF8.self),
+                stderr: String(decoding: stderrData, as: UTF8.self),
+                exitCode: proc.terminationStatus
+            )
+
+            continuation.resume(returning: result)
+        }
     }
+}
+
+/// Launches a detached command-line process without waiting for its output or termination.
+///
+/// This function is useful when you want to spawn a process that runs in the background
+/// independently of the current application. Output streams are redirected to null devices.
+///
+/// - Parameters:
+///   - command: The full path to the executable to launch (e.g., `/usr/bin/open`).
+///   - args: An array of arguments to pass to the command. Defaults to an empty array.
+/// - Returns: The `Process` instance that was launched, in case you want to retain or manage it.
+/// - Throws: An error if the process fails to launch.
+/// - Example:
+/// ```swift
+/// try launchDetachedCommand("/usr/bin/open", args: ["/Applications/Calculator.app"])
+/// ```
+@discardableResult
+func launchDetachedCommand(_ command: String, args: [String] = []) throws -> Process {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: command)
+    process.arguments = args
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    process.standardInput = FileHandle.nullDevice
+
+    // Set this to true to run independently of the launching app
+    process.qualityOfService = .background
+
+    try process.run()
+    return process
 }

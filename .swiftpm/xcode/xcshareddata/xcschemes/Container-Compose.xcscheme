@@ -55,6 +55,10 @@
             argument = "up"
             isEnabled = "YES">
          </CommandLineArgument>
+         <CommandLineArgument
+            argument = "--cwd=/Users/mcrich/Xcode/Assignment-Manager-API"
+            isEnabled = "YES">
+         </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
