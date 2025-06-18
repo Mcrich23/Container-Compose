@@ -39,8 +39,9 @@ struct Application: AsyncParsableCommand {
     var envFilePath: String { "\(cwd)/.env" } // Path to optional .env file
 //    
     private var fileManager: FileManager { FileManager.default }
+    private var projectName: String?
     
-    func run() async throws {
+    mutating func run() async throws {
         // Read docker-compose.yml content
         guard let yamlData = fileManager.contents(atPath: dockerComposePath) else {
             throw YamlError.dockerfileNotFound(dockerComposePath)
@@ -60,7 +61,6 @@ struct Application: AsyncParsableCommand {
         }
 
         // Determine project name for container naming
-        let projectName: String
         if let name = dockerCompose.name {
             projectName = name
             print("Info: Docker Compose project name parsed as: \(name)")
@@ -79,6 +79,27 @@ struct Application: AsyncParsableCommand {
             }
             print("--- Networks Processed ---\n")
         }
+        
+        // Process top-level volumes
+        // This creates named volumes defined in the docker-compose.yml
+        if let volumes = dockerCompose.volumes {
+            print("\n--- Processing Volumes ---")
+            for (volumeName, volumeConfig) in volumes {
+                await createVolumeHardLink(name: volumeName, config: volumeConfig)
+            }
+            print("--- Volumes Processed ---\n")
+        }
+    }
+    
+    func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
+        guard let projectName else { return }
+        let actualVolumeName = volumeConfig.name ?? volumeName // Use explicit name or key as name
+        
+        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(volumeName)")
+        let volumePath = volumeUrl.path(percentEncoded: false)
+        
+        print("Warning: Volume source '\(volumeName)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead.")
+        try? fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
     }
     
     func setupNetwork(name networkName: String, config networkConfig: Network) async throws {
