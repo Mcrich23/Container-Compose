@@ -102,9 +102,3 @@ If you encounter issues or have questions, please open an [Issue](https://github
 ---
 
 Happy Coding! 🚀
-
-```markdown
-[![homebrew](https://img.shields.io/badge/install%20with-homebrew-brightgreen)](https://github.com/Mcrich23/homebrew-formulae)
-````
-
-Or if you want to auto-detect arch and provide links for x86\_64 vs arm64 downloads in the future.
