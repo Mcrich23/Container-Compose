@@ -41,6 +41,7 @@ struct Application: AsyncParsableCommand {
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
     private var environmentVariables: [String : String] = [:]
+    private var containerIps: [String : String] = [:]
     
     mutating func run() async throws {
         // Read docker-compose.yml content
@@ -94,28 +95,14 @@ struct Application: AsyncParsableCommand {
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
         
-        var serviceRunsCommandArgSets: [(serviceName: String, service: Service, runArgs: [String])] = []
-        for (serviceName, service) in dockerCompose.services {
-            let runCommandArgs = try await configService(service, serviceName: serviceName, from: dockerCompose)
-            serviceRunsCommandArgSets.append((serviceName, service, runCommandArgs))
+        var services: [(serviceName: String, service: Service)] = dockerCompose.services.map({ ($0, $1) })
+        services = try topoSortConfiguredServices(services)
+        
+        print(services.map(\.serviceName))
+        for (serviceName, service) in services {
+            try await configService(service, serviceName: serviceName, from: dockerCompose)
         }
         
-        serviceRunsCommandArgSets = try topoSortConfiguredServices(serviceRunsCommandArgSets)
-        
-        serviceRunsCommandArgSets.forEach { serviceName, _, runCommandArgs in
-            Task { [self] in
-                
-                @Sendable
-                func handleOutput(_ string: String) {
-                    print("\(serviceName): \(string)")
-                }
-                
-                print("\nStarting service: \(serviceName)")
-                print("Starting \(serviceName)")
-                print("----------------------------------------\n")
-                let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
-            }
-        }
         await waitForever()
     }
     
@@ -126,16 +113,81 @@ struct Application: AsyncParsableCommand {
         fatalError("unreachable")
     }
     
+    func getIPForRunningService(_ serviceName: String) async throws -> String? {
+        guard let projectName else { return nil }
+        
+        let containerName = "\(projectName)-\(serviceName)"
+        
+        // Run the container list command
+        let containerCommandOutput = try await runCommand("container", args: ["list", "-a"])
+        let allLines = containerCommandOutput.stdout.components(separatedBy: .newlines)
+        
+        // Find the line matching the full container name
+        guard let matchingLine = allLines.first(where: { $0.contains(containerName) }) else {
+            return nil
+        }
+
+        // Extract IP using regex
+        let pattern = #"\b(?:\d{1,3}\.){3}\d{1,3}\b"#
+        let regex = try NSRegularExpression(pattern: pattern)
+        
+        let range = NSRange(matchingLine.startIndex..<matchingLine.endIndex, in: matchingLine)
+        if let match = regex.firstMatch(in: matchingLine, range: range),
+           let matchRange = Range(match.range, in: matchingLine) {
+            return String(matchingLine[matchRange])
+        }
+        
+        return nil
+    }
+    
+    /// Repeatedly checks `container list -a` until the given container is listed as `running`.
+    /// - Parameters:
+    ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
+    ///   - timeout: Max seconds to wait before failing.
+    ///   - interval: How often to poll (in seconds).
+    /// - Returns: `true` if the container reached "running" state within the timeout.
+    func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
+        guard let projectName else { return }
+        let containerName = "\(projectName)-\(serviceName)"
+        
+        let deadline = Date().addingTimeInterval(timeout)
+        
+        while Date() < deadline {
+            let result = try await runCommand("container", args: ["list", "-a"])
+            let lines = result.stdout
+                .split(separator: "\n")
+                .map(String.init)
+            
+            if lines.contains(where: { $0.contains(containerName) && $0.contains("running") }) {
+                return
+            }
+            
+            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        
+        throw NSError(domain: "ContainerWait", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+        ])
+    }
+    
     // MARK: Compose Top Level Functions
+    
+    mutating func updateEnvironmentWithServiceIP(_ serviceName: String) async throws {
+        let ip = try await getIPForRunningService(serviceName)
+        self.containerIps[serviceName] = ip
+        for (key, value) in environmentVariables.map({ ($0, $1) }) where value == serviceName {
+            self.environmentVariables[key] = ip ?? value
+        }
+    }
     
     /// Returns the services in topological order based on `depends_on` relationships.
     func topoSortConfiguredServices(
-        _ services: [(serviceName: String, service: Service, runArgs: [String])]
-    ) throws -> [(serviceName: String, service: Service, runArgs: [String])] {
+        _ services: [(serviceName: String, service: Service)]
+    ) throws -> [(serviceName: String, service: Service)] {
         
         var visited = Set<String>()
         var visiting = Set<String>()
-        var sorted: [(String, Service, [String])] = []
+        var sorted: [(String, Service)] = []
 
         func visit(_ name: String) throws {
             guard let serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
@@ -156,7 +208,7 @@ struct Application: AsyncParsableCommand {
             sorted.append(serviceTuple)
         }
 
-        for (serviceName, _, _) in services {
+        for (serviceName, _) in services {
             if !visited.contains(serviceName) {
                 try visit(serviceName)
             }
@@ -220,7 +272,7 @@ struct Application: AsyncParsableCommand {
     }
     
     // MARK: Compose Service Level Functions
-    func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws -> [String] {
+    mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
         guard let projectName else { throw ComposeError.invalidProjectName }
         var imageToRun: String
 
@@ -292,16 +344,29 @@ struct Application: AsyncParsableCommand {
         }
 
         if let serviceEnv = service.environment {
-            combinedEnv.merge(serviceEnv) { (_, new) in new } // Service env overrides .env files
+            combinedEnv.merge(serviceEnv) { (old, new) in
+                if !new.contains("${") {
+                    return new
+                } else {
+                    return old
+                }
+            } // Service env overrides .env files
         }
         
+        // Fill in variables
         combinedEnv = combinedEnv.mapValues({ value in
             guard value.contains("${") else { return value }
             
             let variableName = String(value.replacingOccurrences(of: "${", with: "").dropLast())
             return combinedEnv[variableName] ?? value
         })
+        
+        // Fill in IPs
+        combinedEnv = combinedEnv.mapValues({ value in
+            containerIps[value] ?? value
+        })
 
+        print("Combined Env: \(combinedEnv)")
         // MARK: Spinning Spot
         // Add environment variables to run command
         for (key, value) in combinedEnv {
@@ -393,7 +458,21 @@ struct Application: AsyncParsableCommand {
             runCommandArgs.append(contentsOf: commandParts)
         }
         
-        return runCommandArgs
+        Task { [self] in
+            
+            @Sendable
+            func handleOutput(_ string: String) {
+                print("\(serviceName): \(string)")
+            }
+            
+            print("\nStarting service: \(serviceName)")
+            print("Starting \(serviceName)")
+            print("----------------------------------------\n")
+            let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
+        }
+        
+        try await waitUntilServiceIsRunning(serviceName)
+        try await updateEnvironmentWithServiceIP(serviceName)
     }
     
     /// Builds Docker Service
