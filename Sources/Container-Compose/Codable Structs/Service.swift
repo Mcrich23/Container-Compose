@@ -7,7 +7,7 @@
 
 
 /// Represents a single service definition within the `services` section.
-struct Service: Codable {
+struct Service: Codable, Hashable {
     let image: String? // Docker image name
     let build: Build? // Build configuration if the service is built from a Dockerfile
     let deploy: Deploy? // Deployment configuration (primarily for Swarm)

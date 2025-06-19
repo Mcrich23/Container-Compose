@@ -7,7 +7,7 @@
 
 
 /// Resource constraints for deployment.
-struct DeployResources: Codable {
+struct DeployResources: Codable, Hashable {
     let limits: ResourceLimits? // Hard limits on resources
     let reservations: ResourceReservations? // Guarantees for resources
 }

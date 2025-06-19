@@ -7,7 +7,7 @@
 
 
 /// Represents the `build` configuration for a service.
-struct Build: Codable {
+struct Build: Codable, Hashable {
     let context: String // Path to the build context
     let dockerfile: String? // Optional path to the Dockerfile within the context
     let args: [String: String]? // Build arguments

@@ -7,7 +7,7 @@
 
 
 /// Represents a service's usage of a config.
-struct ServiceConfig: Codable {
+struct ServiceConfig: Codable, Hashable {
     let source: String // Name of the config being used
     let target: String? // Path in the container where the config will be mounted
     let uid: String? // User ID for the mounted config file

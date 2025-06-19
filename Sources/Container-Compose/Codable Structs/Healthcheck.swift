@@ -7,7 +7,7 @@
 
 
 /// Healthcheck configuration for a service.
-struct Healthcheck: Codable {
+struct Healthcheck: Codable, Hashable {
     let test: [String]? // Command to run to check health
     let start_period: String? // Grace period for the container to start
     let interval: String? // How often to run the check

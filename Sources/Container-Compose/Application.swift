@@ -94,15 +94,15 @@ struct Application: AsyncParsableCommand {
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
         
-        let services = try await sortedServicesByDependency(dockerCompose.services)
-        
-        var serviceRunsCommandArgSets: [String : [String]] = [:]
-        for (serviceName, service) in services {
+        var serviceRunsCommandArgSets: [(serviceName: String, service: Service, runArgs: [String])] = []
+        for (serviceName, service) in dockerCompose.services {
             let runCommandArgs = try await configService(service, serviceName: serviceName, from: dockerCompose)
-            serviceRunsCommandArgSets[serviceName] = runCommandArgs
+            serviceRunsCommandArgSets.append((serviceName, service, runCommandArgs))
         }
         
-        serviceRunsCommandArgSets.forEach { serviceName, runCommandArgs in
+        serviceRunsCommandArgSets = try topoSortConfiguredServices(serviceRunsCommandArgSets)
+        
+        serviceRunsCommandArgSets.forEach { serviceName, _, runCommandArgs in
             Task { [self] in
                 
                 @Sendable
@@ -129,36 +129,40 @@ struct Application: AsyncParsableCommand {
     // MARK: Compose Top Level Functions
     
     /// Returns the services in topological order based on `depends_on` relationships.
-    func sortedServicesByDependency(_ services: [String: Service]) async throws -> [String: Service] {
+    func topoSortConfiguredServices(
+        _ services: [(serviceName: String, service: Service, runArgs: [String])]
+    ) throws -> [(serviceName: String, service: Service, runArgs: [String])] {
+        
         var visited = Set<String>()
         var visiting = Set<String>()
-        var sorted: [(String, Service)] = []
+        var sorted: [(String, Service, [String])] = []
 
         func visit(_ name: String) throws {
-            guard let service = services[name] else { return }
+            guard let serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
 
             if visiting.contains(name) {
                 throw NSError(domain: "ComposeError", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
                 ])
             }
-
             guard !visited.contains(name) else { return }
 
             visiting.insert(name)
-            for dep in service.depends_on ?? [] {
-                try visit(dep)
+            for depName in serviceTuple.service.depends_on ?? [] {
+                try visit(depName)
             }
             visiting.remove(name)
             visited.insert(name)
-            sorted.append((name, service))
+            sorted.append(serviceTuple)
         }
 
-        for name in services.keys {
-            try visit(name)
+        for (serviceName, _, _) in services {
+            if !visited.contains(serviceName) {
+                try visit(serviceName)
+            }
         }
 
-        return Dictionary(uniqueKeysWithValues: sorted)
+        return sorted
     }
     
     func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
@@ -495,7 +499,7 @@ struct Application: AsyncParsableCommand {
             // Host path exists and is a directory, add the volume
             runCommandArgs.append("-v")
             // Reconstruct the volume string without mode, ensuring it's source:destination
-            runCommandArgs.append("\(source):\(destination)") // Use original source for command argument
+            runCommandArgs.append("\"\(volumePath):\(destination)\"") // Use original source for command argument
         }
         
         return runCommandArgs

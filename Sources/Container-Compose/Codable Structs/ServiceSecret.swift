@@ -7,7 +7,7 @@
 
 
 /// Represents a service's usage of a secret.
-struct ServiceSecret: Codable {
+struct ServiceSecret: Codable, Hashable {
     let source: String // Name of the secret being used
     let target: String? // Path in the container where the secret will be mounted
     let uid: String? // User ID for the mounted secret file

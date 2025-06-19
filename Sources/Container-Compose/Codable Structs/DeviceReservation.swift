@@ -7,7 +7,7 @@
 
 
 /// Device reservations for GPUs or other devices.
-struct DeviceReservation: Codable {
+struct DeviceReservation: Codable, Hashable {
     let capabilities: [String]? // Device capabilities
     let driver: String? // Device driver
     let count: String? // Number of devices
