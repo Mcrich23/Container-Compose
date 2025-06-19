@@ -72,6 +72,8 @@ struct Application: AsyncParsableCommand {
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
         }
         
+        try await removeOldStuff()
+        
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
         if let networks = dockerCompose.networks {
@@ -168,6 +170,36 @@ struct Application: AsyncParsableCommand {
         throw NSError(domain: "ContainerWait", code: 1, userInfo: [
             NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
         ])
+    }
+    
+    func removeOldStuff() async throws {
+        guard let projectName else { return }
+        let containers = try await getContainersWithPrefix(projectName)
+        
+        for container in containers {
+            print("Removing old container: \(container)")
+            do {
+                try await runCommand("container", args: ["stop", container])
+                try await runCommand("container", args: ["rm", container])
+            } catch {
+                print(error)
+            }
+        }
+    }
+    
+    /// Returns the names of all containers whose names start with a given prefix.
+    /// - Parameter prefix: The container name prefix (e.g. `"Assignment"`).
+    /// - Returns: An array of matching container names.
+    func getContainersWithPrefix(_ prefix: String) async throws -> [String] {
+        let result = try await runCommand("container", args: ["list", "-a"])
+        let lines = result.stdout.split(separator: "\n")
+
+        return lines.compactMap { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let components = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            guard let name = components.first else { return nil }
+            return name.hasPrefix(prefix) ? String(name) : nil
+        }
     }
     
     // MARK: Compose Top Level Functions
@@ -274,6 +306,7 @@ struct Application: AsyncParsableCommand {
     // MARK: Compose Service Level Functions
     mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
         guard let projectName else { throw ComposeError.invalidProjectName }
+        
         var imageToRun: String
 
         // Handle 'build' configuration
@@ -366,7 +399,6 @@ struct Application: AsyncParsableCommand {
             containerIps[value] ?? value
         })
 
-        print("Combined Env: \(combinedEnv)")
         // MARK: Spinning Spot
         // Add environment variables to run command
         for (key, value) in combinedEnv {
@@ -471,8 +503,12 @@ struct Application: AsyncParsableCommand {
             let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
         }
         
-        try await waitUntilServiceIsRunning(serviceName)
-        try await updateEnvironmentWithServiceIP(serviceName)
+        do {
+            try await waitUntilServiceIsRunning(serviceName)
+            try await updateEnvironmentWithServiceIP(serviceName)
+        } catch {
+            print(error)
+        }
     }
     
     /// Builds Docker Service
@@ -618,6 +654,7 @@ extension Application {
     /// let result = try await runCommand("/bin/echo", args: ["Hello"])
     /// print(result.stdout) // "Hello\n"
     /// ```
+    @discardableResult
     func runCommand(_ command: String, args: [String] = []) async throws -> CommandResult {
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
