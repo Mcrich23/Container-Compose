@@ -93,8 +93,26 @@ struct Application: AsyncParsableCommand {
         
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
+        
+        var serviceRunsCommandArgSets: [String : [String]] = [:]
         for (serviceName, service) in dockerCompose.services {
-            try await configService(service, serviceName: serviceName, from: dockerCompose)
+            let runCommandArgs = try await configService(service, serviceName: serviceName, from: dockerCompose)
+            serviceRunsCommandArgSets[serviceName] = runCommandArgs
+        }
+        
+        serviceRunsCommandArgSets.forEach { serviceName, runCommandArgs in
+            Task { [self] in
+                
+                @Sendable
+                func handleOutput(_ string: String) {
+                    print("\(serviceName): \(string)")
+                }
+                
+                print("\nStarting service: \(serviceName)")
+                print("Starting \(serviceName)")
+                print("----------------------------------------\n")
+                let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
+            }
         }
     }
     
@@ -155,7 +173,7 @@ struct Application: AsyncParsableCommand {
     }
     
     // MARK: Compose Service Level Functions
-    func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
+    func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws -> [String] {
         guard let projectName else { throw ComposeError.invalidProjectName }
         var imageToRun: String
 
@@ -211,7 +229,7 @@ struct Application: AsyncParsableCommand {
         // Add volume mounts
         if let volumes = service.volumes {
             for volume in volumes {
-                let args = await configVolume(volume)
+                let args = try await configVolume(volume)
                 runCommandArgs.append(contentsOf: args)
             }
         }
@@ -291,48 +309,44 @@ struct Application: AsyncParsableCommand {
         if service.read_only == true {
             runCommandArgs.append("--read-only")
         }
+
+        // Handle service-level configs (note: still only parsing/logging, not attaching)
+        if let serviceConfigs = service.configs {
+            print("Note: Service '\(serviceName)' defines 'configs'. Docker Compose 'configs' are primarily used for Docker Swarm deployed stacks and are not directly translatable to 'container run' commands.")
+            print("This tool will parse 'configs' definitions but will not create or attach them to containers during 'container run'.")
+            for serviceConfig in serviceConfigs {
+                print("  - Config: '\(serviceConfig.source)' (Target: \(serviceConfig.target ?? "default location"), UID: \(serviceConfig.uid ?? "default"), GID: \(serviceConfig.gid ?? "default"), Mode: \(serviceConfig.mode?.description ?? "default"))")
+            }
+        }
 //
-//        // Handle service-level configs (note: still only parsing/logging, not attaching)
-//        if let serviceConfigs = service.configs {
-//            print("Note: Service '\(serviceName)' defines 'configs'. Docker Compose 'configs' are primarily used for Docker Swarm deployed stacks and are not directly translatable to 'container run' commands.")
-//            print("This tool will parse 'configs' definitions but will not create or attach them to containers during 'container run'.")
-//            for serviceConfig in serviceConfigs {
-//                print("  - Config: '\(serviceConfig.source)' (Target: \(serviceConfig.target ?? "default location"), UID: \(serviceConfig.uid ?? "default"), GID: \(serviceConfig.gid ?? "default"), Mode: \(serviceConfig.mode?.description ?? "default"))")
-//            }
-//        }
-//
-//        // Handle service-level secrets (note: still only parsing/logging, not attaching)
-//        if let serviceSecrets = service.secrets {
-//            print("Note: Service '\(serviceName)' defines 'secrets'. Docker Compose 'secrets' are primarily used for Docker Swarm deployed stacks and are not directly translatable to 'container run' commands.")
-//            print("This tool will parse 'secrets' definitions but will not create or attach them to containers during 'container run'.")
-//            for serviceSecret in serviceSecrets {
-//                print("  - Secret: '\(serviceSecret.source)' (Target: \(serviceSecret.target ?? "default location"), UID: \(serviceSecret.uid ?? "default"), GID: \(serviceSecret.gid ?? "default"), Mode: \(serviceSecret.mode?.description ?? "default"))")
-//            }
-//        }
-//
-//        // Add interactive and TTY flags
-//        if service.stdin_open == true {
-//            runCommandArgs.append("-i") // --interactive
-//        }
-//        if service.tty == true {
-//            runCommandArgs.append("-t") // --tty
-//        }
-//
-//        runCommandArgs.append(imageToRun) // Add the image name as the final argument before command/entrypoint
-//
-//        // Add entrypoint or command
-//        if let entrypointParts = service.entrypoint {
-//            runCommandArgs.append("--entrypoint")
-//            runCommandArgs.append(contentsOf: entrypointParts)
-//        } else if let commandParts = service.command {
-//            runCommandArgs.append(contentsOf: commandParts)
-//        }
-//
-//        print("\nStarting service: \(serviceName)")
-//        print("Executing container run: container run \(runCommandArgs.joined(separator: " "))")
-//        executeCommand(command: "container", arguments: ["run"] + runCommandArgs, detach: detachFlag)
-        print("Service \(serviceName) command execution initiated.")
-        print("----------------------------------------\n")
+        // Handle service-level secrets (note: still only parsing/logging, not attaching)
+        if let serviceSecrets = service.secrets {
+            print("Note: Service '\(serviceName)' defines 'secrets'. Docker Compose 'secrets' are primarily used for Docker Swarm deployed stacks and are not directly translatable to 'container run' commands.")
+            print("This tool will parse 'secrets' definitions but will not create or attach them to containers during 'container run'.")
+            for serviceSecret in serviceSecrets {
+                print("  - Secret: '\(serviceSecret.source)' (Target: \(serviceSecret.target ?? "default location"), UID: \(serviceSecret.uid ?? "default"), GID: \(serviceSecret.gid ?? "default"), Mode: \(serviceSecret.mode?.description ?? "default"))")
+            }
+        }
+
+        // Add interactive and TTY flags
+        if service.stdin_open == true {
+            runCommandArgs.append("-i") // --interactive
+        }
+        if service.tty == true {
+            runCommandArgs.append("-t") // --tty
+        }
+
+        runCommandArgs.append(imageToRun) // Add the image name as the final argument before command/entrypoint
+
+        // Add entrypoint or command
+        if let entrypointParts = service.entrypoint {
+            runCommandArgs.append("--entrypoint")
+            runCommandArgs.append(contentsOf: entrypointParts)
+        } else if let commandParts = service.command {
+            runCommandArgs.append(contentsOf: commandParts)
+        }
+        
+        return runCommandArgs
     }
     
     /// Builds Docker Service
@@ -382,7 +396,7 @@ struct Application: AsyncParsableCommand {
         return imageToRun
     }
     
-    func configVolume(_ volume: String) async -> [String] {
+    func configVolume(_ volume: String) async throws -> [String] {
         let resolvedVolume = resolveVariable(volume, with: environmentVariables)
         
         var runCommandArgs: [String] = []
