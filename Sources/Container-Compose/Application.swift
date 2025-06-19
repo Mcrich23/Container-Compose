@@ -14,7 +14,7 @@ enum Action: String, ExpressibleByArgument, Codable {
         self.init(rawValue: argument)
     }
     
-    case up
+    case up, down
 }
 
 @main
@@ -27,7 +27,7 @@ struct Application: AsyncParsableCommand {
     @Argument(help: "Directs what container-compose should do")
     var action: Action
     
-    @Flag(name: [.customShort("d"), .customLong("detach")], help: "Detatches from container logs. Note: If you do NOT detatch, killing this process will NOT kill the container,")
+    @Flag(name: [.customShort("d"), .customLong("detach")], help: "Detatches from container logs. Note: If you do NOT detatch, killing this process will NOT kill the container. To kill the container, run container-compose down")
     var detatch: Bool = false
     
     @Flag(name: [.customShort("b"), .customLong("build")])
@@ -74,6 +74,20 @@ struct Application: AsyncParsableCommand {
             projectName = URL(fileURLWithPath: cwd).lastPathComponent // Default to directory name
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
         }
+        
+        switch action {
+        case .up:
+            try await up(dockerCompose: dockerCompose)
+        case .down:
+            try await down()
+        }
+    }
+    
+    func down() async throws {
+        try await stopOldStuff(remove: false)
+    }
+    
+    mutating func up(dockerCompose: DockerCompose) async throws {
         
         try await stopOldStuff(remove: true)
         
