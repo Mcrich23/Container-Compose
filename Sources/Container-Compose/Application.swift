@@ -94,8 +94,10 @@ struct Application: AsyncParsableCommand {
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
         
+        let services = try sortedServicesByDependency(dockerCompose.services)
+        
         var serviceRunsCommandArgSets: [String : [String]] = [:]
-        for (serviceName, service) in dockerCompose.services {
+        for (serviceName, service) in services {
             let runCommandArgs = try await configService(service, serviceName: serviceName, from: dockerCompose)
             serviceRunsCommandArgSets[serviceName] = runCommandArgs
         }
@@ -117,6 +119,39 @@ struct Application: AsyncParsableCommand {
     }
     
     // MARK: Compose Top Level Functions
+    
+    /// Returns the services in topological order based on `depends_on` relationships.
+    func sortedServicesByDependency(_ services: [String: Service]) throws -> [String: Service] {
+        var visited = Set<String>()
+        var visiting = Set<String>()
+        var sorted: [(String, Service)] = []
+
+        func visit(_ name: String) throws {
+            guard let service = services[name] else { return }
+
+            if visiting.contains(name) {
+                throw NSError(domain: "ComposeError", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
+                ])
+            }
+
+            guard !visited.contains(name) else { return }
+
+            visiting.insert(name)
+            for dep in service.depends_on ?? [] {
+                try visit(dep)
+            }
+            visiting.remove(name)
+            visited.insert(name)
+            sorted.append((name, service))
+        }
+
+        for name in services.keys {
+            try visit(name)
+        }
+
+        return Dictionary(uniqueKeysWithValues: sorted)
+    }
     
     func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
         guard let projectName else { return }
