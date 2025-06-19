@@ -108,7 +108,9 @@ struct Application: AsyncParsableCommand {
             try await configService(service, serviceName: serviceName, from: dockerCompose)
         }
         
-        await waitForever()
+        if !detatch {
+            await waitForever()
+        }
     }
     
     func waitForever() async -> Never {
