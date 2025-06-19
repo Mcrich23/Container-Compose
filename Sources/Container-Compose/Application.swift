@@ -8,6 +8,7 @@
 import Foundation
 import Yams
 import ArgumentParser
+import Rainbow
 
 @main
 struct Application: AsyncParsableCommand {
@@ -30,4 +31,8 @@ struct CommandResult {
 
     /// The exit code returned by the process upon termination.
     let exitCode: Int32
+}
+
+extension NamedColor: Codable {
+    
 }

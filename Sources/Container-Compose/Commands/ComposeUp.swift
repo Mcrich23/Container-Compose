@@ -8,8 +8,9 @@
 import Foundation
 import ArgumentParser
 import Yams
+@preconcurrency import Rainbow
 
-struct ComposeUp: AsyncParsableCommand {
+struct ComposeUp: AsyncParsableCommand, Sendable {
     static let configuration: CommandConfiguration = .init(
         commandName: "up",
         abstract: "Start containers with container-compose"
@@ -33,6 +34,11 @@ struct ComposeUp: AsyncParsableCommand {
     private var projectName: String?
     private var environmentVariables: [String : String] = [:]
     private var containerIps: [String : String] = [:]
+    private var containerConsoleColors: [String : NamedColor] = [:]
+    
+    private static let availableContainerConsoleColors: Set<NamedColor> = [
+        .blue, .cyan, .magenta, .lightBlack, .lightBlue, .lightCyan, .lightYellow, .yellow, .lightGreen, .green
+    ]
     
     mutating func run() async throws {
         // Read docker-compose.yml content
@@ -308,7 +314,9 @@ struct ComposeUp: AsyncParsableCommand {
             imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
         } else if let img = service.image {
             // Use specified image if no build config
-            imageToRun = resolveVariable(img, with: environmentVariables)
+            // Pull image if necessary
+            try await pullImage(img)
+            imageToRun = img
         } else {
             // Should not happen due to Service init validation, but as a fallback
             throw ComposeError.imageNotFound(serviceName)
@@ -484,11 +492,20 @@ struct ComposeUp: AsyncParsableCommand {
             runCommandArgs.append(contentsOf: commandParts)
         }
         
-        Task { [self] in
-            
+        var serviceColor: NamedColor = Self.availableContainerConsoleColors.randomElement()!
+        
+        if Array(Set(containerConsoleColors.values)).sorted(by: { $0.rawValue < $1.rawValue }) != Self.availableContainerConsoleColors.sorted(by: { $0.rawValue < $1.rawValue }) {
+            while containerConsoleColors.values.contains(serviceColor) {
+                serviceColor = Self.availableContainerConsoleColors.randomElement()!
+            }
+        }
+        
+        self.containerConsoleColors[serviceName] = serviceColor
+        
+        Task { [self, serviceColor] in
             @Sendable
-            func handleOutput(_ string: String) {
-                print("\(serviceName): \(string)")
+            func handleOutput(_ output: String) {
+                print("\(serviceName): \(output)".applyingColor(serviceColor))
             }
             
             print("\nStarting service: \(serviceName)")
@@ -502,6 +519,15 @@ struct ComposeUp: AsyncParsableCommand {
             try await updateEnvironmentWithServiceIP(serviceName)
         } catch {
             print(error)
+        }
+    }
+    
+    func pullImage(_ image: String) async throws {
+        print("Pulling Image \(image)...")
+        try await streamCommand("container", args: ["image", "pull", image]) { str in
+            print(str.blue)
+        } onStderr: { str in
+            print(str.red)
         }
     }
     
@@ -557,7 +583,7 @@ struct ComposeUp: AsyncParsableCommand {
         print("\n----------------------------------------")
         print("Building image for service: \(serviceName) (Tag: \(imageToRun))")
         print("Executing container build: container \(buildCommandArgs.joined(separator: " "))")
-        try await streamCommand("container", args: buildCommandArgs, onStdout: { print($0) }, onStderr: { print($0) })
+        try await streamCommand("container", args: buildCommandArgs, onStdout: { print($0.blue) }, onStderr: { print($0.red) })
         print("Image build for \(serviceName) completed.")
         print("----------------------------------------")
 
