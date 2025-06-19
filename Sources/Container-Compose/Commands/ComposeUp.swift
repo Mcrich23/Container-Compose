@@ -588,7 +588,7 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
         print("\n----------------------------------------")
         print("Building image for service: \(serviceName) (Tag: \(imageToRun))")
         print("Executing container build: container \(buildCommandArgs.joined(separator: " "))")
-        try await streamCommand("container", args: buildCommandArgs, onStdout: { print($0.blue) }, onStderr: { print($0.red) })
+        try await streamCommand("container", args: buildCommandArgs, onStdout: { print($0.blue) }, onStderr: { print($0.blue) })
         print("Image build for \(serviceName) completed.")
         print("----------------------------------------")
 
