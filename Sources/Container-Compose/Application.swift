@@ -27,7 +27,7 @@ struct Application: AsyncParsableCommand {
     @Argument(help: "Directs what container-compose should do")
     var action: Action
     
-    @Flag(name: [.customShort("d"), .customLong("detach")])
+    @Flag(name: [.customShort("d"), .customLong("detach")], help: "Detatches from container logs. Note: If you do NOT detatch, killing this process will NOT kill the container,")
     var detatch: Bool = false
     
     @Flag(name: [.customShort("b"), .customLong("build")])
@@ -75,7 +75,7 @@ struct Application: AsyncParsableCommand {
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
         }
         
-        try await removeOldStuff()
+        try await stopOldStuff(remove: true)
         
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
@@ -175,7 +175,7 @@ struct Application: AsyncParsableCommand {
         ])
     }
     
-    func removeOldStuff() async throws {
+    func stopOldStuff(remove: Bool) async throws {
         guard let projectName else { return }
         let containers = try await getContainersWithPrefix(projectName)
         
@@ -183,7 +183,9 @@ struct Application: AsyncParsableCommand {
             print("Removing old container: \(container)")
             do {
                 try await runCommand("container", args: ["stop", container])
-                try await runCommand("container", args: ["rm", container])
+                if remove {
+                    try await runCommand("container", args: ["rm", container])
+                }
             } catch {
             }
         }
@@ -529,14 +531,13 @@ struct Application: AsyncParsableCommand {
         let imageToRun = service.image ?? "\(serviceName):latest"
         
         let imagesList = try await runCommand("container", args: ["images", "list"]).stdout
-        if !rebuild, imagesList.contains(imageToRun) {
+        if !rebuild, imagesList.contains(serviceName) {
             return imageToRun
         }
         
         do {
             try await runCommand("container", args: ["images", "rm", imageToRun])
         } catch {
-            print(error)
         }
 
         buildCommandArgs.append("--tag")
