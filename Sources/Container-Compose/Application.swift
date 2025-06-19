@@ -9,14 +9,6 @@ import Foundation
 import Yams
 import ArgumentParser
 
-enum Action: String, ExpressibleByArgument, Codable {
-    init?(argument: String) {
-        self.init(rawValue: argument)
-    }
-    
-    case up, down
-}
-
 @main
 struct Application: AsyncParsableCommand {
     static let configuration: CommandConfiguration = .init(
