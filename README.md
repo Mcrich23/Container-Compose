@@ -17,56 +17,69 @@ Container-Compose brings (limited) Docker Compose support to [Apple Container](h
 
 - A Mac running macOS with Apple Container support (macOS Sonoma or later recommended)
 - Git
-- [Xcode command line tools](https://developer.apple.com/xcode/resources/) (for building)
+- [Xcode command line tools](https://developer.apple.com/xcode/resources/) (for building, if building from source)
 
 ### Installation
 
+You can install Container-Compose via **Homebrew** (recommended):
+
+```sh
+brew tap Mcrich23/formulae
+brew install container-compose
+````
+
+Or, build it from source:
+
 1. **Clone the repository:**
+
    ```sh
    git clone https://github.com/Mcrich23/Container-Compose.git
    cd Container-Compose
    ```
 
 2. **Build the executable:**
-   > _Note: Ensure you have the required toolchain (e.g., Swift, Go, etc.) installed for building the executable._
+
+   > *Note: Ensure you have Swift installed (or the required toolchain).*
+
    ```sh
-   # Example for Swift:
    swift build -c release
    ```
 
-   Adjust the build command above based on the technology used in this repository.
+3. **(Optional)**: Install globally
+
+   ```sh
+   install .build/release/container-compose /usr/local/bin/
+   ```
 
 ### Usage
 
-Currently, Container-Compose is only invoked by building and running the executable yourself.
+After installation, simply run:
 
-1. **Run the executable:**
-   ```sh
-   ./container-compose
-   ```
-   You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
+```sh
+container-compose
+```
 
-2. **Manage your Apple Containers** as defined in your Compose file.
+You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
 
 ### Directory Structure
 
 ```
 Container-Compose/
 ├── docker-compose.yml
-├── .env.example
+├── .env
 ├── README.md
 └── (source code and other configuration files)
 ```
 
-- `docker-compose.yml`: Your Compose specification.
-- `.env.example`: Template for environment variables.
-- `README.md`: Project documentation.
+* `docker-compose.yml`: Your Compose specification.
+* `.env`: Your environment variables.
+* `README.md`: Project documentation.
 
 ### Customization
 
-- **Add a new service:** Edit `docker-compose.yml` and define your new service under the `services:` section.
-- **Override configuration:** Use a `docker-compose.override.yml` for local development customizations.
-- **Persistent data:** Define named volumes in `docker-compose.yml` for data that should persist between container restarts.
+* **Add a new service:** Edit `docker-compose.yml` and define your new service under the `services:` section.
+* **Override configuration:** Use a `docker-compose.override.yml` for local development customizations.
+* **Persistent data:** Define named volumes in `docker-compose.yml` for data that should persist between container restarts.
 
 ## Contributing
 
@@ -89,3 +102,9 @@ If you encounter issues or have questions, please open an [Issue](https://github
 ---
 
 Happy Coding! 🚀
+
+```markdown
+[![homebrew](https://img.shields.io/badge/install%20with-homebrew-brightgreen)](https://github.com/Mcrich23/homebrew-formulae)
+````
+
+Or if you want to auto-detect arch and provide links for x86\_64 vs arm64 downloads in the future.
