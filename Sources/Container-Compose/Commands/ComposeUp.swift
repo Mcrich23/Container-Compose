@@ -523,6 +523,11 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
     }
     
     func pullImage(_ image: String) async throws {
+        let imageList = try await runCommand("container", args: ["images", "ls"]).stdout.replacingOccurrences(of: " ", with: "")
+        guard !imageList.contains(image.replacingOccurrences(of: ":", with: "")) else {
+            return
+        }
+        
         print("Pulling Image \(image)...")
         try await streamCommand("container", args: ["image", "pull", image]) { str in
             print(str.blue)
