@@ -40,6 +40,7 @@ struct Application: AsyncParsableCommand {
 //    
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
+    private var environmentVariables: [String : String] = [:]
     
     mutating func run() async throws {
         // Read docker-compose.yml content
@@ -52,7 +53,7 @@ struct Application: AsyncParsableCommand {
         let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
         
         // Load environment variables from .env file
-        let envVarsFromFile = loadEnvFile(path: envFilePath)
+        environmentVariables = loadEnvFile(path: envFilePath)
         
         // Handle 'version' field
         if let version = dockerCompose.version {
@@ -89,16 +90,24 @@ struct Application: AsyncParsableCommand {
             }
             print("--- Volumes Processed ---\n")
         }
+        
+        // Process each service defined in the docker-compose.yml
+        print("\n--- Processing Services ---")
+        for (serviceName, service) in dockerCompose.services {
+            try await configService(service, serviceName: serviceName)
+        }
     }
+    
+    // MARK: Compose Top Level Functions
     
     func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
         guard let projectName else { return }
         let actualVolumeName = volumeConfig.name ?? volumeName // Use explicit name or key as name
         
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(volumeName)")
+        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(actualVolumeName)")
         let volumePath = volumeUrl.path(percentEncoded: false)
         
-        print("Warning: Volume source '\(volumeName)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead.")
+        print("Warning: Volume source '\(actualVolumeName)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead.")
         try? fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
     }
     
@@ -143,5 +152,454 @@ struct Application: AsyncParsableCommand {
             #warning("Network creation output not used")
             print("Network '\(networkName)' created or already exists.")
         }
+    }
+    
+    // MARK: Compose Service Level Functions
+    func configService(_ service: Service, serviceName: String) async throws {
+        guard let projectName else { throw ComposeError.invalidProjectName }
+        var imageToRun: String
+
+        // Handle 'build' configuration
+        if let buildConfig = service.build {
+            imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
+        } else if let img = service.image {
+            // Use specified image if no build config
+            imageToRun = resolveVariable(img, with: environmentVariables)
+        } else {
+            // Should not happen due to Service init validation, but as a fallback
+            throw ComposeError.imageNotFound(serviceName)
+        }
+
+        // Handle 'deploy' configuration (note that this tool doesn't fully support it)
+        if service.deploy != nil {
+            print("Note: The 'deploy' configuration for service '\(serviceName)' was parsed successfully.")
+            print("However, this 'container-compose' tool does not currently support 'deploy' functionality (e.g., replicas, resources, update strategies) as it is primarily for orchestration platforms like Docker Swarm or Kubernetes, not direct 'container run' commands.")
+            print("The service will be run as a single container based on other configurations.")
+        }
+
+        var runCommandArgs: [String] = []
+
+        // Add detach flag if specified on the CLI
+        if detatch {
+            runCommandArgs.append("-d")
+        }
+
+        // Determine container name
+        let containerName: String
+        if let explicitContainerName = service.container_name {
+            containerName = explicitContainerName
+            print("Info: Using explicit container_name: \(containerName)")
+        } else {
+            // Default container name based on project and service name
+            containerName = "\(projectName)-\(serviceName)"
+        }
+        runCommandArgs.append("--name")
+        runCommandArgs.append(containerName)
+
+        // REMOVED: Restart policy is not supported by `container run`
+        // if let restart = service.restart {
+        //     runCommandArgs.append("--restart")
+        //     runCommandArgs.append(restart)
+        // }
+
+        // Add user
+        if let user = service.user {
+            runCommandArgs.append("--user")
+            runCommandArgs.append(user)
+        }
+
+        // Add volume mounts
+        if let volumes = service.volumes {
+            for volume in volumes {
+                let resolvedVolume = resolveVariable(volume, with: environmentVariables)
+                
+                // Parse the volume string: destination[:mode]
+                let components = resolvedVolume.split(separator: ":", maxSplits: 2).map(String.init)
+                
+                guard components.count >= 2 else {
+                    print("Warning: Volume entry '\(resolvedVolume)' has an invalid format (expected 'source:destination'). Skipping.")
+                    continue
+                }
+
+                let source = components[0]
+                let destination = components[1]
+                
+                // Check if the source looks like a host path (contains '/' or starts with '.')
+                // This heuristic helps distinguish bind mounts from named volume references.
+                if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
+                    // This is likely a bind mount (local path to container path)
+                    var isDirectory: ObjCBool = false
+                    // Ensure the path is absolute or relative to the current directory for FileManager
+                    let fullHostPath = (source.starts(with: "/") || source.starts(with: "~")) ? source : (cwd + "/" + source)
+                    
+                    if fileManager.fileExists(atPath: fullHostPath, isDirectory: &isDirectory) {
+                        if isDirectory.boolValue {
+                            // Host path exists and is a directory, add the volume
+                            runCommandArgs.append("-v")
+                            // Reconstruct the volume string without mode, ensuring it's source:destination
+                            runCommandArgs.append("\(source):\(destination)") // Use original source for command argument
+                        } else {
+                            // Host path exists but is a file
+                            print("Warning: Volume mount source '\(source)' is a file. The 'container' tool does not support direct file mounts. Skipping this volume.")
+                        }
+                    } else {
+                        // Host path does not exist, assume it's meant to be a directory and try to create it.
+                        do {
+                            try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
+                            print("Info: Created missing host directory for volume: \(fullHostPath)")
+                            runCommandArgs.append("-v")
+                            runCommandArgs.append("\(source):\(destination)") // Use original source for command argument
+                        } catch {
+                            print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
+                        }
+                    }
+                } else {
+                    let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
+                    let volumePath = volumeUrl.path(percentEncoded: false)
+                    
+                    print("Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead.")
+                    try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+                    
+                    // Host path exists and is a directory, add the volume
+                    runCommandArgs.append("-v")
+                    // Reconstruct the volume string without mode, ensuring it's source:destination
+                    runCommandArgs.append("\(source):\(destination)") // Use original source for command argument
+                }
+            }
+        }
+
+        // Combine environment variables from .env files and service environment
+        var combinedEnv: [String: String] = environmentVariables
+        
+        if let envFiles = service.env_file {
+            for envFile in envFiles {
+                let additionalEnvVars = loadEnvFile(path: "\(cwd)/\(envFile)")
+                combinedEnv.merge(additionalEnvVars) { (current, _) in current }
+            }
+        }
+
+        if let serviceEnv = service.environment {
+            combinedEnv.merge(serviceEnv) { (_, new) in new } // Service env overrides .env files
+        }
+
+        // MARK: Spinning Spot
+        // Add environment variables to run command
+        print(combinedEnv)
+        for (key, value) in combinedEnv {
+            let resolvedValue = resolveVariable(value, with: combinedEnv)
+            print("Resolved value: \(key) | \(resolvedValue)")
+            runCommandArgs.append("-e")
+            runCommandArgs.append("\(key)=\(resolvedValue)")
+        }
+
+        // REMOVED: Port mappings (-p) are not supported by `container run`
+        // if let ports = service.ports {
+        //     for port in ports {
+        //         let resolvedPort = resolveVariable(port, with: envVarsFromFile)
+        //         runCommandArgs.append("-p")
+        //         runCommandArgs.append(resolvedPort)
+        //     }
+        // }
+
+        // Connect to specified networks
+//        if let serviceNetworks = service.networks {
+//            for network in serviceNetworks {
+//                let resolvedNetwork = resolveVariable(network, with: envVarsFromFile)
+//                // Use the explicit network name from top-level definition if available, otherwise resolved name
+//                let networkToConnect = dockerCompose.networks?[network]?.name ?? resolvedNetwork
+//                runCommandArgs.append("--network")
+//                runCommandArgs.append(networkToConnect)
+//            }
+//            print("Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in docker-compose.yml.")
+//            print("Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level.")
+//        } else {
+//            print("Note: Service '\(serviceName)' is not explicitly connected to any networks. It will likely use the default bridge network.")
+//        }
+
+        // Add hostname
+//        if let hostname = service.hostname {
+//            let resolvedHostname = resolveVariable(hostname, with: envVarsFromFile)
+//            runCommandArgs.append("--hostname")
+//            runCommandArgs.append(resolvedHostname)
+//        }
+//
+//        // Add working directory
+//        if let workingDir = service.working_dir {
+//            let resolvedWorkingDir = resolveVariable(workingDir, with: envVarsFromFile)
+//            runCommandArgs.append("--workdir")
+//            runCommandArgs.append(resolvedWorkingDir)
+//        }
+
+        // Add privileged flag
+//        if service.privileged == true {
+//            runCommandArgs.append("--privileged")
+//        }
+//
+//        // Add read-only flag
+//        if service.read_only == true {
+//            runCommandArgs.append("--read-only")
+//        }
+//
+//        // Handle service-level configs (note: still only parsing/logging, not attaching)
+//        if let serviceConfigs = service.configs {
+//            print("Note: Service '\(serviceName)' defines 'configs'. Docker Compose 'configs' are primarily used for Docker Swarm deployed stacks and are not directly translatable to 'container run' commands.")
+//            print("This tool will parse 'configs' definitions but will not create or attach them to containers during 'container run'.")
+//            for serviceConfig in serviceConfigs {
+//                print("  - Config: '\(serviceConfig.source)' (Target: \(serviceConfig.target ?? "default location"), UID: \(serviceConfig.uid ?? "default"), GID: \(serviceConfig.gid ?? "default"), Mode: \(serviceConfig.mode?.description ?? "default"))")
+//            }
+//        }
+//
+//        // Handle service-level secrets (note: still only parsing/logging, not attaching)
+//        if let serviceSecrets = service.secrets {
+//            print("Note: Service '\(serviceName)' defines 'secrets'. Docker Compose 'secrets' are primarily used for Docker Swarm deployed stacks and are not directly translatable to 'container run' commands.")
+//            print("This tool will parse 'secrets' definitions but will not create or attach them to containers during 'container run'.")
+//            for serviceSecret in serviceSecrets {
+//                print("  - Secret: '\(serviceSecret.source)' (Target: \(serviceSecret.target ?? "default location"), UID: \(serviceSecret.uid ?? "default"), GID: \(serviceSecret.gid ?? "default"), Mode: \(serviceSecret.mode?.description ?? "default"))")
+//            }
+//        }
+//
+//        // Add interactive and TTY flags
+//        if service.stdin_open == true {
+//            runCommandArgs.append("-i") // --interactive
+//        }
+//        if service.tty == true {
+//            runCommandArgs.append("-t") // --tty
+//        }
+//
+//        runCommandArgs.append(imageToRun) // Add the image name as the final argument before command/entrypoint
+//
+//        // Add entrypoint or command
+//        if let entrypointParts = service.entrypoint {
+//            runCommandArgs.append("--entrypoint")
+//            runCommandArgs.append(contentsOf: entrypointParts)
+//        } else if let commandParts = service.command {
+//            runCommandArgs.append(contentsOf: commandParts)
+//        }
+//
+//        print("\nStarting service: \(serviceName)")
+//        print("Executing container run: container run \(runCommandArgs.joined(separator: " "))")
+//        executeCommand(command: "container", arguments: ["run"] + runCommandArgs, detach: detachFlag)
+        print("Service \(serviceName) command execution initiated.")
+        print("----------------------------------------\n")
+    }
+    
+    /// Builds Docker Service
+    ///
+    /// - Parameters:
+    ///   - buildConfig: The configuration for the build
+    ///   - service: The service you would like to build
+    ///   - serviceName: The fallback name for the image
+    ///
+    /// - Returns: Image Name (`String`)
+    func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
+        var buildCommandArgs: [String] = ["build"]
+
+        // Determine image tag for built image
+        let imageToRun = service.image ?? "\(serviceName):latest"
+
+        buildCommandArgs.append("--tag")
+        buildCommandArgs.append(imageToRun)
+
+        // Resolve build context path
+        let resolvedContext = resolveVariable(buildConfig.context, with: environmentVariables)
+        buildCommandArgs.append(resolvedContext)
+
+        // Add Dockerfile path if specified
+        if let dockerfile = buildConfig.dockerfile {
+            let resolvedDockerfile = resolveVariable(dockerfile, with: environmentVariables)
+            buildCommandArgs.append("--file")
+            buildCommandArgs.append(resolvedDockerfile)
+        }
+
+        // Add build arguments
+        if let args = buildConfig.args {
+            for (key, value) in args {
+                let resolvedValue = resolveVariable(value, with: environmentVariables)
+                buildCommandArgs.append("--build-arg")
+                buildCommandArgs.append("\(key)=\(resolvedValue)")
+            }
+        }
+        
+        print("\n----------------------------------------")
+        print("Building image for service: \(serviceName) (Tag: \(imageToRun))")
+        print("Executing container build: container \(buildCommandArgs.joined(separator: " "))")
+        let output = try await streamCommand("container", args: buildCommandArgs, onStdout: { print($0) }, onStderr: { print($0) })
+        print("Image build for \(serviceName) completed.")
+        print("----------------------------------------")
+
+        return imageToRun
+    }
+}
+
+// MARK: CommandLine Functions
+extension Application {
+    
+    /// A structure representing the result of a command-line process execution.
+    struct CommandResult {
+        /// The standard output captured from the process.
+        let stdout: String
+
+        /// The standard error output captured from the process.
+        let stderr: String
+
+        /// The exit code returned by the process upon termination.
+        let exitCode: Int32
+    }
+
+    /// Runs a command-line tool asynchronously and captures its output and exit code.
+    ///
+    /// This function uses async/await and `Process` to launch a command-line tool,
+    /// returning a `CommandResult` containing the output, error, and exit code upon completion.
+    ///
+    /// - Parameters:
+    ///   - command: The full path to the executable to run (e.g., `/bin/ls`).
+    ///   - args: An array of arguments to pass to the command. Defaults to an empty array.
+    /// - Returns: A `CommandResult` containing `stdout`, `stderr`, and `exitCode`.
+    /// - Throws: An error if the process fails to launch.
+    /// - Example:
+    /// ```swift
+    /// let result = try await runCommand("/bin/echo", args: ["Hello"])
+    /// print(result.stdout) // "Hello\n"
+    /// ```
+    func runCommand(_ command: String, args: [String] = []) async throws -> CommandResult {
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [command] + args
+            process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
+
+            // Manually set PATH so it can find `container`
+            process.environment = ProcessInfo.processInfo.environment.merging([
+                "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            ]) { _, new in new }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+                return
+            }
+
+            process.terminationHandler = { proc in
+                let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                
+                guard stderrData.isEmpty else {
+                    continuation.resume(throwing: TerminalError.commandFailed(String(decoding: stderrData, as: UTF8.self)))
+                    return
+                }
+
+                let result = CommandResult(
+                    stdout: String(decoding: stdoutData, as: UTF8.self),
+                    stderr: String(decoding: stderrData, as: UTF8.self),
+                    exitCode: proc.terminationStatus
+                )
+
+                continuation.resume(returning: result)
+            }
+        }
+    }
+    
+    /// Runs a command, streams stdout and stderr via closures, and completes when the process exits.
+    ///
+    /// - Parameters:
+    ///   - command: The name of the command to run (e.g., `"container"`).
+    ///   - args: Command-line arguments to pass to the command.
+    ///   - onStdout: Closure called with streamed stdout data.
+    ///   - onStderr: Closure called with streamed stderr data.
+    /// - Returns: The process's exit code.
+    /// - Throws: If the process fails to launch.
+    func streamCommand(
+        _ command: String,
+        args: [String] = [],
+        onStdout: @escaping (@Sendable (String) -> Void),
+        onStderr: @escaping (@Sendable (String) -> Void)
+    ) async throws -> Int32 {
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [command] + args
+            process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
+
+            process.environment = ProcessInfo.processInfo.environment.merging([
+                "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            ]) { _, new in new }
+
+            let stdoutHandle = stdoutPipe.fileHandleForReading
+            let stderrHandle = stderrPipe.fileHandleForReading
+
+            stdoutHandle.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                if let string = String(data: data, encoding: .utf8) {
+                    onStdout(string)
+                }
+            }
+
+            stderrHandle.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                if let string = String(data: data, encoding: .utf8) {
+                    onStderr(string)
+                }
+            }
+
+            process.terminationHandler = { proc in
+                stdoutHandle.readabilityHandler = nil
+                stderrHandle.readabilityHandler = nil
+                continuation.resume(returning: proc.terminationStatus)
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    /// Launches a detached command-line process without waiting for its output or termination.
+    ///
+    /// This function is useful when you want to spawn a process that runs in the background
+    /// independently of the current application. Output streams are redirected to null devices.
+    ///
+    /// - Parameters:
+    ///   - command: The full path to the executable to launch (e.g., `/usr/bin/open`).
+    ///   - args: An array of arguments to pass to the command. Defaults to an empty array.
+    /// - Returns: The `Process` instance that was launched, in case you want to retain or manage it.
+    /// - Throws: An error if the process fails to launch.
+    /// - Example:
+    /// ```swift
+    /// try launchDetachedCommand("/usr/bin/open", args: ["/Applications/Calculator.app"])
+    /// ```
+    @discardableResult
+    func launchDetachedCommand(_ command: String, args: [String] = []) throws -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [command] + args
+        process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        // Manually set PATH so it can find `container`
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        ]) { _, new in new }
+
+        // Set this to true to run independently of the launching app
+        process.qualityOfService = .background
+
+        try process.run()
+        return process
     }
 }
