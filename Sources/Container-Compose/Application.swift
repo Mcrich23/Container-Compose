@@ -94,7 +94,7 @@ struct Application: AsyncParsableCommand {
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
         for (serviceName, service) in dockerCompose.services {
-            try await configService(service, serviceName: serviceName)
+            try await configService(service, serviceName: serviceName, from: dockerCompose)
         }
     }
     
@@ -155,7 +155,7 @@ struct Application: AsyncParsableCommand {
     }
     
     // MARK: Compose Service Level Functions
-    func configService(_ service: Service, serviceName: String) async throws {
+    func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
         guard let projectName else { throw ComposeError.invalidProjectName }
         var imageToRun: String
 
@@ -281,15 +281,19 @@ struct Application: AsyncParsableCommand {
         if let serviceEnv = service.environment {
             combinedEnv.merge(serviceEnv) { (_, new) in new } // Service env overrides .env files
         }
+        
+        combinedEnv = combinedEnv.mapValues({ value in
+            guard value.contains("${") else { return value }
+            
+            let variableName = String(value.replacingOccurrences(of: "${", with: "").dropLast())
+            return combinedEnv[variableName] ?? value
+        })
 
         // MARK: Spinning Spot
         // Add environment variables to run command
-        print(combinedEnv)
         for (key, value) in combinedEnv {
-            let resolvedValue = resolveVariable(value, with: combinedEnv)
-            print("Resolved value: \(key) | \(resolvedValue)")
             runCommandArgs.append("-e")
-            runCommandArgs.append("\(key)=\(resolvedValue)")
+            runCommandArgs.append("\(key)=\(value)")
         }
 
         // REMOVED: Port mappings (-p) are not supported by `container run`
@@ -302,19 +306,19 @@ struct Application: AsyncParsableCommand {
         // }
 
         // Connect to specified networks
-//        if let serviceNetworks = service.networks {
-//            for network in serviceNetworks {
-//                let resolvedNetwork = resolveVariable(network, with: envVarsFromFile)
-//                // Use the explicit network name from top-level definition if available, otherwise resolved name
-//                let networkToConnect = dockerCompose.networks?[network]?.name ?? resolvedNetwork
-//                runCommandArgs.append("--network")
-//                runCommandArgs.append(networkToConnect)
-//            }
-//            print("Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in docker-compose.yml.")
-//            print("Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level.")
-//        } else {
-//            print("Note: Service '\(serviceName)' is not explicitly connected to any networks. It will likely use the default bridge network.")
-//        }
+        if let serviceNetworks = service.networks {
+            for network in serviceNetworks {
+                let resolvedNetwork = resolveVariable(network, with: environmentVariables)
+                // Use the explicit network name from top-level definition if available, otherwise resolved name
+                let networkToConnect = dockerCompose.networks?[network]?.name ?? resolvedNetwork
+                runCommandArgs.append("--network")
+                runCommandArgs.append(networkToConnect)
+            }
+            print("Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in docker-compose.yml.")
+            print("Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level.")
+        } else {
+            print("Note: Service '\(serviceName)' is not explicitly connected to any networks. It will likely use the default bridge network.")
+        }
 
         // Add hostname
 //        if let hostname = service.hostname {
