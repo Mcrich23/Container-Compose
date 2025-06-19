@@ -94,7 +94,7 @@ struct Application: AsyncParsableCommand {
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
         
-        let services = try sortedServicesByDependency(dockerCompose.services)
+        let services = try await sortedServicesByDependency(dockerCompose.services)
         
         var serviceRunsCommandArgSets: [String : [String]] = [:]
         for (serviceName, service) in services {
@@ -116,12 +116,20 @@ struct Application: AsyncParsableCommand {
                 let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
             }
         }
+        await waitForever()
+    }
+    
+    func waitForever() async -> Never {
+        for await _ in AsyncStream<Void>(unfolding: {  }) {
+            // This will never run
+        }
+        fatalError("unreachable")
     }
     
     // MARK: Compose Top Level Functions
     
     /// Returns the services in topological order based on `depends_on` relationships.
-    func sortedServicesByDependency(_ services: [String: Service]) throws -> [String: Service] {
+    func sortedServicesByDependency(_ services: [String: Service]) async throws -> [String: Service] {
         var visited = Set<String>()
         var visiting = Set<String>()
         var sorted: [(String, Service)] = []
