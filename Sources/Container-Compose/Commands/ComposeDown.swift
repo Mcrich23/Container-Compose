@@ -68,7 +68,7 @@ struct ComposeDown: AsyncParsableCommand {
         let containers = try await getContainersWithPrefix(projectName)
         
         for container in containers {
-            print("Removing old container: \(container)")
+            print("Stopping container: \(container)")
             do {
                 try await runCommand("container", args: ["stop", container])
                 if remove {
