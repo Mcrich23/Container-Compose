@@ -30,6 +30,9 @@ struct Application: AsyncParsableCommand {
     @Flag(name: [.customShort("d"), .customLong("detach")])
     var detatch: Bool = false
     
+    @Flag(name: [.customShort("b"), .customLong("build")])
+    var rebuild: Bool = false
+    
     @Option(
         name: [.customLong("cwd"), .customShort("w"), .customLong("workdir")],
         help: "Current working directory for the container")
@@ -182,7 +185,6 @@ struct Application: AsyncParsableCommand {
                 try await runCommand("container", args: ["stop", container])
                 try await runCommand("container", args: ["rm", container])
             } catch {
-                print(error)
             }
         }
     }
@@ -520,10 +522,22 @@ struct Application: AsyncParsableCommand {
     ///
     /// - Returns: Image Name (`String`)
     func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
+        
         var buildCommandArgs: [String] = ["build"]
 
         // Determine image tag for built image
         let imageToRun = service.image ?? "\(serviceName):latest"
+        
+        let imagesList = try await runCommand("container", args: ["images", "list"]).stdout
+        if !rebuild, imagesList.contains(imageToRun) {
+            return imageToRun
+        }
+        
+        do {
+            try await runCommand("container", args: ["images", "rm", imageToRun])
+        } catch {
+            print(error)
+        }
 
         buildCommandArgs.append("--tag")
         buildCommandArgs.append(imageToRun)
@@ -551,7 +565,7 @@ struct Application: AsyncParsableCommand {
         print("\n----------------------------------------")
         print("Building image for service: \(serviceName) (Tag: \(imageToRun))")
         print("Executing container build: container \(buildCommandArgs.joined(separator: " "))")
-        let output = try await streamCommand("container", args: buildCommandArgs, onStdout: { print($0) }, onStderr: { print($0) })
+        try await streamCommand("container", args: buildCommandArgs, onStdout: { print($0) }, onStderr: { print($0) })
         print("Image build for \(serviceName) completed.")
         print("----------------------------------------")
 
@@ -708,6 +722,7 @@ extension Application {
     ///   - onStderr: Closure called with streamed stderr data.
     /// - Returns: The process's exit code.
     /// - Throws: If the process fails to launch.
+    @discardableResult
     func streamCommand(
         _ command: String,
         args: [String] = [],

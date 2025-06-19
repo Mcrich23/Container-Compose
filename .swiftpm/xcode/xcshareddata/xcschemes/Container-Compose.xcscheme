@@ -56,6 +56,10 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "--build"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "--cwd=/Users/mcrich/Xcode/Assignment-Manager-API"
             isEnabled = "YES">
          </CommandLineArgument>
