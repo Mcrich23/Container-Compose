@@ -54,7 +54,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "up"
+            argument = "down"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
@@ -67,7 +67,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "--build"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "--cwd=/Users/mcrich/Xcode/Assignment-Manager-API"

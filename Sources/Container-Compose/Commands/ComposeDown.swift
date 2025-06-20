@@ -15,6 +15,9 @@ struct ComposeDown: AsyncParsableCommand {
         abstract: "Stop containers with container-compose"
         )
     
+    @Argument(help: "Specify the services to start")
+    var services: [String] = []
+    
     @Option(
         name: [.customLong("cwd"), .customShort("w"), .customLong("workdir")],
         help: "Current working directory for the container")
@@ -45,27 +48,22 @@ struct ComposeDown: AsyncParsableCommand {
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
         }
         
-        try await stopOldStuff(remove: false)
-    }
-    
-    /// Returns the names of all containers whose names start with a given prefix.
-    /// - Parameter prefix: The container name prefix (e.g. `"Assignment"`).
-    /// - Returns: An array of matching container names.
-    func getContainersWithPrefix(_ prefix: String) async throws -> [String] {
-        let result = try await runCommand("container", args: ["list", "-a"])
-        let lines = result.stdout.split(separator: "\n")
-
-        return lines.compactMap { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            let components = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-            guard let name = components.first else { return nil }
-            return name.hasPrefix(prefix) ? String(name) : nil
+        var services: [(serviceName: String, service: Service)] = dockerCompose.services.map({ ($0, $1) })
+        services = try Service.topoSortConfiguredServices(services)
+        
+        // Filter for specified services
+        if !self.services.isEmpty {
+            services = services.filter({ serviceName, service in
+                self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
+            })
         }
+        
+        try await stopOldStuff(services.map({ $0.serviceName }), remove: false)
     }
     
-    func stopOldStuff(remove: Bool) async throws {
+    func stopOldStuff(_ services: [String], remove: Bool) async throws {
         guard let projectName else { return }
-        let containers = try await getContainersWithPrefix(projectName)
+        let containers = services.map { "\(projectName)-\($0)" }
         
         for container in containers {
             print("Stopping container: \(container)")

@@ -72,7 +72,19 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
         }
         
-        try await stopOldStuff(remove: true)
+        // Get Services to use
+        var services: [(serviceName: String, service: Service)] = dockerCompose.services.map({ ($0, $1) })
+        services = try Service.topoSortConfiguredServices(services)
+        
+        // Filter for specified services
+        if !self.services.isEmpty {
+            services = services.filter({ serviceName, service in
+                self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
+            })
+        }
+        
+        // Stop Services
+        try await stopOldStuff(services.map({ $0.serviceName }), remove: true)
         
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
@@ -96,17 +108,6 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
         
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
-        
-        var services: [(serviceName: String, service: Service)] = dockerCompose.services.map({ ($0, $1) })
-        
-        // Filter for specified services
-        if !self.services.isEmpty {
-            services = services.filter({ serviceName, service in
-                self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
-            })
-        }
-        
-        services = try topoSortConfiguredServices(services)
         
         print(services.map(\.serviceName))
         for (serviceName, service) in services {
@@ -182,12 +183,12 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
         ])
     }
     
-    func stopOldStuff(remove: Bool) async throws {
+    func stopOldStuff(_ services: [String], remove: Bool) async throws {
         guard let projectName else { return }
-        let containers = try await getContainersWithPrefix(projectName)
+        let containers = services.map { "\(projectName)-\($0)" }
         
         for container in containers {
-            print("Removing old container: \(container)")
+            print("Stopping container: \(container)")
             do {
                 try await runCommand("container", args: ["stop", container])
                 if remove {
@@ -195,21 +196,6 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
                 }
             } catch {
             }
-        }
-    }
-    
-    /// Returns the names of all containers whose names start with a given prefix.
-    /// - Parameter prefix: The container name prefix (e.g. `"Assignment"`).
-    /// - Returns: An array of matching container names.
-    func getContainersWithPrefix(_ prefix: String) async throws -> [String] {
-        let result = try await runCommand("container", args: ["list", "-a"])
-        let lines = result.stdout.split(separator: "\n")
-
-        return lines.compactMap { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            let components = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-            guard let name = components.first else { return nil }
-            return name.hasPrefix(prefix) ? String(name) : nil
         }
     }
     
@@ -221,46 +207,6 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
         for (key, value) in environmentVariables.map({ ($0, $1) }) where value == serviceName {
             self.environmentVariables[key] = ip ?? value
         }
-    }
-    
-    /// Returns the services in topological order based on `depends_on` relationships.
-    func topoSortConfiguredServices(
-        _ services: [(serviceName: String, service: Service)]
-    ) throws -> [(serviceName: String, service: Service)] {
-        
-        var visited = Set<String>()
-        var visiting = Set<String>()
-        var sorted: [(String, Service)] = []
-
-        func visit(_ name: String, from service: String? = nil) throws {
-            guard var serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
-            if let service {
-                serviceTuple.service.dependedBy.append(service)
-            }
-            
-            if visiting.contains(name) {
-                throw NSError(domain: "ComposeError", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
-                ])
-            }
-            guard !visited.contains(name) else { return }
-
-            visiting.insert(name)
-            for depName in serviceTuple.service.depends_on ?? [] {
-                try visit(depName, from: name)
-            }
-            visiting.remove(name)
-            visited.insert(name)
-            sorted.append(serviceTuple)
-        }
-
-        for (serviceName, _) in services {
-            if !visited.contains(serviceName) {
-                try visit(serviceName)
-            }
-        }
-
-        return sorted
     }
     
     func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
