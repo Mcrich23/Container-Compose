@@ -16,6 +16,9 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
         abstract: "Start containers with container-compose"
         )
     
+    @Argument(help: "Specify the services to start")
+    var services: [String] = []
+    
     @Flag(name: [.customShort("d"), .customLong("detach")], help: "Detatches from container logs. Note: If you do NOT detatch, killing this process will NOT kill the container. To kill the container, run container-compose down")
     var detatch: Bool = false
     
@@ -95,6 +98,14 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
         print("\n--- Processing Services ---")
         
         var services: [(serviceName: String, service: Service)] = dockerCompose.services.map({ ($0, $1) })
+        
+        // Filter for specified services
+        if !self.services.isEmpty {
+            services = services.filter({ serviceName, service in
+                self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
+            })
+        }
+        
         services = try topoSortConfiguredServices(services)
         
         print(services.map(\.serviceName))
@@ -221,9 +232,12 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
         var visiting = Set<String>()
         var sorted: [(String, Service)] = []
 
-        func visit(_ name: String) throws {
-            guard let serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
-
+        func visit(_ name: String, from service: String? = nil) throws {
+            guard var serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
+            if let service {
+                serviceTuple.service.dependedBy.append(service)
+            }
+            
             if visiting.contains(name) {
                 throw NSError(domain: "ComposeError", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
@@ -233,7 +247,7 @@ struct ComposeUp: AsyncParsableCommand, Sendable {
 
             visiting.insert(name)
             for depName in serviceTuple.service.depends_on ?? [] {
-                try visit(depName)
+                try visit(depName, from: name)
             }
             visiting.remove(name)
             visited.insert(name)

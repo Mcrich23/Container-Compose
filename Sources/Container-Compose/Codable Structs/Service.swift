@@ -33,6 +33,9 @@ struct Service: Codable, Hashable {
     let stdin_open: Bool? // Keep STDIN open (-i flag for `container run`)
     let tty: Bool? // Allocate a pseudo-TTY (-t flag for `container run`)
     
+    /// Other services that depend on this service
+    var dependedBy: [String] = []
+    
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
