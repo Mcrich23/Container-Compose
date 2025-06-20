@@ -69,10 +69,13 @@ struct ComposeDown: AsyncParsableCommand {
             print("Stopping container: \(container)")
             do {
                 try await runCommand("container", args: ["stop", container])
-                if remove {
-                    try await runCommand("container", args: ["rm", container])
-                }
             } catch {
+            }
+            if remove {
+                do {
+                    try await runCommand("container", args: ["rm", container])
+                } catch {
+                }
             }
         }
     }
