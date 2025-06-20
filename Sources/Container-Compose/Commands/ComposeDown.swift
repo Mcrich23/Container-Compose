@@ -15,7 +15,7 @@ struct ComposeDown: AsyncParsableCommand {
         abstract: "Stop containers with container-compose"
         )
     
-    @Argument(help: "Specify the services to start")
+    @Argument(help: "Specify the services to stop")
     var services: [String] = []
     
     @Option(
