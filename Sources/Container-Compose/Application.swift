@@ -8,7 +8,7 @@
 import Foundation
 import Yams
 import ArgumentParser
-import Rainbow
+import ContainerCLI
 
 @main
 struct Application: AsyncParsableCommand {
@@ -16,8 +16,8 @@ struct Application: AsyncParsableCommand {
         commandName: "container-compose",
         abstract: "A tool to use manage Docker Compose files with Apple Container",
         subcommands: [
-            ComposeUp.self,
-            ComposeDown.self
+            ContainerCLI.Application.ComposeUp.self,
+            ContainerCLI.Application.ComposeDown.self
         ])
 }
 
@@ -31,8 +31,4 @@ struct CommandResult {
 
     /// The exit code returned by the process upon termination.
     let exitCode: Int32
-}
-
-extension NamedColor: Codable {
-    
 }
