@@ -1,5 +1,5 @@
 {
-  "originHash" : "fcab1302ff3c2f580655cf76558264008707c2aeea7294670692fb16eab8e285",
+  "originHash" : "ed8b87673f0d6d518f0e04ff0ec853106a014d58591fa6893133713e8a5e184e",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -16,7 +16,7 @@
       "location" : "https://github.com/mcrich23/container",
       "state" : {
         "branch" : "add-compose",
-        "revision" : "7954ad5c7459cbf9d8bab36009a50659b8104102"
+        "revision" : "f489307d6e1ec5b95017771f35042e4ebb8d982b"
       }
     },
     {
@@ -35,6 +35,15 @@
       "state" : {
         "revision" : "a56a157218877ef3e9625f7e1f7b2cb7e46ead1b",
         "version" : "1.26.1"
+      }
+    },
+    {
+      "identity" : "rainbow",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/onevcat/Rainbow",
+      "state" : {
+        "revision" : "16da5c62dd737258c6df2e8c430f8a3202f655a7",
+        "version" : "4.2.0"
       }
     },
     {
