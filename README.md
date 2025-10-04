@@ -26,7 +26,7 @@ Container-Compose brings (limited) Docker Compose support to [Apple Container](h
 You can install Container-Compose via **Homebrew** (recommended):
 
 ```sh
-brew tap Mcrich23/formulae
+brew update
 brew install container-compose
 ````
 
@@ -44,13 +44,13 @@ Or, build it from source:
    > *Note: Ensure you have Swift installed (or the required toolchain).*
 
    ```sh
-   swift build -c release
+   make build
    ```
 
 3. **(Optional)**: Install globally
 
    ```sh
-   install .build/release/container-compose /usr/local/bin/
+   make install
    ```
 
 ### Usage
