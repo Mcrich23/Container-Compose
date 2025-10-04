@@ -7,15 +7,14 @@
 
 import Foundation
 import ArgumentParser
-import ComposeCLI
 
 @main
-struct Application: AsyncParsableCommand {
+struct Main: AsyncParsableCommand {
     static let configuration: CommandConfiguration = .init(
         commandName: "container-compose",
         abstract: "A tool to use manage Docker Compose files with Apple Container",
         subcommands: [
-            ComposeCLI.ComposeUp.self,
-            ComposeCLI.ComposeDown.self
+            ComposeUp.self,
+            ComposeDown.self
         ])
 }
