@@ -83,7 +83,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             "docker-compose.yaml",
         ]
         for filename in filenames {
-            if fileManager.fileExists(atPath: filename) {
+            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
                 composeFilename = filename
                 break
             }
