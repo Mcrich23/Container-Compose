@@ -33,6 +33,6 @@ public struct Version: ParsableCommand {
     )
 
     public func run() {
-        print("Container Compose version \(Main.version)")
+        print("\(Main.versionString)")
     }
 }

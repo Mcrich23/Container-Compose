@@ -10,11 +10,15 @@ import ArgumentParser
 
 @main
 struct Main: AsyncParsableCommand {
+    static let commandName: String = "container-compose"
     static let version: String = "v0.5.1"
+    static var versionString: String {
+        "\(commandName) version \(version)"
+    }
     static let configuration: CommandConfiguration = .init(
-        commandName: "container-compose",
+        commandName: Self.commandName,
         abstract: "A tool to use manage Docker Compose files with Apple Container",
-        version: Self.version,
+        version: Self.versionString,
         subcommands: [
             ComposeUp.self,
             ComposeDown.self,
