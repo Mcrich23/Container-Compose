@@ -10,9 +10,9 @@ import ArgumentParser
 
 @main
 struct Main: AsyncParsableCommand {
-    static let commandName: String = "container-compose"
-    static let version: String = "v0.5.1"
-    static var versionString: String {
+    private static let commandName: String = "container-compose"
+    private static let version: String = "v0.5.1"
+    public static var versionString: String {
         "\(commandName) version \(version)"
     }
     static let configuration: CommandConfiguration = .init(
