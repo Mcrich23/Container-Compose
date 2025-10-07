@@ -24,7 +24,7 @@
 import ArgumentParser
 import Foundation
 
-public struct Version: ParsableCommand {
+internal struct Version: ParsableCommand {
     public init() {}
 
     public static let configuration: CommandConfiguration = .init(
