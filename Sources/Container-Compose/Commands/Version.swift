@@ -24,15 +24,14 @@
 import ArgumentParser
 import Foundation
 
-internal struct Version: ParsableCommand {
-    public init() {}
+struct Version: ParsableCommand {
 
-    public static let configuration: CommandConfiguration = .init(
+    static let configuration: CommandConfiguration = .init(
         commandName: "version",
         abstract: "Display the version information"
     )
 
-    public func run() {
+    func run() {
         print("\(Main.versionString)")
     }
 }

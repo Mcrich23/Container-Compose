@@ -12,7 +12,7 @@ import ArgumentParser
 struct Main: AsyncParsableCommand {
     private static let commandName: String = "container-compose"
     private static let version: String = "v0.5.1"
-    public static var versionString: String {
+    static var versionString: String {
         "\(commandName) version \(version)"
     }
     static let configuration: CommandConfiguration = .init(
