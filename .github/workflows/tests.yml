@@ -1,16 +1,11 @@
-name: Run Tests
+name: Tests
 
 on:
-  # Allow manual triggering from PR comments
+  # Manual trigger only - run via workflow_dispatch
   workflow_dispatch:
-  # Run on pull requests
+  # Required status check for PRs (but doesn't auto-run on commits)
   pull_request:
-    branches: [ main ]
-    paths:
-      - 'Sources/**'
-      - 'Tests/**'
-      - 'Package.swift'
-      - '.github/workflows/tests.yml'
+    types: []
 
 jobs:
   test:

@@ -4,41 +4,20 @@ This directory contains GitHub Actions workflows for Container-Compose.
 
 ## Available Workflows
 
-### 1. Run Tests (`tests.yml`)
+### Tests (`tests.yml`)
 
-Automatically runs on:
-- Pull requests targeting `main` branch
-- Changes to `Sources/`, `Tests/`, `Package.swift`, or workflow files
+A required status check for pull requests that must be run manually before merging.
 
-Can also be triggered manually via the GitHub Actions UI.
+**How to run:**
+1. Go to the "Actions" tab in the GitHub repository
+2. Select "Tests" workflow from the left sidebar
+3. Click "Run workflow" button
+4. Select the branch (e.g., your PR branch)
+5. Click "Run workflow" to start the tests
 
 **Requirements:** macOS 15 runner (tests require macOS environment)
 
-### 2. PR Comment Tests (`pr-comment-tests.yml`)
-
-Runs tests when requested via a comment on a pull request.
-
-**How to use:**
-1. Comment `/test` on any pull request
-2. The workflow will:
-   - React with a 🚀 emoji to acknowledge
-   - Check out the PR branch
-   - Run the test suite on macOS
-   - Post results back as a comment
-
-**Example:**
-```
-@copilot /test
-```
-
-or simply:
-```
-/test
-```
-
-**Requirements:** 
-- macOS 15 runner
-- Permissions to comment on PRs
+**Note:** Tests are configured as a required check but do NOT run automatically on each commit. This allows you to control when tests run (e.g., after you're done with a series of commits) while still enforcing that tests must pass before merging.
 
 ## Test Environment
 
@@ -50,7 +29,8 @@ All tests run on macOS 15 with Swift 6.0+ because:
 ## Troubleshooting
 
 If tests fail to run:
-1. Check that the PR has no merge conflicts
+1. Check that the workflow was triggered on the correct branch
 2. Verify Package.swift is valid
 3. Check the Actions tab for detailed logs
 4. Ensure macOS 15 runners are available
+5. If the workflow doesn't appear as a status check, you may need to run it once first
