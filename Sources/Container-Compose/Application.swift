@@ -14,13 +14,6 @@
 // limitations under the License.
 //===----------------------------------------------------------------------===//
 
-//
-//  File.swift
-//  Container-Compose
-//
-//  Created by Morris Richman on 6/18/25.
-//
-
 import Foundation
 import ArgumentParser
 
