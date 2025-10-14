@@ -17,6 +17,7 @@
 import Testing
 import Foundation
 @testable import Yams
+@testable import ContainerComposeCore
 
 @Suite("Build Configuration Tests")
 struct BuildConfigurationTests {
@@ -202,33 +203,3 @@ struct BuildConfigurationTests {
 }
 
 // Test helper structs
-struct Build: Codable {
-    let context: String?
-    let dockerfile: String?
-    let args: [String: String]?
-    let target: String?
-    let cache_from: [String]?
-    let labels: [String: String]?
-    let network: String?
-    let shm_size: String?
-}
-
-struct TestDockerCompose: Codable {
-    let version: String?
-    let services: [String: TestService]
-}
-
-struct TestService: Codable {
-    let image: String?
-    let build: Build?
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        image = try container.decodeIfPresent(String.self, forKey: .image)
-        build = try container.decodeIfPresent(Build.self, forKey: .build)
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case image, build
-    }
-}

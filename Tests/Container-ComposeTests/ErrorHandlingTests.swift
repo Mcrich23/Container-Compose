@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import ContainerComposeCore
 
 @Suite("Error Handling Tests")
 struct ErrorHandlingTests {
@@ -119,8 +120,3 @@ enum TerminalError: Error, LocalizedError {
     }
 }
 
-enum CommandOutput {
-    case stdout(String)
-    case stderr(String)
-    case exitCode(Int32)
-}

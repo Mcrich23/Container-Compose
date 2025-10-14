@@ -23,9 +23,9 @@
 
 
 /// Represents an external network reference.
-struct ExternalNetwork: Codable {
+public struct ExternalNetwork: Codable {
     /// True if the network is external
-    let isExternal: Bool
+    public let isExternal: Bool
     // Optional name of the external network if different from key
-    let name: String?
+    public let name: String?
 }

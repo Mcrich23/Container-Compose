@@ -15,8 +15,10 @@ let package = Package(
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
-        .executableTarget(
-            name: "Container-Compose",
+        
+        // Library target containing core logic
+        .target(
+            name: "ContainerComposeCore",
             dependencies: [
                 .product(
                     name: "ContainerCommands",
@@ -28,12 +30,23 @@ let package = Package(
                 ),
                 "Yams",
                 "Rainbow",
-            ]
+            ],
+            path: "Sources/Container-Compose"
         ),
+        
+        // Executable target
+        .executableTarget(
+            name: "Container-Compose",
+            dependencies: [
+                "ContainerComposeCore"
+            ],
+            path: "Sources/ContainerComposeApp"
+        ),
+        
         .testTarget(
             name: "Container-ComposeTests",
             dependencies: [
-                "Container-Compose"
+                "ContainerComposeCore"
             ]
         ),
     ]

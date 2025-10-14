@@ -17,6 +17,7 @@
 import Testing
 import Foundation
 @testable import Yams
+@testable import ContainerComposeCore
 
 @Suite("Healthcheck Configuration Tests")
 struct HealthcheckConfigurationTests {
@@ -153,20 +154,3 @@ struct HealthcheckConfigurationTests {
 }
 
 // Test helper structs
-struct Healthcheck: Codable {
-    let test: [String]?
-    let interval: String?
-    let timeout: String?
-    let retries: Int?
-    let start_period: String?
-}
-
-struct TestDockerCompose: Codable {
-    let version: String?
-    let services: [String: TestService]
-}
-
-struct TestService: Codable {
-    let image: String?
-    let healthcheck: Healthcheck?
-}

@@ -25,10 +25,10 @@ import ContainerCommands
 import Foundation
 
 //extension Application {
-enum YamlError: Error, LocalizedError {
+public enum YamlError: Error, LocalizedError {
     case composeFileNotFound(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .composeFileNotFound(let path):
             return "compose.yml not found at \(path)"
@@ -36,11 +36,11 @@ enum YamlError: Error, LocalizedError {
     }
 }
 
-enum ComposeError: Error, LocalizedError {
+public enum ComposeError: Error, LocalizedError {
     case imageNotFound(String)
     case invalidProjectName
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .imageNotFound(let name):
             return "Service \(name) must define either 'image' or 'build'."
@@ -50,16 +50,16 @@ enum ComposeError: Error, LocalizedError {
     }
 }
 
-enum TerminalError: Error, LocalizedError {
+public enum TerminalError: Error, LocalizedError {
     case commandFailed(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         "Command failed: \(self)"
     }
 }
 
 /// An enum representing streaming output from either `stdout` or `stderr`.
-enum CommandOutput {
+public enum CommandOutput {
     case stdout(String)
     case stderr(String)
     case exitCode(Int32)

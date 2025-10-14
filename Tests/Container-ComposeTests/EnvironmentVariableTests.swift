@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import ContainerComposeCore
 
 @Suite("Environment Variable Resolution Tests")
 struct EnvironmentVariableTests {
@@ -142,27 +143,3 @@ struct EnvironmentVariableTests {
 }
 
 // Test helper function that mimics the actual implementation
-func resolveVariable(_ value: String, with envVars: [String: String]) -> String {
-    var resolvedValue = value
-    let regex = try! NSRegularExpression(pattern: "\\$\\{([A-Z0-9_]+)(:?-(.*?))?(:\\?(.*?))?\\}", options: [])
-    
-    let combinedEnv = ProcessInfo.processInfo.environment.merging(envVars) { (current, _) in current }
-    
-    while let match = regex.firstMatch(in: resolvedValue, options: [], range: NSRange(resolvedValue.startIndex..<resolvedValue.endIndex, in: resolvedValue)) {
-        guard let varNameRange = Range(match.range(at: 1), in: resolvedValue) else { break }
-        let varName = String(resolvedValue[varNameRange])
-        
-        if let envValue = combinedEnv[varName] {
-            resolvedValue.replaceSubrange(Range(match.range(at: 0), in: resolvedValue)!, with: envValue)
-        } else if let defaultValueRange = Range(match.range(at: 3), in: resolvedValue) {
-            let defaultValue = String(resolvedValue[defaultValueRange])
-            resolvedValue.replaceSubrange(Range(match.range(at: 0), in: resolvedValue)!, with: defaultValue)
-        } else if match.range(at: 5).location != NSNotFound, let errorMessageRange = Range(match.range(at: 5), in: resolvedValue) {
-            // In tests we'll skip the exit behavior
-            break
-        } else {
-            break
-        }
-    }
-    return resolvedValue
-}

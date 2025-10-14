@@ -17,6 +17,7 @@
 import Testing
 import Foundation
 @testable import Yams
+@testable import ContainerComposeCore
 
 @Suite("Integration Tests - Real-World Compose Files")
 struct IntegrationTests {
@@ -444,4 +445,3 @@ struct ServiceConfig: Codable, Hashable {
     let source: String?
     let target: String?
 }
-struct ServiceSecret: Codable, Hashable {}

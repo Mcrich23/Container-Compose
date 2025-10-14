@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import ContainerComposeCore
 
 @Suite("Volume Configuration Tests")
 struct VolumeConfigurationTests {
@@ -148,12 +149,3 @@ struct VolumeConfigurationTests {
 }
 
 // Test helper struct
-struct Volume {
-    let driver: String?
-    let driverOpts: [String: String]?
-    
-    init(driver: String? = nil, driverOpts: [String: String]? = nil) {
-        self.driver = driver
-        self.driverOpts = driverOpts
-    }
-}

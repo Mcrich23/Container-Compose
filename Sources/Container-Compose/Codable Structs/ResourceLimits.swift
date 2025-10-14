@@ -23,9 +23,9 @@
 
 
 /// CPU and memory limits.
-struct ResourceLimits: Codable, Hashable {
+public struct ResourceLimits: Codable, Hashable {
     /// CPU limit (e.g., "0.5")
-    let cpus: String?
+    public let cpus: String?
     /// Memory limit (e.g., "512M")
-    let memory: String?
+    public let memory: String?
 }

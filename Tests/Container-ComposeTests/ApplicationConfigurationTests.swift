@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import ContainerComposeCore
 
 @Suite("Application Configuration Tests")
 struct ApplicationConfigurationTests {

@@ -29,7 +29,7 @@ import ContainerCommands
 /// Loads environment variables from a .env file.
 /// - Parameter path: The full path to the .env file.
 /// - Returns: A dictionary of key-value pairs representing environment variables.
-internal func loadEnvFile(path: String) -> [String: String] {
+public func loadEnvFile(path: String) -> [String: String] {
     var envVars: [String: String] = [:]
     let fileURL = URL(fileURLWithPath: path)
     do {
@@ -60,7 +60,7 @@ internal func loadEnvFile(path: String) -> [String: String] {
 ///   - value: The string possibly containing environment variable references.
 ///   - envVars: A dictionary of environment variables to use for resolution.
 /// - Returns: The string with all recognized environment variables resolved.
-internal func resolveVariable(_ value: String, with envVars: [String: String]) -> String {
+public func resolveVariable(_ value: String, with envVars: [String: String]) -> String {
     var resolvedValue = value
     // Regex to find ${VAR}, ${VAR:-default}, ${VAR:?error}
     let regex = try! NSRegularExpression(pattern: "\\$\\{([A-Z0-9_]+)(:?-(.*?))?(:\\?(.*?))?\\}", options: [])
@@ -96,15 +96,15 @@ internal func resolveVariable(_ value: String, with envVars: [String: String]) -
 extension String: @retroactive Error {}
 
 /// A structure representing the result of a command-line process execution.
-struct CommandResult {
+public struct CommandResult {
     /// The standard output captured from the process.
-    let stdout: String
+    public let stdout: String
 
     /// The standard error output captured from the process.
-    let stderr: String
+    public let stderr: String
 
     /// The exit code returned by the process upon termination.
-    let exitCode: Int32
+    public let exitCode: Int32
 }
 
 extension NamedColor: Codable {

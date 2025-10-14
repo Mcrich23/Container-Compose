@@ -23,23 +23,23 @@
 
 
 /// Represents a top-level network definition.
-struct Network: Codable {
+public struct Network: Codable {
     /// Network driver (e.g., 'bridge', 'overlay')
-    let driver: String?
+    public let driver: String?
     /// Driver-specific options
-    let driver_opts: [String: String]?
+    public let driver_opts: [String: String]?
     /// Allow standalone containers to attach to this network
-    let attachable: Bool?
+    public let attachable: Bool?
     /// Enable IPv6 networking
-    let enable_ipv6: Bool?
+    public let enable_ipv6: Bool?
     /// RENAMED: from `internal` to `isInternal` to avoid keyword clash
-    let isInternal: Bool?
+    public let isInternal: Bool?
     /// Labels for the network
-    let labels: [String: String]?
+    public let labels: [String: String]?
     /// Explicit name for the network
-    let name: String?
+    public let name: String?
     /// Indicates if the network is external (pre-existing)
-    let external: ExternalNetwork?
+    public let external: ExternalNetwork?
 
     /// Updated CodingKeys to map 'internal' from YAML to 'isInternal' Swift property
     enum CodingKeys: String, CodingKey {
@@ -47,7 +47,7 @@ struct Network: Codable {
     }
 
     /// Custom initializer to handle `external: true` (boolean) or `external: { name: "my_net" }` (object).
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         driver = try container.decodeIfPresent(String.self, forKey: .driver)
         driver_opts = try container.decodeIfPresent([String: String].self, forKey: .driver_opts)

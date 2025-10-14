@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import ContainerComposeCore
 
 @Suite("Port Mapping Tests")
 struct PortMappingTests {

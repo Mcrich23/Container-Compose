@@ -23,9 +23,9 @@
 
 
 /// Represents an external config reference.
-struct ExternalConfig: Codable {
+public struct ExternalConfig: Codable {
     /// True if the config is external
-    let isExternal: Bool
+    public let isExternal: Bool
     /// Optional name of the external config if different from key
-    let name: String?
+    public let name: String?
 }

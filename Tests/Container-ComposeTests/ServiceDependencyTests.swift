@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import ContainerComposeCore
 
 @Suite("Service Dependency Resolution Tests")
 struct ServiceDependencyTests {
@@ -132,50 +133,3 @@ struct ServiceDependencyTests {
     }
 }
 
-// Test helper struct that matches the Service structure
-extension ServiceDependencyTests {
-    struct Service: Hashable {
-        let image: String?
-        let depends_on: [String]?
-        var dependedBy: [String] = []
-        
-        static func topoSortConfiguredServices(
-            _ services: [(serviceName: String, service: Service)]
-        ) throws -> [(serviceName: String, service: Service)] {
-            
-            var visited = Set<String>()
-            var visiting = Set<String>()
-            var sorted: [(String, Service)] = []
-            
-            func visit(_ name: String, from service: String? = nil) throws {
-                guard var serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
-                if let service {
-                    serviceTuple.service.dependedBy.append(service)
-                }
-                
-                if visiting.contains(name) {
-                    throw NSError(domain: "ComposeError", code: 1, userInfo: [
-                        NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
-                    ])
-                }
-                guard !visited.contains(name) else { return }
-                
-                visiting.insert(name)
-                for depName in serviceTuple.service.depends_on ?? [] {
-                    try visit(depName, from: name)
-                }
-                visiting.remove(name)
-                visited.insert(name)
-                sorted.append(serviceTuple)
-            }
-            
-            for (serviceName, _) in services {
-                if !visited.contains(serviceName) {
-                    try visit(serviceName)
-                }
-            }
-            
-            return sorted
-        }
-    }
-}

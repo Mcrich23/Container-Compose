@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import ContainerComposeCore
 
 @Suite("Environment File Loading Tests")
 struct EnvFileLoadingTests {
@@ -181,24 +182,3 @@ struct EnvFileLoadingTests {
 }
 
 // Test helper function that mimics the actual implementation
-func loadEnvFile(path: String) -> [String: String] {
-    var envVars: [String: String] = [:]
-    let fileURL = URL(fileURLWithPath: path)
-    do {
-        let content = try String(contentsOf: fileURL, encoding: .utf8)
-        let lines = content.split(separator: "\n")
-        for line in lines {
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedLine.isEmpty && !trimmedLine.starts(with: "#") {
-                if let eqIndex = trimmedLine.firstIndex(of: "=") {
-                    let key = String(trimmedLine[..<eqIndex])
-                    let value = String(trimmedLine[trimmedLine.index(after: eqIndex)...])
-                    envVars[key] = value
-                }
-            }
-        }
-    } catch {
-        // Silently ignore errors
-    }
-    return envVars
-}

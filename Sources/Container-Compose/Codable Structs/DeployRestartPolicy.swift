@@ -23,13 +23,13 @@
 
 
 /// Restart policy for deployed tasks.
-struct DeployRestartPolicy: Codable, Hashable {
+public struct DeployRestartPolicy: Codable, Hashable {
     /// Condition to restart on (e.g., 'on-failure', 'any')
-    let condition: String?
+    public let condition: String?
     /// Delay before attempting restart
-    let delay: String?
+    public let delay: String?
     /// Maximum number of restart attempts
-    let max_attempts: Int?
+    public let max_attempts: Int?
     /// Window to evaluate restart policy
-    let window: String?
+    public let window: String?
 }

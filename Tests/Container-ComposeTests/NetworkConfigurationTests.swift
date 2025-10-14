@@ -17,6 +17,7 @@
 import Testing
 import Foundation
 @testable import Yams
+@testable import ContainerComposeCore
 
 @Suite("Network Configuration Tests")
 struct NetworkConfigurationTests {
@@ -187,31 +188,3 @@ struct NetworkConfigurationTests {
 }
 
 // Test helper structs
-struct Network: Codable {
-    let driver: String?
-    let driver_opts: [String: String]?
-    let external: Bool?
-    let labels: [String: String]?
-}
-
-struct TestDockerCompose: Codable {
-    let version: String?
-    let services: [String: TestService]
-    let networks: [String: Network]?
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        version = try container.decodeIfPresent(String.self, forKey: .version)
-        services = try container.decode([String: TestService].self, forKey: .services)
-        networks = try container.decodeIfPresent([String: Network].self, forKey: .networks)
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case version, services, networks
-    }
-}
-
-struct TestService: Codable {
-    let image: String?
-    let networks: [String]?
-}
