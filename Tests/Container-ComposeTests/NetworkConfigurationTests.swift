@@ -102,7 +102,8 @@ struct NetworkConfigurationTests {
         let decoder = YAMLDecoder()
         let network = try decoder.decode(Network.self, from: yaml)
         
-        #expect(network.external == true)
+        #expect(network.external != nil)
+        #expect(network.external?.isExternal == true)
     }
     
     @Test("Parse network with labels")
