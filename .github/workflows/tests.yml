@@ -22,7 +22,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Setup Swift
-      uses: maartene/setup-swift@main
+      uses: swift-actions/setup-swift@experimental
       with:
         swift-version: "6.2"
     
