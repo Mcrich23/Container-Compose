@@ -64,7 +64,7 @@ struct IntegrationTests {
         #expect(compose.services["wordpress"] != nil)
         #expect(compose.services["db"] != nil)
         #expect(compose.volumes?.count == 2)
-        #expect(compose.services["wordpress"]?.depends_on?.contains("db") == true)
+        #expect(compose.services["wordpress"]??.depends_on?.contains("db") == true)
     }
     
     @Test("Parse three-tier web application")
@@ -171,7 +171,7 @@ struct IntegrationTests {
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services.count == 5)
-        #expect(compose.services["api-gateway"]?.depends_on?.count == 3)
+        #expect(compose.services["api-gateway"]??.depends_on?.count == 3)
     }
     
     @Test("Parse development environment with build")
@@ -197,9 +197,9 @@ struct IntegrationTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.build != nil)
-        #expect(compose.services["app"]?.build?.context == ".")
-        #expect(compose.services["app"]?.volumes?.count == 2)
+        #expect(compose.services["app"]??.build != nil)
+        #expect(compose.services["app"]??.build?.context == ".")
+        #expect(compose.services["app"]??.volumes?.count == 2)
     }
     
     @Test("Parse compose with secrets and configs")
@@ -261,9 +261,9 @@ struct IntegrationTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["web"]?.restart == "unless-stopped")
-        #expect(compose.services["web"]?.healthcheck != nil)
-        #expect(compose.services["db"]?.restart == "always")
+        #expect(compose.services["web"]??.restart == "unless-stopped")
+        #expect(compose.services["web"]??.healthcheck != nil)
+        #expect(compose.services["db"]??.restart == "always")
     }
     
     @Test("Parse compose with complex dependency chain")
@@ -296,7 +296,10 @@ struct IntegrationTests {
         #expect(compose.services.count == 4)
         
         // Test dependency resolution
-        let services: [(String, Service)] = compose.services.map { ($0, $1) }
+        let services: [(String, Service)] = compose.services.compactMap({ serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        })
         let sorted = try Service.topoSortConfiguredServices(services)
         
         // db and cache should come before api

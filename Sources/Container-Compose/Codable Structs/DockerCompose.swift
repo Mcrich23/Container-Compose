@@ -29,21 +29,21 @@ public struct DockerCompose: Codable {
     /// Optional project name
     public let name: String?
     /// Dictionary of service definitions, keyed by service name
-    public let services: [String: Service]
+    public let services: [String: Service?]
     /// Optional top-level volume definitions
-    public let volumes: [String: Volume]?
+    public let volumes: [String: Volume?]?
     /// Optional top-level network definitions
-    public let networks: [String: Network]?
+    public let networks: [String: Network?]?
     /// Optional top-level config definitions (primarily for Swarm)
-    public let configs: [String: Config]?
+    public let configs: [String: Config?]?
     /// Optional top-level secret definitions (primarily for Swarm)
-    public let secrets: [String: Secret]?
+    public let secrets: [String: Secret?]?
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(String.self, forKey: .version)
         name = try container.decodeIfPresent(String.self, forKey: .name)
-        services = try container.decode([String: Service].self, forKey: .services)
+        services = try container.decode([String: Service?].self, forKey: .services)
         
         if let volumes = try container.decodeIfPresent([String: Optional<Volume>].self, forKey: .volumes) {
             let safeVolumes: [String : Volume] = volumes.mapValues { value in
@@ -53,8 +53,8 @@ public struct DockerCompose: Codable {
         } else {
             self.volumes = nil
         }
-        networks = try container.decodeIfPresent([String: Network].self, forKey: .networks)
-        configs = try container.decodeIfPresent([String: Config].self, forKey: .configs)
-        secrets = try container.decodeIfPresent([String: Secret].self, forKey: .secrets)
+        networks = try container.decodeIfPresent([String: Network?].self, forKey: .networks)
+        configs = try container.decodeIfPresent([String: Config?].self, forKey: .configs)
+        secrets = try container.decodeIfPresent([String: Secret?].self, forKey: .secrets)
     }
 }

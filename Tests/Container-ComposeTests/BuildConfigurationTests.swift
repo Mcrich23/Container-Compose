@@ -81,9 +81,9 @@ struct BuildConfigurationTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.build != nil)
-        #expect(compose.services["app"]?.build?.context == ".")
-        #expect(compose.services["app"]?.build?.dockerfile == "Dockerfile")
+        #expect(compose.services["app"]??.build != nil)
+        #expect(compose.services["app"]??.build?.context == ".")
+        #expect(compose.services["app"]??.build?.dockerfile == "Dockerfile")
     }
     
     @Test("Service with both image and build")
@@ -100,8 +100,8 @@ struct BuildConfigurationTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.image == "myapp:latest")
-        #expect(compose.services["app"]?.build?.context == ".")
+        #expect(compose.services["app"]??.image == "myapp:latest")
+        #expect(compose.services["app"]??.build?.context == ".")
     }
     
     @Test("Relative context path resolution")

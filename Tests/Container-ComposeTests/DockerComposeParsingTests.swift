@@ -36,7 +36,7 @@ struct DockerComposeParsingTests {
         
         #expect(compose.version == "3.8")
         #expect(compose.services.count == 1)
-        #expect(compose.services["web"]?.image == "nginx:latest")
+        #expect(compose.services["web"]??.image == "nginx:latest")
     }
     
     @Test("Parse compose file with project name")
@@ -52,7 +52,7 @@ struct DockerComposeParsingTests {
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.name == "my-project")
-        #expect(compose.services["app"]?.image == "alpine:latest")
+        #expect(compose.services["app"]??.image == "alpine:latest")
     }
     
     @Test("Parse compose with multiple services")
@@ -72,9 +72,9 @@ struct DockerComposeParsingTests {
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services.count == 3)
-        #expect(compose.services["web"]?.image == "nginx:latest")
-        #expect(compose.services["db"]?.image == "postgres:14")
-        #expect(compose.services["redis"]?.image == "redis:alpine")
+        #expect(compose.services["web"]??.image == "nginx:latest")
+        #expect(compose.services["db"]??.image == "postgres:14")
+        #expect(compose.services["redis"]??.image == "redis:alpine")
     }
     
     @Test("Parse compose with volumes")
@@ -95,8 +95,8 @@ struct DockerComposeParsingTests {
         
         #expect(compose.volumes != nil)
         #expect(compose.volumes?["db-data"] != nil)
-        #expect(compose.services["db"]?.volumes?.count == 1)
-        #expect(compose.services["db"]?.volumes?.first == "db-data:/var/lib/postgresql/data")
+        #expect(compose.services["db"]??.volumes?.count == 1)
+        #expect(compose.services["db"]??.volumes?.first == "db-data:/var/lib/postgresql/data")
     }
     
     @Test("Parse compose with networks")
@@ -117,7 +117,7 @@ struct DockerComposeParsingTests {
         
         #expect(compose.networks != nil)
         #expect(compose.networks?["frontend"] != nil)
-        #expect(compose.services["web"]?.networks?.contains("frontend") == true)
+        #expect(compose.services["web"]??.networks?.contains("frontend") == true)
     }
     
     @Test("Parse compose with environment variables")
@@ -135,9 +135,9 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.environment != nil)
-        #expect(compose.services["app"]?.environment?["DATABASE_URL"] == "postgres://localhost/mydb")
-        #expect(compose.services["app"]?.environment?["DEBUG"] == "true")
+        #expect(compose.services["app"]??.environment != nil)
+        #expect(compose.services["app"]??.environment?["DATABASE_URL"] == "postgres://localhost/mydb")
+        #expect(compose.services["app"]??.environment?["DEBUG"] == "true")
     }
     
     @Test("Parse compose with ports")
@@ -155,9 +155,9 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["web"]?.ports?.count == 2)
-        #expect(compose.services["web"]?.ports?.contains("8080:80") == true)
-        #expect(compose.services["web"]?.ports?.contains("443:443") == true)
+        #expect(compose.services["web"]??.ports?.count == 2)
+        #expect(compose.services["web"]??.ports?.contains("8080:80") == true)
+        #expect(compose.services["web"]??.ports?.contains("443:443") == true)
     }
     
     @Test("Parse compose with depends_on")
@@ -176,7 +176,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["web"]?.depends_on?.contains("db") == true)
+        #expect(compose.services["web"]??.depends_on?.contains("db") == true)
     }
     
     @Test("Parse compose with build context")
@@ -193,9 +193,9 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.build != nil)
-        #expect(compose.services["app"]?.build?.context == ".")
-        #expect(compose.services["app"]?.build?.dockerfile == "Dockerfile")
+        #expect(compose.services["app"]??.build != nil)
+        #expect(compose.services["app"]??.build?.context == ".")
+        #expect(compose.services["app"]??.build?.dockerfile == "Dockerfile")
     }
     
     @Test("Parse compose with command as array")
@@ -211,8 +211,8 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.command?.count == 3)
-        #expect(compose.services["app"]?.command?.first == "sh")
+        #expect(compose.services["app"]??.command?.count == 3)
+        #expect(compose.services["app"]??.command?.first == "sh")
     }
     
     @Test("Parse compose with command as string")
@@ -228,8 +228,8 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.command?.count == 1)
-        #expect(compose.services["app"]?.command?.first == "echo hello")
+        #expect(compose.services["app"]??.command?.count == 1)
+        #expect(compose.services["app"]??.command?.first == "echo hello")
     }
     
     @Test("Parse compose with restart policy")
@@ -245,7 +245,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.restart == "always")
+        #expect(compose.services["app"]??.restart == "always")
     }
     
     @Test("Parse compose with container name")
@@ -261,7 +261,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.container_name == "my-custom-name")
+        #expect(compose.services["app"]??.container_name == "my-custom-name")
     }
     
     @Test("Parse compose with working directory")
@@ -277,7 +277,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.working_dir == "/app")
+        #expect(compose.services["app"]??.working_dir == "/app")
     }
     
     @Test("Parse compose with user")
@@ -293,7 +293,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.user == "1000:1000")
+        #expect(compose.services["app"]??.user == "1000:1000")
     }
     
     @Test("Parse compose with privileged mode")
@@ -309,7 +309,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.privileged == true)
+        #expect(compose.services["app"]??.privileged == true)
     }
     
     @Test("Parse compose with read-only filesystem")
@@ -325,7 +325,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.read_only == true)
+        #expect(compose.services["app"]??.read_only == true)
     }
     
     @Test("Parse compose with stdin_open and tty")
@@ -342,8 +342,8 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.stdin_open == true)
-        #expect(compose.services["app"]?.tty == true)
+        #expect(compose.services["app"]??.stdin_open == true)
+        #expect(compose.services["app"]??.tty == true)
     }
     
     @Test("Parse compose with hostname")
@@ -359,7 +359,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.hostname == "my-host")
+        #expect(compose.services["app"]??.hostname == "my-host")
     }
     
     @Test("Parse compose with platform")
@@ -375,7 +375,7 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.platform == "linux/amd64")
+        #expect(compose.services["app"]??.platform == "linux/amd64")
     }
     
     @Test("Service must have image or build - should fail without either")

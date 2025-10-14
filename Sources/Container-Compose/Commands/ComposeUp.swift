@@ -123,7 +123,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Get Services to use
-        var services: [(serviceName: String, service: Service)] = dockerCompose.services.map({ ($0, $1) })
+        var services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap({ serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        })
         services = try Service.topoSortConfiguredServices(services)
 
         // Filter for specified services
@@ -141,6 +144,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if let networks = dockerCompose.networks {
             print("\n--- Processing Networks ---")
             for (networkName, networkConfig) in networks {
+                guard let networkConfig else { continue }
                 try await setupNetwork(name: networkName, config: networkConfig)
             }
             print("--- Networks Processed ---\n")
@@ -151,6 +155,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if let volumes = dockerCompose.volumes {
             print("\n--- Processing Volumes ---")
             for (volumeName, volumeConfig) in volumes {
+                guard let volumeConfig else { continue }
                 await createVolumeHardLink(name: volumeName, config: volumeConfig)
             }
             print("--- Volumes Processed ---\n")
@@ -440,7 +445,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             for network in serviceNetworks {
                 let resolvedNetwork = resolveVariable(network, with: environmentVariables)
                 // Use the explicit network name from top-level definition if available, otherwise resolved name
-                let networkToConnect = dockerCompose.networks?[network]?.name ?? resolvedNetwork
+                let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
                 runCommandArgs.append("--network")
                 runCommandArgs.append(networkToConnect)
             }

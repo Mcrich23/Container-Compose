@@ -90,7 +90,10 @@ public struct ComposeDown: AsyncParsableCommand {
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
         }
 
-        var services: [(serviceName: String, service: Service)] = dockerCompose.services.map({ ($0, $1) })
+        var services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap({ serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        })
         services = try Service.topoSortConfiguredServices(services)
 
         // Filter for specified services

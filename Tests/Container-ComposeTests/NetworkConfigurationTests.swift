@@ -38,8 +38,8 @@ struct NetworkConfigurationTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["web"]?.networks?.count == 1)
-        #expect(compose.services["web"]?.networks?.contains("frontend") == true)
+        #expect(compose.services["web"]??.networks?.count == 1)
+        #expect(compose.services["web"]??.networks?.contains("frontend") == true)
         #expect(compose.networks != nil)
     }
     
@@ -61,9 +61,9 @@ struct NetworkConfigurationTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]?.networks?.count == 2)
-        #expect(compose.services["app"]?.networks?.contains("frontend") == true)
-        #expect(compose.services["app"]?.networks?.contains("backend") == true)
+        #expect(compose.services["app"]??.networks?.count == 2)
+        #expect(compose.services["app"]??.networks?.contains("frontend") == true)
+        #expect(compose.services["app"]??.networks?.contains("backend") == true)
     }
     
     @Test("Parse network with driver")
@@ -151,7 +151,7 @@ struct NetworkConfigurationTests {
         #expect(compose.networks?.count == 2)
         #expect(compose.networks?["frontend"] != nil)
         #expect(compose.networks?["backend"] != nil)
-        #expect(compose.services["api"]?.networks?.count == 2)
+        #expect(compose.services["api"]??.networks?.count == 2)
     }
     
     @Test("Service without explicit networks uses default")
@@ -168,7 +168,7 @@ struct NetworkConfigurationTests {
         
         // Service should exist without networks specified
         #expect(compose.services["web"] != nil)
-        #expect(compose.services["web"]?.networks == nil)
+        #expect(compose.services["web"]??.networks == nil)
     }
     
     @Test("Empty networks definition")
