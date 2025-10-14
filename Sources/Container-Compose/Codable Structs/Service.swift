@@ -25,90 +25,145 @@ import Foundation
 
 
 /// Represents a single service definition within the `services` section.
-struct Service: Codable, Hashable {
+public struct Service: Codable, Hashable {
     /// Docker image name
-    let image: String?
+    public let image: String?
 
     /// Build configuration if the service is built from a Dockerfile
-    let build: Build?
+    public let build: Build?
 
     /// Deployment configuration (primarily for Swarm)
-    let deploy: Deploy?
+    public let deploy: Deploy?
 
     /// Restart policy (e.g., 'unless-stopped', 'always')
-    let restart: String?
+    public let restart: String?
 
     /// Healthcheck configuration
-    let healthcheck: Healthcheck?
+    public let healthcheck: Healthcheck?
 
     /// List of volume mounts (e.g., "hostPath:containerPath", "namedVolume:/path")
-    let volumes: [String]?
+    public let volumes: [String]?
 
     /// Environment variables to set in the container
-    let environment: [String: String]?
+    public let environment: [String: String]?
 
     /// List of .env files to load environment variables from
-    let env_file: [String]?
+    public let env_file: [String]?
 
     /// Port mappings (e.g., "hostPort:containerPort")
-    let ports: [String]?
+    public let ports: [String]?
 
     /// Command to execute in the container, overriding the image's default
-    let command: [String]?
+    public let command: [String]?
 
     /// Services this service depends on (for startup order)
-    let depends_on: [String]?
+    public let depends_on: [String]?
 
     /// User or UID to run the container as
-    let user: String?
+    public let user: String?
 
     /// Explicit name for the container instance
-    let container_name: String?
+    public let container_name: String?
 
     /// List of networks the service will connect to
-    let networks: [String]?
+    public let networks: [String]?
 
     /// Container hostname
-    let hostname: String?
+    public let hostname: String?
 
     /// Entrypoint to execute in the container, overriding the image's default
-    let entrypoint: [String]?
+    public let entrypoint: [String]?
 
     /// Run container in privileged mode
-    let privileged: Bool?
+    public let privileged: Bool?
 
     /// Mount container's root filesystem as read-only
-    let read_only: Bool?
+    public let read_only: Bool?
 
     /// Working directory inside the container
-    let working_dir: String?
+    public let working_dir: String?
 
     /// Platform architecture for the service
-    let platform: String?
+    public let platform: String?
 
     /// Service-specific config usage (primarily for Swarm)
-    let configs: [ServiceConfig]?
+    public let configs: [ServiceConfig]?
 
     /// Service-specific secret usage (primarily for Swarm)
-    let secrets: [ServiceSecret]?
+    public let secrets: [ServiceSecret]?
 
     /// Keep STDIN open (-i flag for `container run`)
-    let stdin_open: Bool?
+    public let stdin_open: Bool?
 
     /// Allocate a pseudo-TTY (-t flag for `container run`)
-    let tty: Bool?
+    public let tty: Bool?
     
     /// Other services that depend on this service
-    var dependedBy: [String] = []
+    public var dependedBy: [String] = []
     
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform
     }
+    
+    /// Public memberwise initializer for testing
+    public init(
+        image: String? = nil,
+        build: Build? = nil,
+        deploy: Deploy? = nil,
+        restart: String? = nil,
+        healthcheck: Healthcheck? = nil,
+        volumes: [String]? = nil,
+        environment: [String: String]? = nil,
+        env_file: [String]? = nil,
+        ports: [String]? = nil,
+        command: [String]? = nil,
+        depends_on: [String]? = nil,
+        user: String? = nil,
+        container_name: String? = nil,
+        networks: [String]? = nil,
+        hostname: String? = nil,
+        entrypoint: [String]? = nil,
+        privileged: Bool? = nil,
+        read_only: Bool? = nil,
+        working_dir: String? = nil,
+        platform: String? = nil,
+        configs: [ServiceConfig]? = nil,
+        secrets: [ServiceSecret]? = nil,
+        stdin_open: Bool? = nil,
+        tty: Bool? = nil,
+        dependedBy: [String] = []
+    ) {
+        self.image = image
+        self.build = build
+        self.deploy = deploy
+        self.restart = restart
+        self.healthcheck = healthcheck
+        self.volumes = volumes
+        self.environment = environment
+        self.env_file = env_file
+        self.ports = ports
+        self.command = command
+        self.depends_on = depends_on
+        self.user = user
+        self.container_name = container_name
+        self.networks = networks
+        self.hostname = hostname
+        self.entrypoint = entrypoint
+        self.privileged = privileged
+        self.read_only = read_only
+        self.working_dir = working_dir
+        self.platform = platform
+        self.configs = configs
+        self.secrets = secrets
+        self.stdin_open = stdin_open
+        self.tty = tty
+        self.dependedBy = dependedBy
+    }
 
     /// Custom initializer to handle decoding and basic validation.
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         image = try container.decodeIfPresent(String.self, forKey: .image)
         build = try container.decodeIfPresent(Build.self, forKey: .build)
@@ -166,7 +221,7 @@ struct Service: Codable, Hashable {
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.
-    static func topoSortConfiguredServices(
+    public static func topoSortConfiguredServices(
         _ services: [(serviceName: String, service: Service)]
     ) throws -> [(serviceName: String, service: Service)] {
         

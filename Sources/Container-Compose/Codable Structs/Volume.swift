@@ -23,28 +23,28 @@
 
 
 /// Represents a top-level volume definition.
-struct Volume: Codable {
+public struct Volume: Codable {
     /// Volume driver (e.g., 'local')
-    let driver: String?
+    public let driver: String?
 
     /// Driver-specific options
-    let driver_opts: [String: String]?
+    public let driver_opts: [String: String]?
 
     /// Explicit name for the volume
-    let name: String?
+    public let name: String?
 
     /// Labels for the volume
-    let labels: [String: String]?
+    public let labels: [String: String]?
 
     /// Indicates if the volume is external (pre-existing)
-    let external: ExternalVolume?
+    public let external: ExternalVolume?
 
     enum CodingKeys: String, CodingKey {
         case driver, driver_opts, name, labels, external
     }
 
     /// Custom initializer to handle `external: true` (boolean) or `external: { name: "my_vol" }` (object).
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         driver = try container.decodeIfPresent(String.self, forKey: .driver)
         driver_opts = try container.decodeIfPresent([String: String].self, forKey: .driver_opts)
@@ -60,7 +60,7 @@ struct Volume: Codable {
         }
     }
     
-    init(driver: String? = nil, driver_opts: [String : String]? = nil, name: String? = nil, labels: [String : String]? = nil, external: ExternalVolume? = nil) {
+    public init(driver: String? = nil, driver_opts: [String : String]? = nil, name: String? = nil, labels: [String : String]? = nil, external: ExternalVolume? = nil) {
         self.driver = driver
         self.driver_opts = driver_opts
         self.name = name

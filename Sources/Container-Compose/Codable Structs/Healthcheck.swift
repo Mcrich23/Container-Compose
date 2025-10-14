@@ -23,15 +23,29 @@
 
 
 /// Healthcheck configuration for a service.
-struct Healthcheck: Codable, Hashable {
+public struct Healthcheck: Codable, Hashable {
     /// Command to run to check health
-    let test: [String]?
+    public let test: [String]?
     /// Grace period for the container to start
-    let start_period: String?
+    public let start_period: String?
     /// How often to run the check
-    let interval: String?
+    public let interval: String?
     /// Number of consecutive failures to consider unhealthy
-    let retries: Int?
+    public let retries: Int?
     /// Timeout for each check
-    let timeout: String?
+    public let timeout: String?
+    
+    public init(
+        test: [String]? = nil,
+        start_period: String? = nil,
+        interval: String? = nil,
+        retries: Int? = nil,
+        timeout: String? = nil
+    ) {
+        self.test = test
+        self.start_period = start_period
+        self.interval = interval
+        self.retries = retries
+        self.timeout = timeout
+    }
 }

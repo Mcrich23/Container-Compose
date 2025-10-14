@@ -23,13 +23,13 @@
 
 
 /// Represents the `deploy` configuration for a service (primarily for Swarm orchestration).
-struct Deploy: Codable, Hashable {
+public struct Deploy: Codable, Hashable {
     /// Deployment mode (e.g., 'replicated', 'global')
-    let mode: String?
+    public let mode: String?
     /// Number of replicated service tasks
-    let replicas: Int?
+    public let replicas: Int?
     /// Resource constraints (limits, reservations)
-    let resources: DeployResources?
+    public let resources: DeployResources?
     /// Restart policy for tasks
-    let restart_policy: DeployRestartPolicy?
+    public let restart_policy: DeployRestartPolicy?
 }

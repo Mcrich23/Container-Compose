@@ -23,22 +23,22 @@
 
 
 /// Represents a top-level config definition (primarily for Swarm).
-struct Config: Codable {
+public struct Config: Codable {
     /// Path to the file containing the config content
-    let file: String?
+    public let file: String?
     /// Indicates if the config is external (pre-existing)
-    let external: ExternalConfig?
+    public let external: ExternalConfig?
     /// Explicit name for the config
-    let name: String?
+    public let name: String?
     /// Labels for the config
-    let labels: [String: String]?
+    public let labels: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case file, external, name, labels
     }
 
     /// Custom initializer to handle `external: true` (boolean) or `external: { name: "my_cfg" }` (object).
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         file = try container.decodeIfPresent(String.self, forKey: .file)
         name = try container.decodeIfPresent(String.self, forKey: .name)
