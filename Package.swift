@@ -30,5 +30,11 @@ let package = Package(
                 "Rainbow",
             ]
         ),
+        .testTarget(
+            name: "Container-ComposeTests",
+            dependencies: [
+                "Container-Compose"
+            ]
+        ),
     ]
 )
