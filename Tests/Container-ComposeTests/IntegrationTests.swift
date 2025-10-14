@@ -422,26 +422,3 @@ struct TestService: Codable, Hashable {
         return sorted
     }
 }
-
-struct Volume: Codable, Hashable {
-    init() {}
-}
-
-struct Network: Codable, Hashable {}
-struct Config: Codable, Hashable {}
-struct Secret: Codable, Hashable {}
-struct Build: Codable, Hashable {
-    let context: String?
-    let dockerfile: String?
-}
-struct Healthcheck: Codable, Hashable {
-    let test: [String]?
-    let interval: String?
-    let timeout: String?
-    let retries: Int?
-    let start_period: String?
-}
-struct ServiceConfig: Codable, Hashable {
-    let source: String?
-    let target: String?
-}
