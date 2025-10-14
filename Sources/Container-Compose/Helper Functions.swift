@@ -63,7 +63,7 @@ public func loadEnvFile(path: String) -> [String: String] {
 public func resolveVariable(_ value: String, with envVars: [String: String]) -> String {
     var resolvedValue = value
     // Regex to find ${VAR}, ${VAR:-default}, ${VAR:?error}
-    let regex = try! NSRegularExpression(pattern: "\\$\\{([A-Z0-9_]+)(:?-(.*?))?(:\\?(.*?))?\\}", options: [])
+    let regex = try! NSRegularExpression(pattern: #"\$\{([A-Za-z0-9_]+)(:?-(.*?))?(:\?(.*?))?\}"#, options: [])
     
     // Combine process environment with loaded .env file variables, prioritizing process environment
     let combinedEnv = ProcessInfo.processInfo.environment.merging(envVars) { (current, _) in current }
