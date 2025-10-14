@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     name: Run Swift Tests
-    runs-on: macos-15
+    runs-on: macos-26
     
     steps:
     - name: Checkout code
@@ -19,7 +19,7 @@ jobs:
     - name: Setup Swift
       uses: swift-actions/setup-swift@v2
       with:
-        swift-version: "6.0"
+        swift-version: "6.2"
     
     - name: Cache Swift dependencies
       uses: actions/cache@v4
