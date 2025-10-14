@@ -5,7 +5,12 @@ on:
   workflow_dispatch:
   # Required status check for PRs (but doesn't auto-run on commits)
   pull_request:
-    types: []
+    branches: [ main ]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - '.github/workflows/tests.yml'
 
 jobs:
   test:
