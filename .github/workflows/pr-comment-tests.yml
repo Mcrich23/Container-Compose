@@ -1,0 +1,116 @@
+name: PR Comment Tests
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  run-tests:
+    name: Run Tests on Request
+    # Only run on pull request comments
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/test')
+    runs-on: macos-15
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    
+    steps:
+    - name: Add reaction to comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.reactions.createForIssueComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            comment_id: context.payload.comment.id,
+            content: 'rocket'
+          })
+    
+    - name: Get PR details
+      id: pr
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const pr = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number
+          });
+          return pr.data;
+    
+    - name: Checkout PR code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ fromJSON(steps.pr.outputs.result).head.sha }}
+        
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: "6.0"
+    
+    - name: Cache Swift dependencies
+      uses: actions/cache@v4
+      with:
+        path: .build
+        key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-
+    
+    - name: Build
+      run: swift build --build-tests
+      
+    - name: Run tests
+      id: test
+      run: |
+        swift test 2>&1 | tee test_output.txt
+        echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+      continue-on-error: true
+      
+    - name: Comment test results
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const exitCode = '${{ steps.test.outputs.exit_code }}';
+          let testOutput = '';
+          
+          try {
+            testOutput = fs.readFileSync('test_output.txt', 'utf8');
+          } catch (error) {
+            testOutput = 'Could not read test output';
+          }
+          
+          // Limit output to last 2000 characters to avoid hitting comment size limits
+          const truncatedOutput = testOutput.length > 2000 
+            ? '...\n' + testOutput.slice(-2000) 
+            : testOutput;
+          
+          const success = exitCode === '0';
+          const emoji = success ? '✅' : '❌';
+          const status = success ? 'All tests passed!' : 'Some tests failed';
+          
+          const body = `${emoji} **Test Results: ${status}**
+          
+          <details>
+          <summary>View test output</summary>
+          
+          \`\`\`
+          ${truncatedOutput}
+          \`\`\`
+          
+          </details>
+          
+          Triggered by @${context.payload.comment.user.login}`;
+          
+          github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: body
+          });
+          
+          if (!success) {
+            core.setFailed('Tests failed');
+          }

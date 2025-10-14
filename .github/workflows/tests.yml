@@ -1,0 +1,49 @@
+name: Run Tests
+
+on:
+  # Allow manual triggering from PR comments
+  workflow_dispatch:
+  # Run on pull requests
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - '.github/workflows/tests.yml'
+
+jobs:
+  test:
+    name: Run Swift Tests
+    runs-on: macos-15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: "6.0"
+    
+    - name: Cache Swift dependencies
+      uses: actions/cache@v4
+      with:
+        path: .build
+        key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-
+    
+    - name: Build
+      run: swift build --build-tests
+      
+    - name: Run tests
+      run: swift test
+      
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: .build/debug/*.xctest
+        if-no-files-found: ignore
