@@ -146,7 +146,7 @@ struct HealthcheckConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["web"]?.healthcheck != nil)
         #expect(compose.services["web"]?.healthcheck?.interval == "30s")

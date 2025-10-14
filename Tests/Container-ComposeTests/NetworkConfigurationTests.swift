@@ -36,7 +36,7 @@ struct NetworkConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["web"]?.networks?.count == 1)
         #expect(compose.services["web"]?.networks?.contains("frontend") == true)
@@ -59,7 +59,7 @@ struct NetworkConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["app"]?.networks?.count == 2)
         #expect(compose.services["app"]?.networks?.contains("frontend") == true)
@@ -145,7 +145,7 @@ struct NetworkConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.networks?.count == 2)
         #expect(compose.networks?["frontend"] != nil)
@@ -163,7 +163,7 @@ struct NetworkConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         // Service should exist without networks specified
         #expect(compose.services["web"] != nil)
@@ -181,10 +181,9 @@ struct NetworkConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["web"] != nil)
     }
 }
 
-// Test helper structs

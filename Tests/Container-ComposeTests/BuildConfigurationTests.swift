@@ -154,7 +154,7 @@ struct BuildConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["app"]?.build != nil)
         #expect(compose.services["app"]?.build?.context == ".")
@@ -173,7 +173,7 @@ struct BuildConfigurationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(TestDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["app"]?.image == "myapp:latest")
         #expect(compose.services["app"]?.build?.context == ".")

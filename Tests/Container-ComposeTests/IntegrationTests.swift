@@ -58,7 +58,7 @@ struct IntegrationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(FullDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services.count == 2)
         #expect(compose.services["wordpress"] != nil)
@@ -121,7 +121,7 @@ struct IntegrationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(FullDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.name == "webapp")
         #expect(compose.services.count == 4)
@@ -168,7 +168,7 @@ struct IntegrationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(FullDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services.count == 5)
         #expect(compose.services["api-gateway"]?.depends_on?.count == 3)
@@ -195,7 +195,7 @@ struct IntegrationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(FullDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["app"]?.build != nil)
         #expect(compose.services["app"]?.build?.context == ".")
@@ -226,7 +226,7 @@ struct IntegrationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(FullDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.configs != nil)
         #expect(compose.secrets != nil)
@@ -259,7 +259,7 @@ struct IntegrationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(FullDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services["web"]?.restart == "unless-stopped")
         #expect(compose.services["web"]?.healthcheck != nil)
@@ -291,13 +291,13 @@ struct IntegrationTests {
         """
         
         let decoder = YAMLDecoder()
-        let compose = try decoder.decode(FullDockerCompose.self, from: yaml)
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
         #expect(compose.services.count == 4)
         
         // Test dependency resolution
-        let services: [(String, TestService)] = compose.services.map { ($0, $1) }
-        let sorted = try TestService.topoSortConfiguredServices(services)
+        let services: [(String, Service)] = compose.services.map { ($0, $1) }
+        let sorted = try Service.topoSortConfiguredServices(services)
         
         // db and cache should come before api
         let dbIndex = sorted.firstIndex(where: { $0.serviceName == "db" })!
@@ -311,114 +311,3 @@ struct IntegrationTests {
     }
 }
 
-// Test helper structs
-struct FullDockerCompose: Codable {
-    let version: String?
-    let name: String?
-    let services: [String: TestService]
-    let volumes: [String: Volume]?
-    let networks: [String: Network]?
-    let configs: [String: Config]?
-    let secrets: [String: Secret]?
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        version = try container.decodeIfPresent(String.self, forKey: .version)
-        name = try container.decodeIfPresent(String.self, forKey: .name)
-        services = try container.decode([String: TestService].self, forKey: .services)
-        
-        if let volumes = try container.decodeIfPresent([String: Optional<Volume>].self, forKey: .volumes) {
-            let safeVolumes: [String : Volume] = volumes.mapValues { value in
-                value ?? Volume()
-            }
-            self.volumes = safeVolumes
-        } else {
-            self.volumes = nil
-        }
-        
-        networks = try container.decodeIfPresent([String: Network].self, forKey: .networks)
-        configs = try container.decodeIfPresent([String: Config].self, forKey: .configs)
-        secrets = try container.decodeIfPresent([String: Secret].self, forKey: .secrets)
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case version, name, services, volumes, networks, configs, secrets
-    }
-}
-
-struct TestService: Codable, Hashable {
-    let image: String?
-    let build: Build?
-    let restart: String?
-    let healthcheck: Healthcheck?
-    let volumes: [String]?
-    let environment: [String: String]?
-    let ports: [String]?
-    let command: String?
-    let depends_on: [String]?
-    let working_dir: String?
-    let networks: [String]?
-    let configs: [ServiceConfig]?
-    let secrets: [ServiceSecret]?
-    var dependedBy: [String] = []
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        image = try container.decodeIfPresent(String.self, forKey: .image)
-        build = try container.decodeIfPresent(Build.self, forKey: .build)
-        restart = try container.decodeIfPresent(String.self, forKey: .restart)
-        healthcheck = try container.decodeIfPresent(Healthcheck.self, forKey: .healthcheck)
-        volumes = try container.decodeIfPresent([String].self, forKey: .volumes)
-        environment = try container.decodeIfPresent([String: String].self, forKey: .environment)
-        ports = try container.decodeIfPresent([String].self, forKey: .ports)
-        command = try container.decodeIfPresent(String.self, forKey: .command)
-        depends_on = try container.decodeIfPresent([String].self, forKey: .depends_on)
-        working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
-        networks = try container.decodeIfPresent([String].self, forKey: .networks)
-        configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)
-        secrets = try container.decodeIfPresent([ServiceSecret].self, forKey: .secrets)
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case image, build, restart, healthcheck, volumes, environment, ports, command, depends_on, working_dir, networks, configs, secrets
-    }
-    
-    static func topoSortConfiguredServices(
-        _ services: [(serviceName: String, service: TestService)]
-    ) throws -> [(serviceName: String, service: TestService)] {
-        
-        var visited = Set<String>()
-        var visiting = Set<String>()
-        var sorted: [(String, TestService)] = []
-        
-        func visit(_ name: String, from service: String? = nil) throws {
-            guard var serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
-            if let service {
-                serviceTuple.service.dependedBy.append(service)
-            }
-            
-            if visiting.contains(name) {
-                throw NSError(domain: "ComposeError", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
-                ])
-            }
-            guard !visited.contains(name) else { return }
-            
-            visiting.insert(name)
-            for depName in serviceTuple.service.depends_on ?? [] {
-                try visit(depName, from: name)
-            }
-            visiting.remove(name)
-            visited.insert(name)
-            sorted.append(serviceTuple)
-        }
-        
-        for (serviceName, _) in services {
-            if !visited.contains(serviceName) {
-                try visit(serviceName)
-            }
-        }
-        
-        return sorted
-    }
-}
