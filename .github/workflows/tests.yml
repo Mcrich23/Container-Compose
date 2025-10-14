@@ -24,7 +24,7 @@ jobs:
     - name: Setup Swift
       uses: maartene/setup-swift@main
       with:
-        swift-version: "6.1"
+        swift-version: "6.2"
     
     - name: Cache Swift dependencies
       uses: actions/cache@v4
