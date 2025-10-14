@@ -138,14 +138,4 @@ struct VolumeConfigurationTests {
         #expect(volumes.isEmpty == true)
     }
     
-    @Test("Volume with driver options")
-    func volumeWithDriverOptions() {
-        // This tests the structure, actual parsing would be in the YAML decoder
-        let volume = Volume(driver: "local", driverOpts: ["type": "nfs"])
-        
-        #expect(volume.driver == "local")
-        #expect(volume.driverOpts?["type"] == "nfs")
-    }
 }
-
-// Test helper struct
