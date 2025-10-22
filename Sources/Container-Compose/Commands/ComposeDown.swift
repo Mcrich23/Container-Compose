@@ -60,7 +60,7 @@ public struct ComposeDown: AsyncParsableCommand {
             "docker-compose.yaml",
         ]
         for filename in filenames {
-            if fileManager.fileExists(atPath: filename) {
+            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
                 composeFilename = filename
                 break
             }
