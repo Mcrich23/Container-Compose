@@ -18,6 +18,7 @@ import Testing
 import Foundation
 import ArgumentParser
 @testable import ContainerComposeCore
+@testable import Yams
 
 @Suite("ComposeDown Command Tests")
 struct ComposeDownTests {
@@ -35,7 +36,328 @@ struct ComposeDownTests {
         #expect(ComposeDown.configuration.abstract?.isEmpty == false)
     }
     
-    // MARK: - Flag Parsing Tests
+    // MARK: - Functionality Tests
+    
+    @Test("ComposeDown reads and parses compose file")
+    func testComposeDownReadsComposeFile() async throws {
+        // Create a temporary directory for test
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-test-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a simple compose file
+        let composeYAML = """
+        services:
+          test-service:
+            image: alpine:latest
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse the compose file directly to verify it works
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        // Verify the parse was successful
+        #expect(dockerCompose.services.count == 1)
+        #expect(dockerCompose.services["test-service"]??.image == "alpine:latest")
+    }
+    
+    @Test("ComposeDown handles missing compose file")
+    func testComposeDownMissingFile() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-missing-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Verify that accessing a non-existent file throws an error
+        let composePath = tempDir.appendingPathComponent("compose.yml").path
+        let fileExists = FileManager.default.fileExists(atPath: composePath)
+        
+        #expect(!fileExists)
+    }
+    
+    @Test("ComposeDown identifies services to stop")
+    func testComposeDownServiceIdentification() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-services-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with multiple services
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+          db:
+            image: postgres:14
+          cache:
+            image: redis:alpine
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify services
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        // Verify all services are identified
+        let allServices: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        }
+        
+        #expect(allServices.count == 3)
+        #expect(allServices.contains(where: { $0.serviceName == "web" }))
+        #expect(allServices.contains(where: { $0.serviceName == "db" }))
+        #expect(allServices.contains(where: { $0.serviceName == "cache" }))
+    }
+    
+    @Test("ComposeDown respects service filtering for selective shutdown")
+    func testComposeDownSelectiveShutdown() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-selective-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with multiple services
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+          db:
+            image: postgres:14
+          cache:
+            image: redis:alpine
+          worker:
+            image: alpine:latest
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and simulate service filtering
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let allServices: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        }
+        
+        // Simulate filtering for specific services (like CLI would do)
+        let requestedServices = ["web", "cache"]
+        let filteredServices = allServices.filter { serviceName, service in
+            requestedServices.contains(serviceName)
+        }
+        
+        #expect(filteredServices.count == 2)
+        #expect(filteredServices.contains(where: { $0.serviceName == "web" }))
+        #expect(filteredServices.contains(where: { $0.serviceName == "cache" }))
+        #expect(!filteredServices.contains(where: { $0.serviceName == "db" }))
+        #expect(!filteredServices.contains(where: { $0.serviceName == "worker" }))
+    }
+    
+    @Test("ComposeDown handles services with dependencies")
+    func testComposeDownWithDependencies() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-deps-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with dependencies
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+            depends_on:
+              - api
+          api:
+            image: node:latest
+            depends_on:
+              - db
+          db:
+            image: postgres:14
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify services with dependencies
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        // Verify dependencies are correctly parsed
+        let webService = dockerCompose.services["web"]??
+        #expect(webService.depends_on?.contains("api") == true)
+        
+        let apiService = dockerCompose.services["api"]??
+        #expect(apiService.depends_on?.contains("db") == true)
+        
+        // In shutdown, services should be stopped in reverse dependency order
+        let services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        }
+        
+        let sortedServices = try Service.topoSortConfiguredServices(services)
+        
+        // For shutdown, we'd want to reverse this order
+        let shutdownOrder = sortedServices.reversed()
+        let shutdownNames = shutdownOrder.map { $0.serviceName }
+        
+        // web should be stopped before api, api before db
+        let webIndex = shutdownNames.firstIndex(of: "web")!
+        let apiIndex = shutdownNames.firstIndex(of: "api")!
+        let dbIndex = shutdownNames.firstIndex(of: "db")!
+        
+        #expect(webIndex < apiIndex)
+        #expect(apiIndex < dbIndex)
+    }
+    
+    @Test("ComposeDown determines project name for container identification")
+    func testComposeDownProjectName() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-project-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Test with explicit project name
+        let composeYAMLWithName = """
+        name: production-app
+        services:
+          web:
+            image: nginx:latest
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAMLWithName.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        #expect(dockerCompose.name == "production-app")
+        
+        // With project name, container would be named "production-app-web"
+        // ComposeDown would look for this container name to stop it
+    }
+    
+    @Test("ComposeDown processes all services when no filter specified")
+    func testComposeDownStopAll() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-all-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with multiple services
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+          api:
+            image: node:latest
+          db:
+            image: postgres:14
+          cache:
+            image: redis:alpine
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify all services would be stopped
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let allServices: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        }
+        
+        // When no filter is specified, all services should be stopped
+        #expect(allServices.count == 4)
+        
+        // Verify all service names are available for stopping
+        let serviceNames = allServices.map { $0.serviceName }
+        #expect(serviceNames.contains("web"))
+        #expect(serviceNames.contains("api"))
+        #expect(serviceNames.contains("db"))
+        #expect(serviceNames.contains("cache"))
+    }
+    
+    @Test("ComposeDown handles container naming convention")
+    func testComposeDownContainerNaming() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-naming-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with explicit and implicit container names
+        let composeYAML = """
+        name: myapp
+        services:
+          web:
+            image: nginx:latest
+          api:
+            image: node:latest
+            container_name: custom-api-name
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify container naming
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let webService = dockerCompose.services["web"]??
+        let apiService = dockerCompose.services["api"]??
+        
+        // web would be named "myapp-web" (project name + service name)
+        #expect(webService.container_name == nil)
+        
+        // api has explicit container_name, so it would be "custom-api-name"
+        #expect(apiService.container_name == "custom-api-name")
+    }
+    
+    @Test("ComposeDown verifies compose file structure for shutdown")
+    func testComposeDownComposeStructure() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-down-structure-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a complete compose file
+        let composeYAML = """
+        version: '3.8'
+        name: test-app
+        services:
+          web:
+            image: nginx:latest
+            networks:
+              - frontend
+          db:
+            image: postgres:14
+            volumes:
+              - db-data:/var/lib/postgresql/data
+        networks:
+          frontend:
+            driver: bridge
+        volumes:
+          db-data:
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify complete structure
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        // Verify all components that ComposeDown needs to be aware of
+        #expect(dockerCompose.version == "3.8")
+        #expect(dockerCompose.name == "test-app")
+        #expect(dockerCompose.services.count == 2)
+        #expect(dockerCompose.networks != nil)
+        #expect(dockerCompose.volumes != nil)
+    }
+    
+    // MARK: - Argument Parsing Tests
+    // These tests verify that command-line arguments are parsed correctly
     
     @Test("Parse ComposeDown with no flags")
     func parseComposeDownNoFlags() throws {

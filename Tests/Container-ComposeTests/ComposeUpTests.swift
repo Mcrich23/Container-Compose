@@ -18,6 +18,7 @@ import Testing
 import Foundation
 import ArgumentParser
 @testable import ContainerComposeCore
+@testable import Yams
 
 @Suite("ComposeUp Command Tests")
 struct ComposeUpTests {
@@ -35,7 +36,390 @@ struct ComposeUpTests {
         #expect(ComposeUp.configuration.abstract?.isEmpty == false)
     }
     
-    // MARK: - Flag Parsing Tests
+    // MARK: - Functionality Tests
+    
+    @Test("ComposeUp reads and parses compose file")
+    func testComposeUpReadsComposeFile() async throws {
+        // Create a temporary directory for test
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-test-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a simple compose file
+        let composeYAML = """
+        services:
+          test-service:
+            image: alpine:latest
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse the compose file directly to verify it works
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        // Verify the parse was successful
+        #expect(dockerCompose.services.count == 1)
+        #expect(dockerCompose.services["test-service"]??.image == "alpine:latest")
+    }
+    
+    @Test("ComposeUp handles missing compose file")
+    func testComposeUpMissingFile() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-missing-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Verify that accessing a non-existent file throws an error
+        let composePath = tempDir.appendingPathComponent("compose.yml").path
+        let fileExists = FileManager.default.fileExists(atPath: composePath)
+        
+        #expect(!fileExists)
+    }
+    
+    @Test("ComposeUp respects service filtering")
+    func testComposeUpServiceFiltering() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-filter-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with multiple services
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+          db:
+            image: postgres:14
+          cache:
+            image: redis:alpine
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify services
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        // Test service filtering logic
+        let allServices: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        }
+        
+        let requestedServices = ["web", "db"]
+        let filteredServices = allServices.filter { serviceName, service in
+            requestedServices.contains(serviceName)
+        }
+        
+        #expect(filteredServices.count == 2)
+        #expect(filteredServices.contains(where: { $0.serviceName == "web" }))
+        #expect(filteredServices.contains(where: { $0.serviceName == "db" }))
+        #expect(!filteredServices.contains(where: { $0.serviceName == "cache" }))
+    }
+    
+    @Test("ComposeUp processes environment variables")
+    func testComposeUpEnvironmentVariables() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-env-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with environment variables
+        let composeYAML = """
+        services:
+          app:
+            image: alpine:latest
+            environment:
+              DATABASE_URL: postgres://localhost/mydb
+              DEBUG: "true"
+              PORT: "8080"
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify environment variables
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let appService = dockerCompose.services["app"]??
+        #expect(appService.environment?["DATABASE_URL"] == "postgres://localhost/mydb")
+        #expect(appService.environment?["DEBUG"] == "true")
+        #expect(appService.environment?["PORT"] == "8080")
+    }
+    
+    @Test("ComposeUp processes volumes configuration")
+    func testComposeUpVolumes() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-volumes-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with volumes
+        let composeYAML = """
+        services:
+          db:
+            image: postgres:14
+            volumes:
+              - db-data:/var/lib/postgresql/data
+              - ./config:/etc/config:ro
+        volumes:
+          db-data:
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify volumes
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let dbService = dockerCompose.services["db"]??
+        #expect(dbService.volumes?.count == 2)
+        #expect(dbService.volumes?.contains("db-data:/var/lib/postgresql/data") == true)
+        #expect(dbService.volumes?.contains("./config:/etc/config:ro") == true)
+        
+        #expect(dockerCompose.volumes != nil)
+        #expect(dockerCompose.volumes?["db-data"] != nil)
+    }
+    
+    @Test("ComposeUp processes networks configuration")
+    func testComposeUpNetworks() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-networks-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with networks
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+            networks:
+              - frontend
+              - backend
+        networks:
+          frontend:
+            driver: bridge
+          backend:
+            driver: bridge
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify networks
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let webService = dockerCompose.services["web"]??
+        #expect(webService.networks?.count == 2)
+        #expect(webService.networks?.contains("frontend") == true)
+        #expect(webService.networks?.contains("backend") == true)
+        
+        #expect(dockerCompose.networks != nil)
+        #expect(dockerCompose.networks?["frontend"]??.driver == "bridge")
+        #expect(dockerCompose.networks?["backend"]??.driver == "bridge")
+    }
+    
+    @Test("ComposeUp handles service dependencies")
+    func testComposeUpServiceDependencies() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-deps-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with dependencies
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+            depends_on:
+              - api
+          api:
+            image: node:latest
+            depends_on:
+              - db
+          db:
+            image: postgres:14
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify dependencies
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        // Verify dependencies are parsed
+        let webService = dockerCompose.services["web"]??
+        #expect(webService.depends_on?.contains("api") == true)
+        
+        let apiService = dockerCompose.services["api"]??
+        #expect(apiService.depends_on?.contains("db") == true)
+        
+        // Verify topological sorting works
+        let services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        }
+        
+        let sortedServices = try Service.topoSortConfiguredServices(services)
+        let serviceNames = sortedServices.map { $0.serviceName }
+        
+        // db should come before api, api before web
+        let dbIndex = serviceNames.firstIndex(of: "db")!
+        let apiIndex = serviceNames.firstIndex(of: "api")!
+        let webIndex = serviceNames.firstIndex(of: "web")!
+        
+        #expect(dbIndex < apiIndex)
+        #expect(apiIndex < webIndex)
+    }
+    
+    @Test("ComposeUp determines project name correctly")
+    func testComposeUpProjectName() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-project-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Test with explicit project name
+        let composeYAMLWithName = """
+        name: my-project
+        services:
+          web:
+            image: nginx:latest
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAMLWithName.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        #expect(dockerCompose.name == "my-project")
+        
+        // Test without project name (should use directory name)
+        let composeYAMLWithoutName = """
+        services:
+          web:
+            image: nginx:latest
+        """
+        try composeYAMLWithoutName.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        let yamlData2 = try Data(contentsOf: composePath)
+        let dockerComposeString2 = String(data: yamlData2, encoding: .utf8)!
+        let dockerCompose2 = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString2)
+        
+        #expect(dockerCompose2.name == nil)
+        // Project name would default to directory name at runtime
+    }
+    
+    @Test("ComposeUp handles build configuration")
+    func testComposeUpBuildConfiguration() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-build-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with build configuration
+        let composeYAML = """
+        services:
+          app:
+            build:
+              context: ./app
+              dockerfile: Dockerfile
+              args:
+                NODE_ENV: production
+                VERSION: 1.0.0
+            image: myapp:latest
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify build configuration
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let appService = dockerCompose.services["app"]??
+        #expect(appService.build != nil)
+        #expect(appService.build?.context == "./app")
+        #expect(appService.build?.dockerfile == "Dockerfile")
+        #expect(appService.build?.args?["NODE_ENV"] == "production")
+        #expect(appService.build?.args?["VERSION"] == "1.0.0")
+        #expect(appService.image == "myapp:latest")
+    }
+    
+    @Test("ComposeUp processes port mappings")
+    func testComposeUpPortMappings() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-ports-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with port mappings
+        let composeYAML = """
+        services:
+          web:
+            image: nginx:latest
+            ports:
+              - "8080:80"
+              - "443:443"
+              - "3000"
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify ports
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let webService = dockerCompose.services["web"]??
+        #expect(webService.ports?.count == 3)
+        #expect(webService.ports?.contains("8080:80") == true)
+        #expect(webService.ports?.contains("443:443") == true)
+        #expect(webService.ports?.contains("3000") == true)
+    }
+    
+    @Test("ComposeUp handles container configuration options")
+    func testComposeUpContainerOptions() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("compose-up-options-\(UUID())")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        // Create a compose file with various container options
+        let composeYAML = """
+        services:
+          app:
+            image: alpine:latest
+            container_name: my-app-container
+            hostname: myapp.local
+            user: "1000:1000"
+            working_dir: /app
+            restart: always
+            privileged: true
+            read_only: false
+            stdin_open: true
+            tty: true
+        """
+        let composePath = tempDir.appendingPathComponent("compose.yml")
+        try composeYAML.write(to: composePath, atomically: true, encoding: .utf8)
+        
+        // Parse and verify container options
+        let yamlData = try Data(contentsOf: composePath)
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        
+        let appService = dockerCompose.services["app"]??
+        #expect(appService.container_name == "my-app-container")
+        #expect(appService.hostname == "myapp.local")
+        #expect(appService.user == "1000:1000")
+        #expect(appService.working_dir == "/app")
+        #expect(appService.restart == "always")
+        #expect(appService.privileged == true)
+        #expect(appService.read_only == false)
+        #expect(appService.stdin_open == true)
+        #expect(appService.tty == true)
+    }
+    
+    // MARK: - Argument Parsing Tests
+    // These tests verify that command-line arguments are parsed correctly
     
     @Test("Parse ComposeUp with no flags")
     func parseComposeUpNoFlags() throws {

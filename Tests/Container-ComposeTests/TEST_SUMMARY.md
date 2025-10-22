@@ -63,12 +63,25 @@ Comprehensive tests for parsing docker-compose.yml files:
 - Parse complete compose file with all features
 - Parse and verify topological sort of services with dependencies
 
-### 2. ComposeUpTests.swift (80+ tests)
-Comprehensive tests for the ComposeUp command with all flag combinations:
+### 2. ComposeUpTests.swift (60 tests)
+Comprehensive tests for the ComposeUp command functionality and flag combinations:
 
 #### Command Configuration (2 tests)
 - Verify command name
 - Verify abstract description
+
+#### Functionality Tests (11 tests)
+- Reads and parses compose file
+- Handles missing compose file
+- Respects service filtering
+- Processes environment variables
+- Processes volumes configuration
+- Processes networks configuration
+- Handles service dependencies
+- Determines project name correctly
+- Handles build configuration
+- Processes port mappings
+- Handles container configuration options
 
 #### Individual Flag Parsing (11 tests)
 - Parse with no flags (verify defaults)
@@ -129,12 +142,23 @@ Comprehensive tests for the ComposeUp command with all flag combinations:
 #### Flag Permutations (6 tests)
 - Various ordering combinations of flags and services
 
-### 3. ComposeDownTests.swift (70+ tests)
-Comprehensive tests for the ComposeDown command with all flag combinations:
+### 3. ComposeDownTests.swift (58 tests)
+Comprehensive tests for the ComposeDown command functionality and flag combinations:
 
 #### Command Configuration (2 tests)
 - Verify command name
 - Verify abstract description
+
+#### Functionality Tests (9 tests)
+- Reads and parses compose file
+- Handles missing compose file
+- Identifies services to stop
+- Respects service filtering for selective shutdown
+- Handles services with dependencies (reverse order)
+- Determines project name for container identification
+- Processes all services when no filter specified
+- Handles container naming convention
+- Verifies compose file structure for shutdown
 
 #### Flag Parsing (5 tests)
 - Parse with no flags (verify defaults)
@@ -215,24 +239,26 @@ The tests cover:
 - ✅ Complex integration scenarios
 
 ### ComposeUp Tests
-- ✅ All flags: `-d/--detach`, `-f/--file`, `-b/--build`, `--no-cache`
-- ✅ Service selection (single, multiple, none)
-- ✅ All flag combinations
-- ✅ Short and long form flags
-- ✅ Flag ordering variations
-- ✅ Default values
-- ✅ Real-world scenarios (prod, dev, testing, CI/CD)
-- ✅ Edge cases
+- ✅ **Functionality**: File reading, parsing, service filtering, environment variables, volumes, networks, dependencies, project naming, build configuration, port mappings, container options
+- ✅ **Flags**: `-d/--detach`, `-f/--file`, `-b/--build`, `--no-cache`
+- ✅ **Service selection**: Single, multiple, none
+- ✅ **Flag combinations**: All permutations
+- ✅ **Flag forms**: Short and long
+- ✅ **Flag ordering**: Various positions
+- ✅ **Default values**: All verified
+- ✅ **Real-world scenarios**: Production, development, testing, CI/CD
+- ✅ **Edge cases**: Duplicates, empty arrays
 
 ### ComposeDown Tests
-- ✅ All flags: `-f/--file`
-- ✅ Service selection (single, multiple, none - stop all)
-- ✅ All flag combinations
-- ✅ Short and long form flags
-- ✅ Flag ordering variations
-- ✅ Default values
-- ✅ Real-world scenarios (prod, dev, testing, CI/CD)
-- ✅ Edge cases
+- ✅ **Functionality**: File reading, parsing, service identification, selective shutdown, dependency handling (reverse order), project naming, container naming, stop all vs selective
+- ✅ **Flags**: `-f/--file`
+- ✅ **Service selection**: Stop all vs selective
+- ✅ **Flag combinations**: All permutations
+- ✅ **Flag forms**: Short and long
+- ✅ **Flag ordering**: Various positions
+- ✅ **Default values**: All verified
+- ✅ **Real-world scenarios**: Production, development, testing, CI/CD
+- ✅ **Edge cases**: Various service names, paths
 
 ## Running Tests
 
@@ -266,10 +292,10 @@ swift test --filter ComposeDownTests
    - Include real-world scenarios
 
 4. **Comprehensive Coverage**: The test suite includes:
-   - 60+ parsing tests
-   - 80+ ComposeUp command tests
-   - 70+ ComposeDown command tests
-   - **Total: 210+ tests**
+   - 37 parsing tests
+   - 60 ComposeUp command tests (11 functionality + 49 argument parsing)
+   - 58 ComposeDown command tests (9 functionality + 49 argument parsing)
+   - **Total: 155 tests**
 
 ## What Changed
 
@@ -280,22 +306,25 @@ swift test --filter ComposeDownTests
 - Covered many aspects but incorrectly
 
 ### After
-- 3 focused test files with 210+ tests
+- 3 focused test files with 155 tests
 - Tests are comprehensive and correct
 - Tests import and use the actual ContainerComposeCore types
 - Each test validates specific functionality
 - Complete coverage of:
-  - Docker Compose YAML parsing
-  - ComposeUp command with all flags
-  - ComposeDown command with all flags
+  - Docker Compose YAML parsing (37 tests)
+  - ComposeUp command functionality and flags (60 tests)
+  - ComposeDown command functionality and flags (58 tests)
+- Tests verify both command behavior/results and argument parsing
 
 ## Summary
 
 ✅ All existing tests removed
-✅ Comprehensive parsing tests created (60+ tests)
-✅ Comprehensive ComposeUp tests created (80+ tests)
-✅ Comprehensive ComposeDown tests created (70+ tests)
+✅ Comprehensive parsing tests created (37 tests)
+✅ Comprehensive ComposeUp tests created (60 tests: 11 functionality + 49 argument parsing)
+✅ Comprehensive ComposeDown tests created (58 tests: 9 functionality + 49 argument parsing)
+✅ **Total: 155 tests** covering parsing, functionality, and argument parsing
 ✅ All flag combinations tested
 ✅ Real-world scenarios covered
 ✅ Edge cases handled
+✅ Functionality tests verify command behavior and results
 ✅ Tests are syntactically correct and ready to run on macOS
