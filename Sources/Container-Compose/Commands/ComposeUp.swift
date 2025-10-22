@@ -231,11 +231,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             do {
                 try await container.stop()
             } catch {
+                print("Error Stopping Container: \(error)")
             }
             if remove {
                 do {
                     try await container.delete()
                 } catch {
+                    print("Error Removing Container: \(error)")
                 }
             }
         }

@@ -60,7 +60,7 @@ public struct ComposeDown: AsyncParsableCommand {
             "docker-compose.yaml",
         ]
         for filename in filenames {
-            if fileManager.fileExists(atPath: filename) {
+            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
                 composeFilename = filename
                 break
             }
@@ -117,11 +117,13 @@ public struct ComposeDown: AsyncParsableCommand {
             do {
                 try await container.stop()
             } catch {
+                print("Error Stopping Container: \(error)")
             }
             if remove {
                 do {
                     try await container.delete()
                 } catch {
+                    print("Error Removing Container: \(error)")
                 }
             }
         }
