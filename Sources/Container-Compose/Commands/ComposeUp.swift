@@ -433,14 +433,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("\(key)=\(value)")
         }
 
-        // REMOVED: Port mappings (-p) are not supported by `container run`
-        // if let ports = service.ports {
-        //     for port in ports {
-        //         let resolvedPort = resolveVariable(port, with: envVarsFromFile)
-        //         runCommandArgs.append("-p")
-        //         runCommandArgs.append(resolvedPort)
-        //     }
-        // }
+         if let ports = service.ports {
+             for port in ports {
+                 let resolvedPort = resolveVariable(port, with: environmentVariables)
+                 runCommandArgs.append("-p")
+                 runCommandArgs.append("0.0.0.0:\(resolvedPort)")
+             }
+         }
 
         // Connect to specified networks
         if let serviceNetworks = service.networks {
@@ -575,7 +574,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             commands.append(contentsOf: ["--platform", platform])
         }
 
-        var imagePull = try Application.ImagePull.parse(commands + global.passThroughCommands())
+        let imagePull = try Application.ImagePull.parse(commands + global.passThroughCommands())
         try await imagePull.run()
     }
 
