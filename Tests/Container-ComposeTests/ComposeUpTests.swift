@@ -17,8 +17,8 @@
 import Testing
 import Foundation
 import ArgumentParser
+import Yams
 @testable import ContainerComposeCore
-@testable import Yams
 
 @Suite("ComposeUp Command Tests")
 struct ComposeUpTests {

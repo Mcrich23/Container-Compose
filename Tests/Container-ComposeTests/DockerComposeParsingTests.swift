@@ -16,7 +16,7 @@
 
 import Testing
 import Foundation
-@testable import Yams
+import Yams
 @testable import ContainerComposeCore
 
 @Suite("DockerCompose YAML Parsing Tests")
