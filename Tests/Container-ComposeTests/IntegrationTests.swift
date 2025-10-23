@@ -213,7 +213,7 @@ struct IntegrationTests {
         // --- APP Container ---
         #expect(appContainer.configuration.image.reference == "docker.io/library/python:3.12-alpine")
         let appEnv = parseEnvToDict(appContainer.configuration.initProcess.environment)
-        #expect(appEnv["DATABASE_URL"] == "postgres://postgres:postgres@\(dbContainer.networks.first!.address.split(separator: "/")[0]):5432/appdb")
+        #expect(appEnv["DATABASE_URL"] == "postgres://postgres:postgres@db:5432/appdb")
         #expect(appContainer.configuration.initProcess.executable == "python -m http.server 8000")
         #expect(appContainer.configuration.platform.architecture == "arm64")
         #expect(appContainer.configuration.platform.os == "linux")
@@ -239,7 +239,7 @@ struct IntegrationTests {
     }
     
     private func parseEnvToDict(_ envArray: [String]) -> [String: String] {
-        let array = envArray.map({ (String($0.split(separator: "=")[0].split(separator: ":")[0]), String($0.split(separator: "=")[1].split(separator: ":")[1])) })
+        let array = envArray.map({ (String($0.split(separator: "=")[0]), String($0.split(separator: "=")[1])) })
         let dict = Dictionary(uniqueKeysWithValues: array)
         
         return dict
