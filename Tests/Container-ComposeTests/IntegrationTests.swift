@@ -82,6 +82,7 @@ struct IntegrationTests {
         print("")
     }
     
+    // TODO: Reenable
 //    @Test("Test three-tier web application with multiple networks")
 //    func testThreeTierWebAppWithNetworks() async throws {
 //        let yaml = DockerComposeParsingTests.dockerComposeYaml2
