@@ -158,7 +158,7 @@ struct IntegrationTests {
 struct ContainerDependentTrait: TestScoping, TestTrait, SuiteTrait {
     func provideScope(for test: Test, testCase: Test.Case?, performing function: () async throws -> Void) async throws {
         // Start Server
-        try await Application.SystemStart.parse([]).run()
+        try await Application.SystemStart.parse(["--enable-kernel-install"]).run()
         
         // Run Test
         try await function()
