@@ -396,7 +396,107 @@ struct DockerComposeParsingTests {
     // MARK: Full Files
     @Test("Parse WordPress with MySQL compose file")
     func parseWordPressCompose() throws {
-        let yaml = """
+        let yaml = Self.dockerComposeYaml1
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services.count == 2)
+        #expect(compose.services["wordpress"] != nil)
+        #expect(compose.services["db"] != nil)
+        #expect(compose.volumes?.count == 2)
+        #expect(compose.services["wordpress"]??.depends_on?.contains("db") == true)
+    }
+    
+    @Test("Parse three-tier web application")
+    func parseThreeTierApp() throws {
+        let yaml = Self.dockerComposeYaml2
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.name == "webapp")
+        #expect(compose.services.count == 4)
+        #expect(compose.networks?.count == 2)
+        #expect(compose.volumes?.count == 1)
+    }
+    
+    @Test("Parse microservices architecture")
+    func parseMicroservicesCompose() throws {
+        let yaml = Self.dockerComposeYaml3
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services.count == 5)
+        #expect(compose.services["api-gateway"]??.depends_on?.count == 3)
+    }
+    
+    @Test("Parse development environment with build")
+    func parseDevelopmentEnvironment() throws {
+        let yaml = Self.dockerComposeYaml4
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services["app"]??.build != nil)
+        #expect(compose.services["app"]??.build?.context == ".")
+        #expect(compose.services["app"]??.volumes?.count == 2)
+    }
+    
+    @Test("Parse compose with secrets and configs")
+    func parseComposeWithSecretsAndConfigs() throws {
+        let yaml = Self.dockerComposeYaml5
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.configs != nil)
+        #expect(compose.secrets != nil)
+    }
+    
+    @Test("Parse compose with healthchecks and restart policies")
+    func parseComposeWithHealthchecksAndRestart() throws {
+        let yaml = Self.dockerComposeYaml6
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services["web"]??.restart == "unless-stopped")
+        #expect(compose.services["web"]??.healthcheck != nil)
+        #expect(compose.services["db"]??.restart == "always")
+    }
+    
+    @Test("Parse compose with complex dependency chain")
+    func parseComplexDependencyChain() throws {
+        let yaml = Self.dockerComposeYaml6
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services.count == 4)
+        
+        // Test dependency resolution
+        let services: [(String, Service)] = compose.services.compactMap({ serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        })
+        let sorted = try Service.topoSortConfiguredServices(services)
+        
+        // db and cache should come before api
+        let dbIndex = sorted.firstIndex(where: { $0.serviceName == "db" })!
+        let cacheIndex = sorted.firstIndex(where: { $0.serviceName == "cache" })!
+        let apiIndex = sorted.firstIndex(where: { $0.serviceName == "api" })!
+        let frontendIndex = sorted.firstIndex(where: { $0.serviceName == "frontend" })!
+        
+        #expect(dbIndex < apiIndex)
+        #expect(cacheIndex < apiIndex)
+        #expect(apiIndex < frontendIndex)
+    }
+}
+
+extension DockerComposeParsingTests {
+    static let dockerComposeYaml1 = """
         version: '3.8'
         
         services:
@@ -428,20 +528,8 @@ struct DockerComposeParsingTests {
           wordpress_data:
           db_data:
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services.count == 2)
-        #expect(compose.services["wordpress"] != nil)
-        #expect(compose.services["db"] != nil)
-        #expect(compose.volumes?.count == 2)
-        #expect(compose.services["wordpress"]??.depends_on?.contains("db") == true)
-    }
     
-    @Test("Parse three-tier web application")
-    func parseThreeTierApp() throws {
-        let yaml = """
+    static let dockerComposeYaml2 = """
         version: '3.8'
         name: webapp
         
@@ -491,19 +579,8 @@ struct DockerComposeParsingTests {
           frontend:
           backend:
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.name == "webapp")
-        #expect(compose.services.count == 4)
-        #expect(compose.networks?.count == 2)
-        #expect(compose.volumes?.count == 1)
-    }
     
-    @Test("Parse microservices architecture")
-    func parseMicroservicesCompose() throws {
-        let yaml = """
+    static let dockerComposeYaml3 = """
         version: '3.8'
         
         services:
@@ -538,17 +615,8 @@ struct DockerComposeParsingTests {
             environment:
               POSTGRES_PASSWORD: postgres
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services.count == 5)
-        #expect(compose.services["api-gateway"]??.depends_on?.count == 3)
-    }
     
-    @Test("Parse development environment with build")
-    func parseDevelopmentEnvironment() throws {
-        let yaml = """
+    static let dockerComposeYaml4 = """
         version: '3.8'
         
         services:
@@ -565,18 +633,8 @@ struct DockerComposeParsingTests {
               - "3000:3000"
             command: npm run dev
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services["app"]??.build != nil)
-        #expect(compose.services["app"]??.build?.context == ".")
-        #expect(compose.services["app"]??.volumes?.count == 2)
-    }
     
-    @Test("Parse compose with secrets and configs")
-    func parseComposeWithSecretsAndConfigs() throws {
-        let yaml = """
+    static let dockerComposeYaml5 = """
         version: '3.8'
         
         services:
@@ -596,17 +654,8 @@ struct DockerComposeParsingTests {
           db_password:
             external: true
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.configs != nil)
-        #expect(compose.secrets != nil)
-    }
     
-    @Test("Parse compose with healthchecks and restart policies")
-    func parseComposeWithHealthchecksAndRestart() throws {
-        let yaml = """
+    static let dockerComposeYaml6 = """
         version: '3.8'
         
         services:
@@ -629,18 +678,8 @@ struct DockerComposeParsingTests {
               timeout: 5s
               retries: 5
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services["web"]??.restart == "unless-stopped")
-        #expect(compose.services["web"]??.healthcheck != nil)
-        #expect(compose.services["db"]??.restart == "always")
-    }
     
-    @Test("Parse compose with complex dependency chain")
-    func parseComplexDependencyChain() throws {
-        let yaml = """
+    static let dockerComposeYaml7 = """
         version: '3.8'
         
         services:
@@ -661,27 +700,4 @@ struct DockerComposeParsingTests {
           db:
             image: postgres:14
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services.count == 4)
-        
-        // Test dependency resolution
-        let services: [(String, Service)] = compose.services.compactMap({ serviceName, service in
-            guard let service else { return nil }
-            return (serviceName, service)
-        })
-        let sorted = try Service.topoSortConfiguredServices(services)
-        
-        // db and cache should come before api
-        let dbIndex = sorted.firstIndex(where: { $0.serviceName == "db" })!
-        let cacheIndex = sorted.firstIndex(where: { $0.serviceName == "cache" })!
-        let apiIndex = sorted.firstIndex(where: { $0.serviceName == "api" })!
-        let frontendIndex = sorted.firstIndex(where: { $0.serviceName == "frontend" })!
-        
-        #expect(dbIndex < apiIndex)
-        #expect(cacheIndex < apiIndex)
-        #expect(apiIndex < frontendIndex)
-    }
 }

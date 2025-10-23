@@ -16,10 +16,12 @@
 
 import Testing
 import Foundation
+import ContainerCommands
+import ContainerClient
 @testable import Yams
 @testable import ContainerComposeCore
 
-@Suite("Integration Tests - Real-World Compose Files")
+@Suite("Compose Up Tests - Real-World Compose Files", .containerDependent)
 struct IntegrationTests {
     
     @Test("Parse WordPress with MySQL compose file")
@@ -267,7 +269,7 @@ struct IntegrationTests {
     }
     
     @Test("Parse compose with complex dependency chain")
-    func parseComplexDependencyChain() throws {
+    func parseComplexDependencyChain() async throws {
         let yaml = """
         version: '3.8'
         
@@ -289,28 +291,28 @@ struct IntegrationTests {
           db:
             image: postgres:14
         """
+        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests/docker-compose.yaml")
+        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
         
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", tempLocation.deletingLastPathComponent().path(percentEncoded: false)])
+        try await composeUp.run()
         
-        #expect(compose.services.count == 4)
-        
-        // Test dependency resolution
-        let services: [(String, Service)] = compose.services.compactMap({ serviceName, service in
-            guard let service else { return nil }
-            return (serviceName, service)
-        })
-        let sorted = try Service.topoSortConfiguredServices(services)
-        
-        // db and cache should come before api
-        let dbIndex = sorted.firstIndex(where: { $0.serviceName == "db" })!
-        let cacheIndex = sorted.firstIndex(where: { $0.serviceName == "cache" })!
-        let apiIndex = sorted.firstIndex(where: { $0.serviceName == "api" })!
-        let frontendIndex = sorted.firstIndex(where: { $0.serviceName == "frontend" })!
-        
-        #expect(dbIndex < apiIndex)
-        #expect(cacheIndex < apiIndex)
-        #expect(apiIndex < frontendIndex)
+        let containers = try await ClientContainer.list()
+        print(containers)
     }
 }
 
+struct ContainerDependentTrait: TestScoping, TestTrait, SuiteTrait {
+    func provideScope(for test: Test, testCase: Test.Case?, performing function: () async throws -> Void) async throws {
+        // Start Server
+        try await Application.SystemStart.parse([]).run()
+        
+        // Run Test
+        try await function()
+    }
+}
+
+extension Trait where Self == ContainerDependentTrait {
+    static var containerDependent: ContainerDependentTrait { .init() }
+}
