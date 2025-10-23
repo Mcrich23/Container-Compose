@@ -180,5 +180,3 @@ struct EnvFileLoadingTests {
         #expect(envVars.count == 4)
     }
 }
-
-// Test helper function that mimics the actual implementation
