@@ -144,7 +144,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if let networks = dockerCompose.networks {
             print("\n--- Processing Networks ---")
             for (networkName, networkConfig) in networks {
-                guard let networkConfig else { continue }
                 try await setupNetwork(name: networkName, config: networkConfig)
             }
             print("--- Networks Processed ---\n")
@@ -266,10 +265,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         try? fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
     }
 
-    private func setupNetwork(name networkName: String, config networkConfig: Network) async throws {
-        let actualNetworkName = networkConfig.name ?? networkName  // Use explicit name or key as name
+    private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
+        let actualNetworkName = networkConfig?.name ?? networkName  // Use explicit name or key as name
 
-        if let externalNetwork = networkConfig.external, externalNetwork.isExternal {
+        if let externalNetwork = networkConfig?.external, externalNetwork.isExternal {
             print("Info: Network '\(networkName)' is declared as external.")
             print("This tool assumes external network '\(externalNetwork.name ?? actualNetworkName)' already exists and will not attempt to create it.")
         } else {
@@ -277,12 +276,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
             #warning("Docker Compose Network Options Not Supported")
             // Add driver and driver options
-            if let driver = networkConfig.driver, !driver.isEmpty {
+            if let driver = networkConfig?.driver, !driver.isEmpty {
                 //                    networkCreateArgs.append("--driver")
                 //                    networkCreateArgs.append(driver)
                 print("Network Driver Detected, But Not Supported")
             }
-            if let driverOpts = networkConfig.driver_opts, !driverOpts.isEmpty {
+            if let driverOpts = networkConfig?.driver_opts, !driverOpts.isEmpty {
                 //                    for (optKey, optValue) in driverOpts {
                 //                        networkCreateArgs.append("--opt")
                 //                        networkCreateArgs.append("\(optKey)=\(optValue)")
@@ -290,21 +289,21 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 print("Network Options Detected, But Not Supported")
             }
             // Add various network flags
-            if networkConfig.attachable == true {
+            if networkConfig?.attachable == true {
                 //                    networkCreateArgs.append("--attachable")
                 print("Network Attachable Flag Detected, But Not Supported")
             }
-            if networkConfig.enable_ipv6 == true {
+            if networkConfig?.enable_ipv6 == true {
                 //                    networkCreateArgs.append("--ipv6")
                 print("Network IPv6 Flag Detected, But Not Supported")
             }
-            if networkConfig.isInternal == true {
+            if networkConfig?.isInternal == true {
                 //                    networkCreateArgs.append("--internal")
                 print("Network Internal Flag Detected, But Not Supported")
             }  // CORRECTED: Use isInternal
 
             // Add labels
-            if let labels = networkConfig.labels, !labels.isEmpty {
+            if let labels = networkConfig?.labels, !labels.isEmpty {
                 print("Network Labels Detected, But Not Supported")
                 //                    for (labelKey, labelValue) in labels {
                 //                        networkCreateArgs.append("--label")
@@ -451,7 +450,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 runCommandArgs.append(networkToConnect)
             }
             print(
-                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in docker-compose.yml."
+                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composeFilename)."
             )
             print(
                 "Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level."
