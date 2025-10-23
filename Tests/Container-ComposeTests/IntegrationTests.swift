@@ -25,102 +25,68 @@ import ContainerClient
 struct IntegrationTests {
     
     @Test("Parse WordPress with MySQL compose file")
-    func parseWordPressCompose() throws {
-        let yaml = """
-        version: '3.8'
+    func parseWordPressCompose() async throws {
+        let yaml = DockerComposeParsingTests.dockerComposeYaml1
         
-        services:
-          wordpress:
-            image: wordpress:latest
-            ports:
-              - "8080:80"
-            environment:
-              WORDPRESS_DB_HOST: db
-              WORDPRESS_DB_USER: wordpress
-              WORDPRESS_DB_PASSWORD: wordpress
-              WORDPRESS_DB_NAME: wordpress
-            depends_on:
-              - db
-            volumes:
-              - wordpress_data:/var/www/html
-          
-          db:
-            image: mysql:8.0
-            environment:
-              MYSQL_DATABASE: wordpress
-              MYSQL_USER: wordpress
-              MYSQL_PASSWORD: wordpress
-              MYSQL_ROOT_PASSWORD: rootpassword
-            volumes:
-              - db_data:/var/lib/mysql
+        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
+        let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
         
-        volumes:
-          wordpress_data:
-          db_data:
-        """
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", tempLocation.deletingLastPathComponent().path(percentEncoded: false)])
+        try await composeUp.run()
         
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        // Get these containers
+        let containers = try await ClientContainer.list()
+            .filter({
+                $0.configuration.id.contains(tempLocation.deletingLastPathComponent().lastPathComponent)
+            })
         
-        #expect(compose.services.count == 2)
-        #expect(compose.services["wordpress"] != nil)
-        #expect(compose.services["db"] != nil)
-        #expect(compose.volumes?.count == 2)
-        #expect(compose.services["wordpress"]??.depends_on?.contains("db") == true)
+        // Assert correct wordpress container information
+        guard let wordpressContainer = containers.first(where: { $0.configuration.id == "\(folderName)-wordpress" }),
+              let dbContainer = containers.first(where: { $0.configuration.id == "\(folderName)-db" })
+        else {
+            throw Errors.containerNotFound
+        }
+        
+        // Check Ports
+        #expect(wordpressContainer.configuration.publishedPorts.map({ "\($0.hostAddress):\($0.hostPort):\($0.containerPort)" }) == ["0.0.0.0:8080:80"])
+        
+        // Check Image
+        #expect(wordpressContainer.configuration.image.reference == "docker.io/library/wordpress:latest")
+        
+        // Check Environment
+        let wpEnvArray = wordpressContainer.configuration.initProcess.environment.map({ (String($0.split(separator: "=")[0]), String($0.split(separator: "=")[1])) })
+        let wpEnv = Dictionary(uniqueKeysWithValues: wpEnvArray)
+        #expect(wpEnv["WORDPRESS_DB_HOST"] == String(dbContainer.networks.first!.address.split(separator: "/")[0]))
+        #expect(wpEnv["WORDPRESS_DB_USER"] == "wordpress")
+        #expect(wpEnv["WORDPRESS_DB_PASSWORD"] == "wordpress")
+        #expect(wpEnv["WORDPRESS_DB_NAME"] == "wordpress")
+        
+        // Check Volume
+        #expect(wordpressContainer.configuration.mounts.map(\.destination) == ["/var/www/"])
+        
+        // Assert correct db container information
+        
+        // Check Image
+        #expect(dbContainer.configuration.image.reference == "docker.io/library/mysql:8.0")
+        
+        // Check Environment
+        let dbEnvArray = dbContainer.configuration.initProcess.environment.map({ (String($0.split(separator: "=")[0]), String($0.split(separator: "=")[1])) })
+        let dbEnv = Dictionary(uniqueKeysWithValues: dbEnvArray)
+        #expect(dbEnv["MYSQL_ROOT_PASSWORD"] == "rootpassword")
+        #expect(dbEnv["MYSQL_DATABASE"] == "wordpress")
+        #expect(dbEnv["MYSQL_USER"] == "wordpress")
+        #expect(dbEnv["MYSQL_PASSWORD"] == "wordpress")
+        
+        // Check Volume
+        #expect(dbContainer.configuration.mounts.map(\.destination) == ["/var/lib/"])
+        print("")
     }
     
     @Test("Parse three-tier web application")
     func parseThreeTierApp() throws {
-        let yaml = """
-        version: '3.8'
-        name: webapp
-        
-        services:
-          nginx:
-            image: nginx:alpine
-            ports:
-              - "80:80"
-            depends_on:
-              - app
-            networks:
-              - frontend
-          
-          app:
-            image: node:18-alpine
-            working_dir: /app
-            environment:
-              NODE_ENV: production
-              DATABASE_URL: postgres://db:5432/myapp
-            depends_on:
-              - db
-              - redis
-            networks:
-              - frontend
-              - backend
-          
-          db:
-            image: postgres:14-alpine
-            environment:
-              POSTGRES_DB: myapp
-              POSTGRES_USER: user
-              POSTGRES_PASSWORD: password
-            volumes:
-              - db-data:/var/lib/postgresql/data
-            networks:
-              - backend
-          
-          redis:
-            image: redis:alpine
-            networks:
-              - backend
-        
-        volumes:
-          db-data:
-        
-        networks:
-          frontend:
-          backend:
-        """
+        let yaml = DockerComposeParsingTests.dockerComposeYaml2
         
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
@@ -133,41 +99,7 @@ struct IntegrationTests {
     
     @Test("Parse microservices architecture")
     func parseMicroservicesCompose() throws {
-        let yaml = """
-        version: '3.8'
-        
-        services:
-          api-gateway:
-            image: traefik:v2.10
-            ports:
-              - "80:80"
-              - "8080:8080"
-            depends_on:
-              - auth-service
-              - user-service
-              - order-service
-          
-          auth-service:
-            image: auth:latest
-            environment:
-              JWT_SECRET: secret123
-              DATABASE_URL: postgres://db:5432/auth
-          
-          user-service:
-            image: user:latest
-            environment:
-              DATABASE_URL: postgres://db:5432/users
-          
-          order-service:
-            image: order:latest
-            environment:
-              DATABASE_URL: postgres://db:5432/orders
-          
-          db:
-            image: postgres:14
-            environment:
-              POSTGRES_PASSWORD: postgres
-        """
+        let yaml = DockerComposeParsingTests.dockerComposeYaml3
         
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
@@ -178,23 +110,7 @@ struct IntegrationTests {
     
     @Test("Parse development environment with build")
     func parseDevelopmentEnvironment() throws {
-        let yaml = """
-        version: '3.8'
-        
-        services:
-          app:
-            build:
-              context: .
-              dockerfile: Dockerfile.dev
-            volumes:
-              - ./app:/app
-              - /app/node_modules
-            environment:
-              NODE_ENV: development
-            ports:
-              - "3000:3000"
-            command: npm run dev
-        """
+        let yaml = DockerComposeParsingTests.dockerComposeYaml4
         
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
@@ -206,26 +122,7 @@ struct IntegrationTests {
     
     @Test("Parse compose with secrets and configs")
     func parseComposeWithSecretsAndConfigs() throws {
-        let yaml = """
-        version: '3.8'
-        
-        services:
-          app:
-            image: myapp:latest
-            configs:
-              - source: app_config
-                target: /etc/app/config.yml
-            secrets:
-              - db_password
-        
-        configs:
-          app_config:
-            external: true
-        
-        secrets:
-          db_password:
-            external: true
-        """
+        let yaml = DockerComposeParsingTests.dockerComposeYaml5
         
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
@@ -236,29 +133,7 @@ struct IntegrationTests {
     
     @Test("Parse compose with healthchecks and restart policies")
     func parseComposeWithHealthchecksAndRestart() throws {
-        let yaml = """
-        version: '3.8'
-        
-        services:
-          web:
-            image: nginx:latest
-            restart: unless-stopped
-            healthcheck:
-              test: ["CMD", "curl", "-f", "http://localhost"]
-              interval: 30s
-              timeout: 10s
-              retries: 3
-              start_period: 40s
-          
-          db:
-            image: postgres:14
-            restart: always
-            healthcheck:
-              test: ["CMD-SHELL", "pg_isready -U postgres"]
-              interval: 10s
-              timeout: 5s
-              retries: 5
-        """
+        let yaml = DockerComposeParsingTests.dockerComposeYaml6
         
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
@@ -270,36 +145,13 @@ struct IntegrationTests {
     
     @Test("Parse compose with complex dependency chain")
     func parseComplexDependencyChain() async throws {
-        let yaml = """
-        version: '3.8'
+        let yaml = DockerComposeParsingTests.dockerComposeYaml7
         
-        services:
-          frontend:
-            image: frontend:latest
-            depends_on:
-              - api
-          
-          api:
-            image: api:latest
-            depends_on:
-              - cache
-              - db
-          
-          cache:
-            image: redis:alpine
-          
-          db:
-            image: postgres:14
-        """
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests/docker-compose.yaml")
-        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
-        
-        var composeUp = try ComposeUp.parse(["-d", "--cwd", tempLocation.deletingLastPathComponent().path(percentEncoded: false)])
-        try await composeUp.run()
-        
-        let containers = try await ClientContainer.list()
-        print(containers)
+        #expect(false)
+    }
+    
+    enum Errors: Error {
+        case containerNotFound
     }
 }
 

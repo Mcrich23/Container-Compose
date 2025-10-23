@@ -587,8 +587,8 @@ extension DockerComposeParsingTests {
           api-gateway:
             image: traefik:v2.10
             ports:
-              - "80:80"
-              - "8080:8080"
+              - "81:80"
+              - "8081:8080"
             depends_on:
               - auth-service
               - user-service
