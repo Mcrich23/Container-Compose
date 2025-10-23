@@ -469,7 +469,7 @@ struct DockerComposeParsingTests {
     
     @Test("Parse compose with complex dependency chain")
     func parseComplexDependencyChain() throws {
-        let yaml = Self.dockerComposeYaml6
+        let yaml = Self.dockerComposeYaml7
         
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
