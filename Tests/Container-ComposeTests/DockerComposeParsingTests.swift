@@ -700,4 +700,31 @@ extension DockerComposeParsingTests {
           db:
             image: postgres:14
         """
+    
+    static let dockerComposeYaml8 = """
+    version: '3.8'
+
+    services:
+      web:
+        image: nginx:alpine
+        ports:
+          - "8082:80"
+        depends_on:
+          - app
+
+      app:
+        image: python:3.12-alpine
+        depends_on:
+          - db
+        command: python -m http.server 8000
+        environment:
+          DATABASE_URL: postgres://postgres:postgres@db:5432/appdb
+
+      db:
+        image: postgres:14
+        environment:
+          POSTGRES_DB: appdb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+    """
 }
