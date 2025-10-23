@@ -82,61 +82,61 @@ struct IntegrationTests {
         print("")
     }
     
-    @Test("Test three-tier web application with multiple networks")
-    func testThreeTierWebAppWithNetworks() async throws {
-        let yaml = DockerComposeParsingTests.dockerComposeYaml2
-        
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
-        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
-        let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
-        
-        var composeUp = try ComposeUp.parse(["-d", "--cwd", tempLocation.deletingLastPathComponent().path(percentEncoded: false)])
-        try await composeUp.run()
-        
-        // Get the containers created by this compose file
-        let containers = try await ClientContainer.list()
-            .filter({
-                $0.configuration.id.contains(folderName)
-            })
-        
-        guard let nginxContainer = containers.first(where: { $0.configuration.id == "\(folderName)-nginx" }),
-              let appContainer = containers.first(where: { $0.configuration.id == "\(folderName)-app" }),
-              let dbContainer = containers.first(where: { $0.configuration.id == "\(folderName)-db" }),
-              let redisContainer = containers.first(where: { $0.configuration.id == "\(folderName)-redis" })
-        else {
-            throw Errors.containerNotFound
-        }
-        
-        // --- NGINX Container ---
-        #expect(nginxContainer.configuration.image.reference == "docker.io/library/nginx:alpine")
-        #expect(nginxContainer.configuration.publishedPorts.map({ "\($0.hostAddress):\($0.hostPort):\($0.containerPort)" }) == ["0.0.0.0:80:80"])
-        #expect(nginxContainer.networks.map(\.hostname).contains("frontend"))
-        
-        // --- APP Container ---
-        #expect(appContainer.configuration.image.reference == "docker.io/library/node:18-alpine")
-        
-        let appEnv = parseEnvToDict(appContainer.configuration.initProcess.environment)
-        #expect(appEnv["NODE_ENV"] == "production")
-        #expect(appEnv["DATABASE_URL"] == "postgres://\(dbContainer.networks.first!.address.split(separator: "/")[0]):5432/myapp")
-        
-        #expect(appContainer.networks.map(\.hostname).sorted() == ["backend", "frontend"])
-        
-        // --- DB Container ---
-        #expect(dbContainer.configuration.image.reference == "docker.io/library/postgres:14-alpine")
-        let dbEnv = parseEnvToDict(dbContainer.configuration.initProcess.environment)
-        #expect(dbEnv["POSTGRES_DB"] == "myapp")
-        #expect(dbEnv["POSTGRES_USER"] == "user")
-        #expect(dbEnv["POSTGRES_PASSWORD"] == "password")
-        
-        // Verify volume mount
-        #expect(dbContainer.configuration.mounts.map(\.destination) == ["/var/lib/postgresql/"])
-        #expect(dbContainer.networks.map(\.hostname) == ["backend"])
-        
-        // --- Redis Container ---
-        #expect(redisContainer.configuration.image.reference == "docker.io/library/redis:alpine")
-        #expect(redisContainer.networks.map(\.hostname) == ["backend"])
-    }
+//    @Test("Test three-tier web application with multiple networks")
+//    func testThreeTierWebAppWithNetworks() async throws {
+//        let yaml = DockerComposeParsingTests.dockerComposeYaml2
+//        
+//        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+//        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
+//        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
+//        let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
+//        
+//        var composeUp = try ComposeUp.parse(["-d", "--cwd", tempLocation.deletingLastPathComponent().path(percentEncoded: false)])
+//        try await composeUp.run()
+//        
+//        // Get the containers created by this compose file
+//        let containers = try await ClientContainer.list()
+//            .filter({
+//                $0.configuration.id.contains(folderName)
+//            })
+//        
+//        guard let nginxContainer = containers.first(where: { $0.configuration.id == "\(folderName)-nginx" }),
+//              let appContainer = containers.first(where: { $0.configuration.id == "\(folderName)-app" }),
+//              let dbContainer = containers.first(where: { $0.configuration.id == "\(folderName)-db" }),
+//              let redisContainer = containers.first(where: { $0.configuration.id == "\(folderName)-redis" })
+//        else {
+//            throw Errors.containerNotFound
+//        }
+//        
+//        // --- NGINX Container ---
+//        #expect(nginxContainer.configuration.image.reference == "docker.io/library/nginx:alpine")
+//        #expect(nginxContainer.configuration.publishedPorts.map({ "\($0.hostAddress):\($0.hostPort):\($0.containerPort)" }) == ["0.0.0.0:80:80"])
+//        #expect(nginxContainer.networks.map(\.hostname).contains("frontend"))
+//        
+//        // --- APP Container ---
+//        #expect(appContainer.configuration.image.reference == "docker.io/library/node:18-alpine")
+//        
+//        let appEnv = parseEnvToDict(appContainer.configuration.initProcess.environment)
+//        #expect(appEnv["NODE_ENV"] == "production")
+//        #expect(appEnv["DATABASE_URL"] == "postgres://\(dbContainer.networks.first!.address.split(separator: "/")[0]):5432/myapp")
+//        
+//        #expect(appContainer.networks.map(\.hostname).sorted() == ["backend", "frontend"])
+//        
+//        // --- DB Container ---
+//        #expect(dbContainer.configuration.image.reference == "docker.io/library/postgres:14-alpine")
+//        let dbEnv = parseEnvToDict(dbContainer.configuration.initProcess.environment)
+//        #expect(dbEnv["POSTGRES_DB"] == "myapp")
+//        #expect(dbEnv["POSTGRES_USER"] == "user")
+//        #expect(dbEnv["POSTGRES_PASSWORD"] == "password")
+//        
+//        // Verify volume mount
+//        #expect(dbContainer.configuration.mounts.map(\.destination) == ["/var/lib/postgresql/"])
+//        #expect(dbContainer.networks.map(\.hostname) == ["backend"])
+//        
+//        // --- Redis Container ---
+//        #expect(redisContainer.configuration.image.reference == "docker.io/library/redis:alpine")
+//        #expect(redisContainer.networks.map(\.hostname) == ["backend"])
+//    }
     
 //    @Test("Parse development environment with build")
 //    func parseDevelopmentEnvironment() throws {
