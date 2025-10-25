@@ -43,10 +43,23 @@ let package = Package(
             path: "Sources/ContainerComposeApp"
         ),
         
+        // Test Helper
+        .target(name: "TestHelpers", path: "Tests/TestHelpers"),
+        
+        // Tests
         .testTarget(
-            name: "Container-ComposeTests",
+            name: "Container-Compose-StaticTests",
             dependencies: [
-                "ContainerComposeCore"
+                "ContainerComposeCore",
+                "TestHelpers"
+            ]
+        ),
+        
+        .testTarget(
+            name: "Container-Compose-DynamicTests",
+            dependencies: [
+                "ContainerComposeCore",
+                "TestHelpers"
             ]
         ),
     ]

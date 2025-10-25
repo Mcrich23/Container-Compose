@@ -14,17 +14,8 @@
 // limitations under the License.
 //===----------------------------------------------------------------------===//
 
-import Testing
-import Foundation
-@testable import Yams
-@testable import ContainerComposeCore
-
-@Suite("Integration Tests - Real-World Compose Files")
-struct IntegrationTests {
-    
-    @Test("Parse WordPress with MySQL compose file")
-    func parseWordPressCompose() throws {
-        let yaml = """
+public struct DockerComposeYamlFiles {
+    public static let dockerComposeYaml1 = """
         version: '3.8'
         
         services:
@@ -56,20 +47,8 @@ struct IntegrationTests {
           wordpress_data:
           db_data:
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services.count == 2)
-        #expect(compose.services["wordpress"] != nil)
-        #expect(compose.services["db"] != nil)
-        #expect(compose.volumes?.count == 2)
-        #expect(compose.services["wordpress"]??.depends_on?.contains("db") == true)
-    }
     
-    @Test("Parse three-tier web application")
-    func parseThreeTierApp() throws {
-        let yaml = """
+    public static let dockerComposeYaml2 = """
         version: '3.8'
         name: webapp
         
@@ -119,27 +98,16 @@ struct IntegrationTests {
           frontend:
           backend:
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.name == "webapp")
-        #expect(compose.services.count == 4)
-        #expect(compose.networks?.count == 2)
-        #expect(compose.volumes?.count == 1)
-    }
     
-    @Test("Parse microservices architecture")
-    func parseMicroservicesCompose() throws {
-        let yaml = """
+    public static let dockerComposeYaml3 = """
         version: '3.8'
         
         services:
           api-gateway:
             image: traefik:v2.10
             ports:
-              - "80:80"
-              - "8080:8080"
+              - "81:80"
+              - "8081:8080"
             depends_on:
               - auth-service
               - user-service
@@ -166,17 +134,8 @@ struct IntegrationTests {
             environment:
               POSTGRES_PASSWORD: postgres
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services.count == 5)
-        #expect(compose.services["api-gateway"]??.depends_on?.count == 3)
-    }
     
-    @Test("Parse development environment with build")
-    func parseDevelopmentEnvironment() throws {
-        let yaml = """
+    public static let dockerComposeYaml4 = """
         version: '3.8'
         
         services:
@@ -193,18 +152,8 @@ struct IntegrationTests {
               - "3000:3000"
             command: npm run dev
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services["app"]??.build != nil)
-        #expect(compose.services["app"]??.build?.context == ".")
-        #expect(compose.services["app"]??.volumes?.count == 2)
-    }
     
-    @Test("Parse compose with secrets and configs")
-    func parseComposeWithSecretsAndConfigs() throws {
-        let yaml = """
+    public static let dockerComposeYaml5 = """
         version: '3.8'
         
         services:
@@ -224,17 +173,8 @@ struct IntegrationTests {
           db_password:
             external: true
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.configs != nil)
-        #expect(compose.secrets != nil)
-    }
     
-    @Test("Parse compose with healthchecks and restart policies")
-    func parseComposeWithHealthchecksAndRestart() throws {
-        let yaml = """
+    public static let dockerComposeYaml6 = """
         version: '3.8'
         
         services:
@@ -257,18 +197,8 @@ struct IntegrationTests {
               timeout: 5s
               retries: 5
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services["web"]??.restart == "unless-stopped")
-        #expect(compose.services["web"]??.healthcheck != nil)
-        #expect(compose.services["db"]??.restart == "always")
-    }
     
-    @Test("Parse compose with complex dependency chain")
-    func parseComplexDependencyChain() throws {
-        let yaml = """
+    public static let dockerComposeYaml7 = """
         version: '3.8'
         
         services:
@@ -289,28 +219,31 @@ struct IntegrationTests {
           db:
             image: postgres:14
         """
-        
-        let decoder = YAMLDecoder()
-        let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services.count == 4)
-        
-        // Test dependency resolution
-        let services: [(String, Service)] = compose.services.compactMap({ serviceName, service in
-            guard let service else { return nil }
-            return (serviceName, service)
-        })
-        let sorted = try Service.topoSortConfiguredServices(services)
-        
-        // db and cache should come before api
-        let dbIndex = sorted.firstIndex(where: { $0.serviceName == "db" })!
-        let cacheIndex = sorted.firstIndex(where: { $0.serviceName == "cache" })!
-        let apiIndex = sorted.firstIndex(where: { $0.serviceName == "api" })!
-        let frontendIndex = sorted.firstIndex(where: { $0.serviceName == "frontend" })!
-        
-        #expect(dbIndex < apiIndex)
-        #expect(cacheIndex < apiIndex)
-        #expect(apiIndex < frontendIndex)
-    }
-}
+    
+    public static let dockerComposeYaml8 = """
+    version: '3.8'
 
+    services:
+      web:
+        image: nginx:alpine
+        ports:
+          - "8082:80"
+        depends_on:
+          - app
+
+      app:
+        image: python:3.12-alpine
+        depends_on:
+          - db
+        command: python -m http.server 8000
+        environment:
+          DATABASE_URL: postgres://postgres:postgres@db:5432/appdb
+
+      db:
+        image: postgres:14
+        environment:
+          POSTGRES_DB: appdb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+    """
+}

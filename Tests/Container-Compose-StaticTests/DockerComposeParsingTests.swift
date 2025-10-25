@@ -16,12 +16,13 @@
 
 import Testing
 import Foundation
+import TestHelpers
 @testable import Yams
 @testable import ContainerComposeCore
 
 @Suite("DockerCompose YAML Parsing Tests")
 struct DockerComposeParsingTests {
-    
+    // MARK: File Snippets
     @Test("Parse basic docker-compose.yml with single service")
     func parseBasicCompose() throws {
         let yaml = """
@@ -391,5 +392,106 @@ struct DockerComposeParsingTests {
         #expect(throws: Error.self) {
             try decoder.decode(DockerCompose.self, from: yaml)
         }
+    }
+    
+    // MARK: Full Files
+    @Test("Parse WordPress with MySQL compose file")
+    func parseWordPressCompose() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml1
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services.count == 2)
+        #expect(compose.services["wordpress"] != nil)
+        #expect(compose.services["db"] != nil)
+        #expect(compose.volumes?.count == 2)
+        #expect(compose.services["wordpress"]??.depends_on?.contains("db") == true)
+    }
+    
+    @Test("Parse three-tier web application")
+    func parseThreeTierApp() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml2
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.name == "webapp")
+        #expect(compose.services.count == 4)
+        #expect(compose.networks?.count == 2)
+        #expect(compose.volumes?.count == 1)
+    }
+    
+    @Test("Parse microservices architecture")
+    func parseMicroservicesCompose() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml3
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services.count == 5)
+        #expect(compose.services["api-gateway"]??.depends_on?.count == 3)
+    }
+    
+    @Test("Parse development environment with build")
+    func parseDevelopmentEnvironment() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml4
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services["app"]??.build != nil)
+        #expect(compose.services["app"]??.build?.context == ".")
+        #expect(compose.services["app"]??.volumes?.count == 2)
+    }
+    
+    @Test("Parse compose with secrets and configs")
+    func parseComposeWithSecretsAndConfigs() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml5
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.configs != nil)
+        #expect(compose.secrets != nil)
+    }
+    
+    @Test("Parse compose with healthchecks and restart policies")
+    func parseComposeWithHealthchecksAndRestart() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml6
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services["web"]??.restart == "unless-stopped")
+        #expect(compose.services["web"]??.healthcheck != nil)
+        #expect(compose.services["db"]??.restart == "always")
+    }
+    
+    @Test("Parse compose with complex dependency chain")
+    func parseComplexDependencyChain() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml7
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services.count == 4)
+        
+        // Test dependency resolution
+        let services: [(String, Service)] = compose.services.compactMap({ serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        })
+        let sorted = try Service.topoSortConfiguredServices(services)
+        
+        // db and cache should come before api
+        let dbIndex = sorted.firstIndex(where: { $0.serviceName == "db" })!
+        let cacheIndex = sorted.firstIndex(where: { $0.serviceName == "cache" })!
+        let apiIndex = sorted.firstIndex(where: { $0.serviceName == "api" })!
+        let frontendIndex = sorted.firstIndex(where: { $0.serviceName == "frontend" })!
+        
+        #expect(dbIndex < apiIndex)
+        #expect(cacheIndex < apiIndex)
+        #expect(apiIndex < frontendIndex)
     }
 }

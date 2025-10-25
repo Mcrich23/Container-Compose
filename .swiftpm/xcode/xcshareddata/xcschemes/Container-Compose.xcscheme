@@ -40,6 +40,26 @@
                ReferencedContainer = "container:">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "Container-Compose-StaticTests"
+               BuildableName = "Container-Compose-StaticTests"
+               BlueprintName = "Container-Compose-StaticTests"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "Container-Compose-DynamicTests"
+               BuildableName = "Container-Compose-DynamicTests"
+               BlueprintName = "Container-Compose-DynamicTests"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
