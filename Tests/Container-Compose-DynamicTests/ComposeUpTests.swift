@@ -18,15 +18,15 @@ import Testing
 import Foundation
 import ContainerCommands
 import ContainerClient
-@testable import Yams
+import TestHelpers
 @testable import ContainerComposeCore
 
 @Suite("Compose Up Tests - Real-World Compose Files", .containerDependent)
-struct IntegrationTests {
+struct ComposeUpTests {
     
     @Test("Test WordPress with MySQL compose file")
     func testWordPressCompose() async throws {
-        let yaml = DockerComposeParsingTests.dockerComposeYaml1
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml1
         
         let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -85,7 +85,7 @@ struct IntegrationTests {
     // TODO: Reenable
 //    @Test("Test three-tier web application with multiple networks")
 //    func testThreeTierWebAppWithNetworks() async throws {
-//        let yaml = DockerComposeParsingTests.dockerComposeYaml2
+//        let yaml = DockerComposeYamlFiles.dockerComposeYaml2
 //        
 //        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
 //        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -141,7 +141,7 @@ struct IntegrationTests {
     
 //    @Test("Parse development environment with build")
 //    func parseDevelopmentEnvironment() throws {
-//        let yaml = DockerComposeParsingTests.dockerComposeYaml4
+//        let yaml = DockerComposeYamlFiles.dockerComposeYaml4
 //        
 //        let decoder = YAMLDecoder()
 //        let compose = try decoder.decode(DockerCompose.self, from: yaml)
@@ -153,7 +153,7 @@ struct IntegrationTests {
     
 //    @Test("Parse compose with secrets and configs")
 //    func parseComposeWithSecretsAndConfigs() throws {
-//        let yaml = DockerComposeParsingTests.dockerComposeYaml5
+//        let yaml = DockerComposeYamlFiles.dockerComposeYaml5
 //        
 //        let decoder = YAMLDecoder()
 //        let compose = try decoder.decode(DockerCompose.self, from: yaml)
@@ -164,7 +164,7 @@ struct IntegrationTests {
     
 //    @Test("Parse compose with healthchecks and restart policies")
 //    func parseComposeWithHealthchecksAndRestart() async throws {
-//        let yaml = DockerComposeParsingTests.dockerComposeYaml6
+//        let yaml = DockerComposeYamlFiles.dockerComposeYaml6
 //        
 //        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
 //        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -184,7 +184,7 @@ struct IntegrationTests {
     
     @Test("Test compose with complex dependency chain")
     func TestComplexDependencyChain() async throws {
-        let yaml = DockerComposeParsingTests.dockerComposeYaml8
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml8
         
         let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
