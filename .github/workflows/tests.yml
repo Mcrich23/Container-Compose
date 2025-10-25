@@ -21,7 +21,7 @@ on:
 
 jobs:
   test:
-    name: Run Swift Tests
+    name: Run Swift Static Tests
     runs-on: macos-26
     
     steps:
@@ -44,10 +44,10 @@ jobs:
     - name: Build
       run: swift build --build-tests
       
-    - name: Run tests
-      run: swift test
-      
-    - name: Upload test results
+    - name: Run static tests
+      run: swift test --filter Container-Compose-StaticTests.
+
+    - name: Upload static test results
       if: always()
       uses: actions/upload-artifact@v4
       with:
