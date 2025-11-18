@@ -331,6 +331,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         guard let projectName else { throw ComposeError.invalidProjectName }
 
         var imageToRun: String
+        
+        var runCommandArgs: [String] = []
 
         // Handle 'build' configuration
         if let buildConfig = service.build {
@@ -344,6 +346,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // Should not happen due to Service init validation, but as a fallback
             throw ComposeError.imageNotFound(serviceName)
         }
+        
+        // Set Run Platform
+        if let platform = service.platform {
+            runCommandArgs.append(contentsOf: ["--platform", "\(platform)"])
+        }
 
         // Handle 'deploy' configuration (note that this tool doesn't fully support it)
         if service.deploy != nil {
@@ -353,8 +360,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             )
             print("The service will be run as a single container based on other configurations.")
         }
-
-        var runCommandArgs: [String] = []
 
         // Add detach flag if specified on the CLI
         if detatch {
