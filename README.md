@@ -58,30 +58,10 @@ Or, build it from source:
 After installation, simply run:
 
 ```sh
-container-compose
+container-compose up
 ```
 
 You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
-
-### Directory Structure
-
-```
-Container-Compose/
-├── docker-compose.yml
-├── .env
-├── README.md
-└── (source code and other configuration files)
-```
-
-* `docker-compose.yml`: Your Compose specification.
-* `.env`: Your environment variables.
-* `README.md`: Project documentation.
-
-### Customization
-
-* **Add a new service:** Edit `docker-compose.yml` and define your new service under the `services:` section.
-* **Override configuration:** Use a `docker-compose.override.yml` for local development customizations.
-* **Persistent data:** Define named volumes in `docker-compose.yml` for data that should persist between container restarts.
 
 ## Contributing
 
