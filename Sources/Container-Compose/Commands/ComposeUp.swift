@@ -542,6 +542,18 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         self.containerConsoleColors[serviceName] = serviceColor
 
+        // Check if container already exists
+        if let existingContainer = try? await ClientContainer.get(id: containerName) {
+            if existingContainer.status == .running {
+                print("Container '\(containerName)' is already running.")
+                try await updateEnvironmentWithServiceIP(serviceName, containerName: containerName)
+                return
+            } else {
+                print("Error: Container '\(containerName)' already exists with status: \(existingContainer.status).")
+                return
+            }
+        }
+
         Task { [self, serviceColor] in
             @Sendable
             func handleOutput(_ output: String) {
