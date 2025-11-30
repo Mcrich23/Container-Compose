@@ -598,16 +598,25 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             return imageToRun
         }
 
+        // Resolve context path (handle absolute paths)
+        let contextPath: String
+        if buildConfig.context.hasPrefix("/") || buildConfig.context.hasPrefix("~") {
+            contextPath = buildConfig.context
+        } else {
+            contextPath = "\(self.cwd)/\(buildConfig.context)"
+        }
+
         // Build command arguments
-        var commands = ["\(self.cwd)/\(buildConfig.context)"]
-        
+        var commands = [contextPath]
+
         // Add build arguments
         for (key, value) in buildConfig.args ?? [:] {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
         }
-        
-        // Add Dockerfile path
-        commands.append(contentsOf: ["--file", "\(self.cwd)/\(buildConfig.dockerfile ?? "Dockerfile")"])
+
+        // Add Dockerfile path - should be relative to context, NOT cwd
+        let dockerfilePath = "\(contextPath)/\(buildConfig.dockerfile ?? "Dockerfile")"
+        commands.append(contentsOf: ["--file", dockerfilePath])
         
         // Add caching options
         if noCache {
