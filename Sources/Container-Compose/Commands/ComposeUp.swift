@@ -46,8 +46,16 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var detatch: Bool = false
 
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String = "compose.yml"
-    private var composePath: String { "\(cwd)/\(composeFilename)" }  // Path to compose.yml
+    var composeFilename: String? = nil
+    private var composePath: String {
+        let filename = composeFilename ?? "compose.yml"
+        // Handle absolute paths
+        if filename.hasPrefix("/") || filename.hasPrefix("~") {
+            return filename
+        } else {
+            return "\(cwd)/\(filename)"
+        }
+    }
 
     @Flag(name: [.customShort("b"), .customLong("build")])
     var rebuild: Bool = false
@@ -75,17 +83,23 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
-        // Check for supported filenames and extensions
-        let filenames = [
-            "compose.yml",
-            "compose.yaml",
-            "docker-compose.yml",
-            "docker-compose.yaml",
-        ]
-        for filename in filenames {
-            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
-                composeFilename = filename
-                break
+        // Check for supported filenames and extensions only if user didn't specify -f
+        if composeFilename == nil {
+            let filenames = [
+                "compose.yml",
+                "compose.yaml",
+                "docker-compose.yml",
+                "docker-compose.yaml",
+            ]
+            for filename in filenames {
+                if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
+                    composeFilename = filename
+                    break
+                }
+            }
+            // If no file was found, default to compose.yml (will fail later with proper error)
+            if composeFilename == nil {
+                composeFilename = "compose.yml"
             }
         }
 
