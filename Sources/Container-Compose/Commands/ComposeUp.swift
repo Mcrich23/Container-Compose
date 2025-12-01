@@ -598,10 +598,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             return imageToRun
         }
 
-        // Resolve context path (handle absolute paths)
+        // Resolve context path (handle absolute paths and tilde expansion)
         let contextPath: String
-        if buildConfig.context.hasPrefix("/") || buildConfig.context.hasPrefix("~") {
+        if buildConfig.context.hasPrefix("/") {
             contextPath = buildConfig.context
+        } else if buildConfig.context.hasPrefix("~") {
+            contextPath = NSString(string: buildConfig.context).expandingTildeInPath
         } else {
             contextPath = "\(self.cwd)/\(buildConfig.context)"
         }
