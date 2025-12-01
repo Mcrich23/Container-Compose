@@ -49,9 +49,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var composeFilename: String? = nil
     private var composePath: String {
         let filename = composeFilename ?? "compose.yml"
-        // Handle absolute paths
-        if filename.hasPrefix("/") || filename.hasPrefix("~") {
+        // Handle absolute paths and tilde expansion
+        if filename.hasPrefix("/") {
             return filename
+        } else if filename.hasPrefix("~") {
+            return NSString(string: filename).expandingTildeInPath
         } else {
             return "\(cwd)/\(filename)"
         }
@@ -97,10 +99,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     break
                 }
             }
-            // If no file was found, default to compose.yml (will fail later with proper error)
-            if composeFilename == nil {
-                composeFilename = "compose.yml"
-            }
+            // No need to set composeFilename = "compose.yml" here; composePath already handles the nil case
         }
 
         // Read compose.yml content

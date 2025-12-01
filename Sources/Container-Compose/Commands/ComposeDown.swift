@@ -47,9 +47,11 @@ public struct ComposeDown: AsyncParsableCommand {
     var composeFilename: String? = nil
     private var composePath: String {
         let filename = composeFilename ?? "compose.yml"
-        // Handle absolute paths
-        if filename.hasPrefix("/") || filename.hasPrefix("~") {
+        // Handle absolute paths and tilde expansion
+        if filename.hasPrefix("/") {
             return filename
+        } else if filename.hasPrefix("~") {
+            return NSString(string: filename).expandingTildeInPath
         } else {
             return "\(cwd)/\(filename)"
         }
@@ -74,10 +76,7 @@ public struct ComposeDown: AsyncParsableCommand {
                     break
                 }
             }
-            // If no file was found, default to compose.yml (will fail later with proper error)
-            if composeFilename == nil {
-                composeFilename = "compose.yml"
-            }
+            // No need to set composeFilename = "compose.yml" here; composePath already handles the nil case
         }
 
         // Read docker-compose.yml content
