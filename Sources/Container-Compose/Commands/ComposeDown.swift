@@ -76,7 +76,6 @@ public struct ComposeDown: AsyncParsableCommand {
                     break
                 }
             }
-            // No need to set composeFilename = "compose.yml" here; composePath already handles the nil case
         }
 
         // Read docker-compose.yml content

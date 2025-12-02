@@ -99,7 +99,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     break
                 }
             }
-            // No need to set composeFilename = "compose.yml" here; composePath already handles the nil case
         }
 
         // Read compose.yml content
@@ -331,7 +330,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 return
             }
             let commands = [actualNetworkName]
-            
+
             var networkCreate = try Application.NetworkCreate.parse(commands + global.passThroughCommands())
 
             try await networkCreate.run()
@@ -344,7 +343,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         guard let projectName else { throw ComposeError.invalidProjectName }
 
         var imageToRun: String
-        
+
         var runCommandArgs: [String] = []
 
         // Handle 'build' configuration
@@ -359,7 +358,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // Should not happen due to Service init validation, but as a fallback
             throw ComposeError.imageNotFound(serviceName)
         }
-        
+
         // Set Run Platform
         if let platform = service.platform {
             runCommandArgs.append(contentsOf: ["--platform", "\(platform)"])
@@ -582,11 +581,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         print("Pulling Image \(imageName)...")
-        
+
         var commands = [
             imageName
         ]
-        
+
         if let platform {
             commands.append(contentsOf: ["--platform", platform])
         }
@@ -613,30 +612,30 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Build command arguments
         var commands = ["\(self.cwd)/\(buildConfig.context)"]
-        
+
         // Add build arguments
         for (key, value) in buildConfig.args ?? [:] {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
         }
-        
+
         // Add Dockerfile path
         commands.append(contentsOf: ["--file", "\(self.cwd)/\(buildConfig.dockerfile ?? "Dockerfile")"])
-        
+
         // Add caching options
         if noCache {
             commands.append("--no-cache")
         }
-        
+
         // Add OS/Arch
         let split = service.platform?.split(separator: "/")
         let os = String(split?.first ?? "linux")
         let arch = String(((split ?? []).count >= 1 ? split?.last : nil) ?? "arm64")
         commands.append(contentsOf: ["--os", os])
         commands.append(contentsOf: ["--arch", arch])
-        
+
         // Add image name
         commands.append(contentsOf: ["--tag", imageToRun])
-        
+
         // Add CPU & Memory
         let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
