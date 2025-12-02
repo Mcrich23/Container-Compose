@@ -246,4 +246,96 @@ public struct DockerComposeYamlFiles {
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
     """
+
+    public static let dockerComposeYamlWithHealthyCondition = """
+    version: '3.8'
+
+    services:
+      web:
+        image: nginx:latest
+        depends_on:
+          db:
+            condition: service_healthy
+
+      db:
+        image: mysql:8.0
+        environment:
+          MYSQL_ROOT_PASSWORD: secret
+        healthcheck:
+          test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+          interval: 10s
+          timeout: 5s
+          retries: 5
+    """
+
+    public static let dockerComposeYamlWithMixedConditions = """
+    version: '3.8'
+
+    services:
+      web:
+        image: nginx:latest
+        depends_on:
+          app:
+            condition: service_started
+          db:
+            condition: service_healthy
+          migration:
+            condition: service_completed_successfully
+
+      app:
+        image: node:18-alpine
+        depends_on:
+          db:
+            condition: service_healthy
+
+      db:
+        image: postgres:14
+        environment:
+          POSTGRES_PASSWORD: postgres
+        healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U postgres"]
+          interval: 5s
+          timeout: 3s
+          retries: 5
+
+      migration:
+        image: migration:latest
+        depends_on:
+          db:
+            condition: service_healthy
+    """
+
+    public static let dockerComposeYamlWithSimpleArrayDependsOn = """
+    version: '3.8'
+
+    services:
+      web:
+        image: nginx:latest
+        depends_on:
+          - db
+          - cache
+
+      db:
+        image: postgres:14
+
+      cache:
+        image: redis:alpine
+    """
+
+    public static let dockerComposeYamlWithEmptyDictDependsOn = """
+    version: '3.8'
+
+    services:
+      web:
+        image: nginx:latest
+        depends_on:
+          db:
+          cache:
+
+      db:
+        image: postgres:14
+
+      cache:
+        image: redis:alpine
+    """
 }
