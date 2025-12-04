@@ -21,7 +21,7 @@ import ContainerClient
 import TestHelpers
 @testable import ContainerComposeCore
 
-@Suite("Compose Up Tests - Real-World Compose Files", .containerDependent)
+@Suite("Compose Up Tests - Real-World Compose Files", .containerDependent, .serialized)
 struct ComposeUpTests {
     
     @Test("Test WordPress with MySQL compose file")
