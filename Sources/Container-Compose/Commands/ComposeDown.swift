@@ -103,25 +103,37 @@ public struct ComposeDown: AsyncParsableCommand {
             })
         }
 
-        try await stopOldStuff(services.map({ $0.serviceName }), remove: false)
+        try await stopOldStuff(services, remove: false)
     }
 
-    private func stopOldStuff(_ services: [String], remove: Bool) async throws {
+    private func stopOldStuff(_ services: [(serviceName: String, service: Service)], remove: Bool) async throws {
         guard let projectName else { return }
-        let containers = services.map { "\(projectName)-\($0)" }
 
-        for container in containers {
-            print("Stopping container: \(container)")
-            guard let container = try? await ClientContainer.get(id: container) else { continue }
+        for (serviceName, service) in services {
+            // Respect explicit container_name, otherwise use default pattern
+            let containerName: String
+            if let explicitContainerName = service.container_name {
+                containerName = explicitContainerName
+            } else {
+                containerName = "\(projectName)-\(serviceName)"
+            }
+
+            print("Stopping container: \(containerName)")
+            guard let container = try? await ClientContainer.get(id: containerName) else {
+                print("Warning: Container '\(containerName)' not found, skipping.")
+                continue
+            }
 
             do {
                 try await container.stop()
+                print("Successfully stopped container: \(containerName)")
             } catch {
                 print("Error Stopping Container: \(error)")
             }
             if remove {
                 do {
                     try await container.delete()
+                    print("Successfully removed container: \(containerName)")
                 } catch {
                     print("Error Removing Container: \(error)")
                 }
