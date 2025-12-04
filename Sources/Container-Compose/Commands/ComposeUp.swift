@@ -352,13 +352,24 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append(contentsOf: ["--platform", "\(platform)"])
         }
 
-        // Handle 'deploy' configuration (note that this tool doesn't fully support it)
-        if service.deploy != nil {
-            print("Note: The 'deploy' configuration for service '\(serviceName)' was parsed successfully.")
-            print(
-                "However, this 'container-compose' tool does not currently support 'deploy' functionality (e.g., replicas, resources, update strategies) as it is primarily for orchestration platforms like Docker Swarm or Kubernetes, not direct 'container run' commands."
-            )
-            print("The service will be run as a single container based on other configurations.")
+        // Handle 'deploy' configuration - apply resource limits
+        if let deploy = service.deploy {
+            // Apply memory limit
+            if let memoryLimit = deploy.resources?.limits?.memory {
+                runCommandArgs.append("-m")
+                runCommandArgs.append(memoryLimit)
+            }
+
+            // Apply CPU limit
+            if let cpuLimit = deploy.resources?.limits?.cpus {
+                runCommandArgs.append("-c")
+                runCommandArgs.append(cpuLimit)
+            }
+
+            // Log unsupported deploy features
+            if deploy.mode != nil || deploy.replicas != nil || deploy.restart_policy != nil {
+                print("Note: The 'deploy' configuration for service '\(serviceName)' includes features (mode, replicas, restart_policy) that are not supported by this tool.")
+            }
         }
 
         // Add detach flag if specified on the CLI
