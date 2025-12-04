@@ -44,25 +44,37 @@ public struct ComposeDown: AsyncParsableCommand {
     private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
 
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String = "compose.yml"
-    private var composePath: String { "\(cwd)/\(composeFilename)" }  // Path to compose.yml
+    var composeFilename: String? = nil
+    private var composePath: String {
+        let filename = composeFilename ?? "compose.yml"
+        // Handle absolute paths and tilde expansion
+        if filename.hasPrefix("/") {
+            return filename
+        } else if filename.hasPrefix("~") {
+            return NSString(string: filename).expandingTildeInPath
+        } else {
+            return "\(cwd)/\(filename)"
+        }
+    }
 
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
 
     public mutating func run() async throws {
 
-        // Check for supported filenames and extensions
-        let filenames = [
-            "compose.yml",
-            "compose.yaml",
-            "docker-compose.yml",
-            "docker-compose.yaml",
-        ]
-        for filename in filenames {
-            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
-                composeFilename = filename
-                break
+        // Check for supported filenames and extensions only if user didn't specify -f
+        if composeFilename == nil {
+            let filenames = [
+                "compose.yml",
+                "compose.yaml",
+                "docker-compose.yml",
+                "docker-compose.yaml",
+            ]
+            for filename in filenames {
+                if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
+                    composeFilename = filename
+                    break
+                }
             }
         }
 

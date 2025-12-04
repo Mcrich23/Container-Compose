@@ -46,8 +46,18 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var detatch: Bool = false
 
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String = "compose.yml"
-    private var composePath: String { "\(cwd)/\(composeFilename)" }  // Path to compose.yml
+    var composeFilename: String? = nil
+    private var composePath: String {
+        let filename = composeFilename ?? "compose.yml"
+        // Handle absolute paths and tilde expansion
+        if filename.hasPrefix("/") {
+            return filename
+        } else if filename.hasPrefix("~") {
+            return NSString(string: filename).expandingTildeInPath
+        } else {
+            return "\(cwd)/\(filename)"
+        }
+    }
 
     @Flag(name: [.customShort("b"), .customLong("build")])
     var rebuild: Bool = false
@@ -75,17 +85,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
-        // Check for supported filenames and extensions
-        let filenames = [
-            "compose.yml",
-            "compose.yaml",
-            "docker-compose.yml",
-            "docker-compose.yaml",
-        ]
-        for filename in filenames {
-            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
-                composeFilename = filename
-                break
+        // Check for supported filenames and extensions only if user didn't specify -f
+        if composeFilename == nil {
+            let filenames = [
+                "compose.yml",
+                "compose.yaml",
+                "docker-compose.yml",
+                "docker-compose.yaml",
+            ]
+            for filename in filenames {
+                if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
+                    composeFilename = filename
+                    break
+                }
             }
         }
 
@@ -318,7 +330,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 return
             }
             let commands = [actualNetworkName]
-            
+
             var networkCreate = try Application.NetworkCreate.parse(commands + global.passThroughCommands())
 
             try await networkCreate.run()
@@ -331,7 +343,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         guard let projectName else { throw ComposeError.invalidProjectName }
 
         var imageToRun: String
-        
+
         var runCommandArgs: [String] = []
 
         // Handle 'build' configuration
@@ -346,7 +358,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // Should not happen due to Service init validation, but as a fallback
             throw ComposeError.imageNotFound(serviceName)
         }
-        
+
         // Set Run Platform
         if let platform = service.platform {
             runCommandArgs.append(contentsOf: ["--platform", "\(platform)"])
@@ -569,11 +581,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         print("Pulling Image \(imageName)...")
-        
+
         var commands = [
             imageName
         ]
-        
+
         if let platform {
             commands.append(contentsOf: ["--platform", platform])
         }
@@ -600,30 +612,30 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Build command arguments
         var commands = ["\(self.cwd)/\(buildConfig.context)"]
-        
+
         // Add build arguments
         for (key, value) in buildConfig.args ?? [:] {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
         }
-        
+
         // Add Dockerfile path
         commands.append(contentsOf: ["--file", "\(self.cwd)/\(buildConfig.dockerfile ?? "Dockerfile")"])
-        
+
         // Add caching options
         if noCache {
             commands.append("--no-cache")
         }
-        
+
         // Add OS/Arch
         let split = service.platform?.split(separator: "/")
         let os = String(split?.first ?? "linux")
         let arch = String(((split ?? []).count >= 1 ? split?.last : nil) ?? "arm64")
         commands.append(contentsOf: ["--os", os])
         commands.append(contentsOf: ["--arch", arch])
-        
+
         // Add image name
         commands.append(contentsOf: ["--tag", imageToRun])
-        
+
         // Add CPU & Memory
         let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
