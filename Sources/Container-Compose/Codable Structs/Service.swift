@@ -56,8 +56,8 @@ public struct Service: Codable, Hashable {
     /// Command to execute in the container, overriding the image's default
     public let command: [String]?
 
-    /// Services this service depends on (for startup order)
-    public let depends_on: [String]?
+    /// Services this service depends on with optional conditions (for startup order)
+    public let depends_on: [String: DependencyConfig]?
 
     /// User or UID to run the container as
     public let user: String?
@@ -119,7 +119,7 @@ public struct Service: Codable, Hashable {
         env_file: [String]? = nil,
         ports: [String]? = nil,
         command: [String]? = nil,
-        depends_on: [String]? = nil,
+        depends_on: [String: DependencyConfig]? = nil,
         user: String? = nil,
         container_name: String? = nil,
         networks: [String]? = nil,
@@ -190,10 +190,27 @@ public struct Service: Codable, Hashable {
             command = nil
         }
         
-        if let dependsOnString = try? container.decodeIfPresent(String.self, forKey: .depends_on) {
-            depends_on = [dependsOnString]
+        // Decode 'depends_on' which can be:
+        // 1. A simple array: ["mysql", "redis"]
+        // 2. An extended dictionary with conditions: { mysql: { condition: service_healthy }, redis: { condition: service_started } }
+        // 3. A dictionary without conditions (null values): { mysql: null, redis: null } or { mysql:, redis: }
+        if let dependsOnDict = try? container.decodeIfPresent([String: DependencyConfig].self, forKey: .depends_on) {
+            depends_on = dependsOnDict
+        } else if let dependsOnDictOptional = try? container.decodeIfPresent([String: DependencyConfig?].self, forKey: .depends_on) {
+            // Convert dictionary with optional values (null values) to dictionary with default condition
+            depends_on = Dictionary(uniqueKeysWithValues: dependsOnDictOptional.map { key, value in
+                (key, value ?? DependencyConfig(condition: .service_started))
+            })
+        } else if let dependsOnArray = try? container.decodeIfPresent([String].self, forKey: .depends_on) {
+            // Convert simple array to dictionary with default condition
+            depends_on = Dictionary(uniqueKeysWithValues: dependsOnArray.map {
+                ($0, DependencyConfig(condition: .service_started))
+            })
+        } else if let dependsOnString = try? container.decodeIfPresent(String.self, forKey: .depends_on) {
+            // Handle single string
+            depends_on = [dependsOnString: DependencyConfig(condition: .service_started)]
         } else {
-            depends_on = try container.decodeIfPresent([String].self, forKey: .depends_on)
+            depends_on = nil
         }
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
@@ -243,8 +260,10 @@ public struct Service: Codable, Hashable {
             guard !visited.contains(name) else { return }
 
             visiting.insert(name)
-            for depName in serviceTuple.service.depends_on ?? [] {
-                try visit(depName, from: name)
+            if let depends = serviceTuple.service.depends_on {
+                for depName in depends.keys {
+                    try visit(depName, from: name)
+                }
             }
             visiting.remove(name)
             visited.insert(name)
