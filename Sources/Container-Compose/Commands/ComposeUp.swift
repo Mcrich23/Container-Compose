@@ -187,7 +187,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let containerName = "\(projectName)-\(serviceName)"
 
         let container = try await ClientContainer.get(id: containerName)
-        let ip = container.networks.compactMap { $0.ipv4Gateway.value.description }.first
+        let ip = container.networks.compactMap { $0.ipv4Gateway.description }.first
 
         return ip
     }

@@ -57,7 +57,7 @@ struct ComposeUpTests {
         
         // Check Environment
         let wpEnv = parseEnvToDict(wordpressContainer.configuration.initProcess.environment)
-        #expect(wpEnv["WORDPRESS_DB_HOST"] == String(dbContainer.networks.first!.ipv4Address.description.split(separator: "/")[0]))
+        #expect(wpEnv["WORDPRESS_DB_HOST"] == dbContainer.networks.first!.ipv4Gateway.description)
         #expect(wpEnv["WORDPRESS_DB_USER"] == "wordpress")
         #expect(wpEnv["WORDPRESS_DB_PASSWORD"] == "wordpress")
         #expect(wpEnv["WORDPRESS_DB_NAME"] == "wordpress")
