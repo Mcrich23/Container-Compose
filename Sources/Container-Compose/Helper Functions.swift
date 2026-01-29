@@ -93,6 +93,17 @@ public func resolveVariable(_ value: String, with envVars: [String: String]) -> 
     return resolvedValue
 }
 
+/// Derives a project name from the current working directory. It replaces any '.' characters with
+/// '_' to ensure compatibility with container naming conventions.
+///
+/// - Parameter cwd: The current working directory path.
+/// - Returns: A sanitized project name suitable for container naming.
+public func deriveProjectName(cwd: String) -> String {
+    // We need to replace '.' with _ because it is not supported in the container name
+    let projectName = URL(fileURLWithPath: cwd).lastPathComponent.replacingOccurrences(of: ".", with: "_")
+    return projectName
+}
+
 extension String: @retroactive Error {}
 
 /// A structure representing the result of a command-line process execution.
