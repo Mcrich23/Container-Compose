@@ -107,6 +107,6 @@ public struct CommandResult {
     public let exitCode: Int32
 }
 
-extension NamedColor: Codable {
+extension NamedColor: @retroactive Codable {
 
 }

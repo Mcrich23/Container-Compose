@@ -320,7 +320,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
             let commands = [actualNetworkName]
             
-            var networkCreate = try Application.NetworkCreate.parse(commands + logging.passThroughCommands())
+            let networkCreate = try Application.NetworkCreate.parse(commands + logging.passThroughCommands())
 
             try await networkCreate.run()
             print("Network '\(networkName)' created")
