@@ -21,10 +21,10 @@
 //  Created by Morris Richman on 6/17/25.
 //
 
-import Foundation
-import Yams
-import Rainbow
 import ContainerCommands
+import Foundation
+import Rainbow
+import Yams
 
 /// Loads environment variables from a .env file.
 /// - Parameter path: The full path to the .env file.
@@ -63,34 +63,70 @@ public func loadEnvFile(path: String) -> [String: String] {
 public func resolveVariable(_ value: String, with envVars: [String: String]) -> String {
     var resolvedValue = value
     // Regex to find ${VAR}, ${VAR:-default}, ${VAR:?error}
-    let regex = try! NSRegularExpression(pattern: #"\$\{([A-Za-z0-9_]+)(:?-(.*?))?(:\?(.*?))?\}"#, options: [])
-    
+    let regex = try! NSRegularExpression(
+        pattern: #"\$\{([A-Za-z0-9_]+)(:?-(.*?))?(:\?(.*?))?\}"#, options: [])
+
     // Combine process environment with loaded .env file variables, prioritizing process environment
-    let combinedEnv = ProcessInfo.processInfo.environment.merging(envVars) { (current, _) in current }
-    
+    let combinedEnv = ProcessInfo.processInfo.environment.merging(envVars) { (current, _) in current
+    }
+
     // Loop to resolve all occurrences of variables in the string
-    while let match = regex.firstMatch(in: resolvedValue, options: [], range: NSRange(resolvedValue.startIndex..<resolvedValue.endIndex, in: resolvedValue)) {
+    while let match = regex.firstMatch(
+        in: resolvedValue, options: [],
+        range: NSRange(resolvedValue.startIndex..<resolvedValue.endIndex, in: resolvedValue))
+    {
         guard let varNameRange = Range(match.range(at: 1), in: resolvedValue) else { break }
         let varName = String(resolvedValue[varNameRange])
-        
+
         if let envValue = combinedEnv[varName] {
             // Variable found in environment, replace with its value
-            resolvedValue.replaceSubrange(Range(match.range(at: 0), in: resolvedValue)!, with: envValue)
+            resolvedValue.replaceSubrange(
+                Range(match.range(at: 0), in: resolvedValue)!, with: envValue)
         } else if let defaultValueRange = Range(match.range(at: 3), in: resolvedValue) {
             // Variable not found, but default value is provided, replace with default
             let defaultValue = String(resolvedValue[defaultValueRange])
-            resolvedValue.replaceSubrange(Range(match.range(at: 0), in: resolvedValue)!, with: defaultValue)
-        } else if match.range(at: 5).location != NSNotFound, let errorMessageRange = Range(match.range(at: 5), in: resolvedValue) {
+            resolvedValue.replaceSubrange(
+                Range(match.range(at: 0), in: resolvedValue)!, with: defaultValue)
+        } else if match.range(at: 5).location != NSNotFound,
+            let errorMessageRange = Range(match.range(at: 5), in: resolvedValue)
+        {
             // Variable not found, and error-on-missing syntax used, print error and exit
             let errorMessage = String(resolvedValue[errorMessageRange])
-            fputs("Error: Missing required environment variable '\(varName)': \(errorMessage)\n", stderr)
-            Application.exit(withError: "Error: Missing required environment variable '\(varName)': \(errorMessage)\n")
+            fputs(
+                "Error: Missing required environment variable '\(varName)': \(errorMessage)\n",
+                stderr)
+            Application.exit(
+                withError:
+                    "Error: Missing required environment variable '\(varName)': \(errorMessage)\n")
         } else {
             // Variable not found and no default/error specified, leave as is and break loop to avoid infinite loop
             break
         }
     }
     return resolvedValue
+}
+
+public func loadComposeFile(composePath: String) throws -> DockerCompose {
+    // Read YAML
+    guard let yamlData = fileManager.contents(atPath: composePath) else {
+        let path = URL(fileURLWithPath: composePath)
+            .deletingLastPathComponent()
+            .path
+        throw YamlError.composeFileNotFound(path)
+    }
+
+    // Decode the YAML file into the DockerCompose struct
+    let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+    let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+
+    // Loop through includes and load additional files
+    if let includes = dockerCompose.includes {
+        for include in includes {
+            let includePath = loadComposeFile(include)
+        }
+    }
+
+    return dockerCompose
 }
 
 extension String: @retroactive Error {}

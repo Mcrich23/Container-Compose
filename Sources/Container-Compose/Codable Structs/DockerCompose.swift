@@ -38,7 +38,9 @@ public struct DockerCompose: Codable {
     public let configs: [String: Config?]?
     /// Optional top-level secret definitions (primarily for Swarm)
     public let secrets: [String: Secret?]?
-    
+    /// Optional includes of other compose files
+    public let includes: [DockerInclude]?
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(String.self, forKey: .version)
@@ -56,5 +58,16 @@ public struct DockerCompose: Codable {
         networks = try container.decodeIfPresent([String: Network?].self, forKey: .networks)
         configs = try container.decodeIfPresent([String: Config?].self, forKey: .configs)
         secrets = try container.decodeIfPresent([String: Secret?].self, forKey: .secrets)
+        includes = try container.decodeIfPresent([DockerInclude].self, forKey: .includes)
+    }
+}
+
+public struct DockerInclude : Codable {
+    // The file to include
+    let file: String;
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        file = try container.decode(String.self, forKey: .file)
     }
 }
