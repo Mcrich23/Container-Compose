@@ -23,7 +23,8 @@
 
 import ArgumentParser
 import ContainerCommands
-import ContainerClient
+//import ContainerClient
+import ContainerAPIClient
 import ContainerizationExtras
 import Foundation
 @preconcurrency import Rainbow
@@ -59,7 +60,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var process: Flags.Process
 
     @OptionGroup
-    var global: Flags.Global
+    var logging: Flags.Logging
 
     private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
     var envFilePath: String { "\(cwd)/\(process.envFile.first ?? ".env")" }  // Path to optional .env file
@@ -186,7 +187,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let containerName = "\(projectName)-\(serviceName)"
 
         let container = try await ClientContainer.get(id: containerName)
-        let ip = container.networks.compactMap { try? CIDRAddress($0.address).address.description }.first
+        let ip = container.networks.compactMap { $0.ipv4Gateway.description }.first
 
         return ip
     }
@@ -319,7 +320,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
             let commands = [actualNetworkName]
             
-            var networkCreate = try Application.NetworkCreate.parse(commands + global.passThroughCommands())
+            let networkCreate = try Application.NetworkCreate.parse(commands + logging.passThroughCommands())
 
             try await networkCreate.run()
             print("Network '\(networkName)' created")
@@ -578,7 +579,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             commands.append(contentsOf: ["--platform", platform])
         }
 
-        let imagePull = try Application.ImagePull.parse(commands + global.passThroughCommands())
+        let imagePull = try Application.ImagePull.parse(commands + logging.passThroughCommands())
         try await imagePull.run()
     }
 
