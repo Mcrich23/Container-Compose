@@ -67,7 +67,7 @@ public struct ComposeDown: AsyncParsableCommand {
         }
 
         // Read docker-compose.yml content
-        let dockerCompose = try loadComposeFile(composePath: composePath)
+        let dockerCompose = try fileManager.loadComposeFile(composePath: composePath)
 
         // Determine project name for container naming
         if let name = dockerCompose.name {

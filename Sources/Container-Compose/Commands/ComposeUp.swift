@@ -91,7 +91,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Read compose.yml content
-        let dockerCompose = try loadComposeFile(composePath: composePath)
+        let dockerCompose = try fileManager.loadComposeFile(composePath: composePath)
 
         // Load environment variables from .env file
         environmentVariables = loadEnvFile(path: envFilePath)

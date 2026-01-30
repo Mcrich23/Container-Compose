@@ -106,27 +106,32 @@ public func resolveVariable(_ value: String, with envVars: [String: String]) -> 
     return resolvedValue
 }
 
-public func loadComposeFile(composePath: String) throws -> DockerCompose {
-    // Read YAML
-    guard let yamlData = fileManager.contents(atPath: composePath) else {
-        let path = URL(fileURLWithPath: composePath)
-            .deletingLastPathComponent()
-            .path
-        throw YamlError.composeFileNotFound(path)
-    }
-
-    // Decode the YAML file into the DockerCompose struct
-    let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-    let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
-
-    // Loop through includes and load additional files
-    if let includes = dockerCompose.includes {
-        for include in includes {
-            let includePath = loadComposeFile(include)
+extension FileManager {
+    public func loadComposeFile(composePath: String) throws -> DockerCompose {
+        // Read YAML
+        guard let yamlData = contents(atPath: composePath) else {
+            let path = URL(fileURLWithPath: composePath)
+                .deletingLastPathComponent()
+                .path
+            throw YamlError.composeFileNotFound(path)
         }
-    }
 
-    return dockerCompose
+        // Decode the YAML file into the DockerCompose struct
+        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
+        var dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+
+        // Loop through includes and load additional files
+
+        if let includes = dockerCompose.includes {
+            for include in includes {
+                let included = try loadComposeFile(composePath: include.file)
+                // Merge into main dockerCompose
+                dockerCompose = dockerCompose.merge(with: included)
+            }
+        }
+
+        return dockerCompose
+    }
 }
 
 extension String: @retroactive Error {}
