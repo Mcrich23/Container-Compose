@@ -246,4 +246,14 @@ public struct DockerComposeYamlFiles {
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
     """
+
+    public static let dockerComposeYaml9 = """
+    version: '3.8'
+    services:
+      web:
+        image: nginx:alpine
+        container_name: custom_nginx
+        ports:
+          - "8082:80"
+    """
 }
