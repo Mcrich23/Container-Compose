@@ -22,7 +22,7 @@ import Testing
 
 @testable import ContainerComposeCore
 
-@Suite("Compose Down Tests")
+@Suite("Compose Down Tests", .containerDependent, .serialized)
 struct ComposeDownTests {
 
     @Test("What goes up must come down - two containers")
@@ -43,9 +43,25 @@ struct ComposeDownTests {
         #expect(
             containers.count == 2,
             "Expected 2 containers for \(project.name), found \(containers.count)")
+
+        guard
+            let wordpressContainer = containers.first(where: {
+                $0.configuration.id == "\(project.name)-wordpress"
+            }),
+            let dbContainer = containers.first(where: {
+                $0.configuration.id == "\(project.name)-db"
+            })
+        else {
+            throw Errors.containerNotFound
+        }
+
         #expect(
-            containers[0].status == .running,
-            "Expected wordpress container to be running, found status: \(containers[0].status.rawValue)"
+            wordpressContainer.status == .running,
+            "Expected wordpress container to be running, found status: \(wordpressContainer.status.rawValue)"
+        )
+        #expect(
+            dbContainer.status == .running,
+            "Expected db container to be running, found status: \(dbContainer.status.rawValue)"
         )
 
         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
@@ -59,9 +75,25 @@ struct ComposeDownTests {
         #expect(
             containers.count == 2,
             "Expected 2 containers for \(project.name), found \(containers.count)")
+
+        guard
+            let wordpressContainer = containers.first(where: {
+                $0.configuration.id == "\(project.name)-wordpress"
+            }),
+            let dbContainer = containers.first(where: {
+                $0.configuration.id == "\(project.name)-db"
+            })
+        else {
+            throw Errors.containerNotFound
+        }
+
         #expect(
-            containers[0].status == .stopped,
-            "Expected wordpress container to be stopped, found status: \(containers[0].status.rawValue)"
+            wordpressContainer.status == .stopped,
+            "Expected wordpress container to be stopped, found status: \(wordpressContainer.status.rawValue)"
+        )
+        #expect(
+            dbContainer.status == .stopped,
+            "Expected db container to be stopped, found status: \(dbContainer.status.rawValue)"
         )
     }
 
@@ -107,6 +139,10 @@ struct ComposeDownTests {
             containers[0].status == .stopped,
             "Expected container \(containerName) to be stopped, found status: \(containers[0].status.rawValue)"
         )
+    }
+
+    enum Errors: Error {
+        case containerNotFound
     }
 
 }
