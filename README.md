@@ -68,10 +68,11 @@ You may need to provide a path to your `docker-compose.yml` and `.env` file as a
 Contributions are welcome! Please open issues or submit pull requests to help improve this project.
 
 1. Fork the repository.
-2. Create your feature branch (`git checkout -b feature/YourFeature`).
+2. Create your feature branch (`git checkout -b feat/YourFeature`).
 3. Commit your changes (`git commit -am 'Add new feature'`).
-4. Push to the branch (`git push origin feature/YourFeature`).
-5. Open a pull request.
+4. Add tests to you changes.
+5. Push to the branch (`git push origin feature/YourFeature`).
+6. Open a pull request.
 
 ## License
 
