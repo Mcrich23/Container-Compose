@@ -67,16 +67,7 @@ public struct ComposeDown: AsyncParsableCommand {
         }
 
         // Read docker-compose.yml content
-        guard let yamlData = fileManager.contents(atPath: composePath) else {
-            let path = URL(fileURLWithPath: composePath)
-                .deletingLastPathComponent()
-                .path
-            throw YamlError.composeFileNotFound(path)
-        }
-
-        // Decode the YAML file into the DockerCompose struct
-        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        let dockerCompose = try fileManager.loadComposeFile(composePath: composePath)
 
         // Determine project name for container naming
         if let name = dockerCompose.name {
