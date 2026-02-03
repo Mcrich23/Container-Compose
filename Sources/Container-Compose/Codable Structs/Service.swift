@@ -185,9 +185,7 @@ public struct Service: Codable, Hashable {
         if let cmdArray = try? container.decodeIfPresent([String].self, forKey: .command) {
             command = cmdArray
         } else if let cmdString = try? container.decodeIfPresent(String.self, forKey: .command) {
-            // When command is a string, wrap it in a shell to properly handle arguments
-            // This matches Docker Compose behavior for string commands
-            command = ["/bin/sh", "-c", cmdString]
+            command = [cmdString]
         } else {
             command = nil
         }
