@@ -14,10 +14,12 @@
 // limitations under the License.
 //===----------------------------------------------------------------------===//
 
+import Foundation
+
 public struct DockerComposeYamlFiles {
     public static let dockerComposeYaml1 = """
         version: '3.8'
-        
+
         services:
           wordpress:
             image: wordpress:latest
@@ -42,16 +44,16 @@ public struct DockerComposeYamlFiles {
               MYSQL_ROOT_PASSWORD: rootpassword
             volumes:
               - db_data:/var/lib/mysql
-        
+
         volumes:
           wordpress_data:
           db_data:
         """
-    
+
     public static let dockerComposeYaml2 = """
         version: '3.8'
         name: webapp
-        
+
         services:
           nginx:
             image: nginx:alpine
@@ -90,18 +92,18 @@ public struct DockerComposeYamlFiles {
             image: redis:alpine
             networks:
               - backend
-        
+
         volumes:
           db-data:
-        
+
         networks:
           frontend:
           backend:
         """
-    
+
     public static let dockerComposeYaml3 = """
         version: '3.8'
-        
+
         services:
           api-gateway:
             image: traefik:v2.10
@@ -134,10 +136,10 @@ public struct DockerComposeYamlFiles {
             environment:
               POSTGRES_PASSWORD: postgres
         """
-    
+
     public static let dockerComposeYaml4 = """
         version: '3.8'
-        
+
         services:
           app:
             build:
@@ -152,10 +154,10 @@ public struct DockerComposeYamlFiles {
               - "3000:3000"
             command: npm run dev
         """
-    
+
     public static let dockerComposeYaml5 = """
         version: '3.8'
-        
+
         services:
           app:
             image: myapp:latest
@@ -164,19 +166,19 @@ public struct DockerComposeYamlFiles {
                 target: /etc/app/config.yml
             secrets:
               - db_password
-        
+
         configs:
           app_config:
             external: true
-        
+
         secrets:
           db_password:
             external: true
         """
-    
+
     public static let dockerComposeYaml6 = """
         version: '3.8'
-        
+
         services:
           web:
             image: nginx:latest
@@ -197,10 +199,10 @@ public struct DockerComposeYamlFiles {
               timeout: 5s
               retries: 5
         """
-    
+
     public static let dockerComposeYaml7 = """
         version: '3.8'
-        
+
         services:
           frontend:
             image: frontend:latest
@@ -219,31 +221,69 @@ public struct DockerComposeYamlFiles {
           db:
             image: postgres:14
         """
-    
+
     public static let dockerComposeYaml8 = """
-    version: '3.8'
+        version: '3.8'
 
-    services:
-      web:
-        image: nginx:alpine
-        ports:
-          - "8082:80"
-        depends_on:
-          - app
+        services:
+          web:
+            image: nginx:alpine
+            ports:
+              - "8082:80"
+            depends_on:
+              - app
 
-      app:
-        image: python:3.12-alpine
-        depends_on:
-          - db
-        command: python -m http.server 8000
-        environment:
-          DATABASE_URL: postgres://postgres:postgres@db:5432/appdb
+          app:
+            image: python:3.12-alpine
+            depends_on:
+              - db
+            command: python -m http.server 8000
+            environment:
+              DATABASE_URL: postgres://postgres:postgres@db:5432/appdb
 
-      db:
-        image: postgres:14
-        environment:
-          POSTGRES_DB: appdb
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-    """
+          db:
+            image: postgres:14
+            environment:
+              POSTGRES_DB: appdb
+              POSTGRES_USER: postgres
+              POSTGRES_PASSWORD: postgres
+        """
+
+    public static func dockerComposeYaml9(containerName: String) -> String {
+        return """
+            version: '3.8'
+            services:
+              web:
+                image: nginx:alpine
+                container_name: \(containerName)
+            """
+    }
+
+    /// Represents a temporary Docker Compose project copied to a temporary location for testing.
+    public struct TemporaryProject {
+        /// The URL of the temporary docker-compose.yaml file.
+        public let url: URL
+
+        /// The base directory containing the temporary docker-compose.yaml file.
+        public let base: URL
+
+        /// The project name derived from the temporary directory name.
+        public let name: String
+    }
+
+    /// Copies the provided Docker Compose YAML content to a temporary location and returns a
+    /// TemporaryProject.
+    /// - Parameter yaml: The Docker Compose YAML content to copy.
+    /// - Returns: A TemporaryProject containing the URL and project name.
+    public static func copyYamlToTemporaryLocation(yaml: String) throws -> TemporaryProject {
+        let tempLocation = URL.temporaryDirectory.appending(
+            path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        let tempBase = tempLocation.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: tempBase, withIntermediateDirectories: true)
+        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
+        let projectName = tempBase.lastPathComponent
+
+        return TemporaryProject(url: tempLocation, base: tempBase, name: projectName)
+    }
+
 }
