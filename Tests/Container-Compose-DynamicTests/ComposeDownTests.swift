@@ -44,7 +44,7 @@ struct ComposeDownTests {
             containers.count == 2,
             "Expected 2 containers for \(project.name), found \(containers.count)")
 
-        #expect(containers.filter({ $0.status == .stopped}).count == 2, "Expected 2 running containers for \(project.name), found \(containers.count)")
+        #expect(containers.filter({ $0.status == .stopped }).count == 2, "Expected 2 running containers for \(project.name), found \(containers.count)")
 
         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
         try await composeDown.run()
@@ -85,7 +85,7 @@ struct ComposeDownTests {
             "Expected 1 container with the name \(containerName), found \(containers.count)")
         #expect(
             containers.filter({ $0.status == .running}).count == 1,
-            "Expected container \(containerName) to be running, found status: \(containers[0].status.rawValue)"
+            "Expected container \(containerName) to be running, found status: \(containers.map(\.status))"
         )
 
         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
@@ -101,7 +101,7 @@ struct ComposeDownTests {
             "Expected 1 container with the name \(containerName), found \(containers.count)")
         #expect(
             containers.filter({ $0.status == .stopped }).count == 1,
-            "Expected container \(containerName) to be stopped, found status: \(containers[0].status.rawValue)"
+            "Expected container \(containerName) to be stopped, found status: \(containers.map(\.status))"
         )
     }
 
