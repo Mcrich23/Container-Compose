@@ -166,6 +166,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         print(services.map(\.serviceName))
         for (serviceName, service) in services {
+            // Wait for dependencies to meet their conditions before starting this service
+            if let dependencies = service.depends_on {
+                for (depServiceName, depConfig) in dependencies {
+                    let condition = depConfig.condition
+                    print("Waiting for service '\(depServiceName)' to meet condition '\(condition.rawValue)' before starting '\(serviceName)'...")
+                    try await waitUntilServiceMeetsCondition(depServiceName, condition: condition, timeout: 120)
+                }
+            }
+
             try await configService(service, serviceName: serviceName, from: dockerCompose)
         }
 
@@ -192,13 +201,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return ip
     }
 
-    /// Repeatedly checks `container list -a` until the given container is listed as `running`.
+    /// Waits for a service to meet the specified condition based on depends_on configuration.
     /// - Parameters:
-    ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
+    ///   - serviceName: The service name
+    ///   - condition: The condition to wait for (service_started, service_healthy, etc.)
     ///   - timeout: Max seconds to wait before failing.
     ///   - interval: How often to poll (in seconds).
-    /// - Returns: `true` if the container reached "running" state within the timeout.
-    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
+    private func waitUntilServiceMeetsCondition(_ serviceName: String, condition: DependsOnCondition, timeout: TimeInterval = 60, interval: TimeInterval = 0.5) async throws {
         guard let projectName else { return }
         let containerName = "\(projectName)-\(serviceName)"
 
@@ -206,8 +215,32 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         while Date() < deadline {
             let container = try? await ClientContainer.get(id: containerName)
-            if container?.status == .running {
-                return
+
+            switch condition {
+            case .service_started:
+                // Just wait for container to be running
+                if container?.status == .running {
+                    return
+                }
+
+            case .service_healthy:
+                // Wait for container to be running AND healthy
+                // TODO: Implement proper health check monitoring once Container API exposes health status
+                // For now, wait for container to be running and add a delay for health checks
+                if container?.status == .running {
+                    print("Warning: Health check monitoring not yet fully implemented. Waiting for container to be running plus grace period...")
+                    // Give some time for health checks to pass (simplified for now)
+                    try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                    return
+                }
+
+            case .service_completed_successfully:
+                // Wait for container to complete (not currently running)
+                // TODO: Check exit code once API exposes it
+                if let container = container, container.status != .running {
+                    print("Warning: Container '\(containerName)' has stopped. Exit code checking not yet implemented.")
+                    return
+                }
             }
 
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
@@ -216,8 +249,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         throw NSError(
             domain: "ContainerWait", code: 1,
             userInfo: [
-                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to meet condition '\(condition.rawValue)'."
             ])
+    }
+
+    /// Repeatedly checks `container list -a` until the given container is listed as `running`.
+    /// - Parameters:
+    ///   - serviceName: The service name
+    ///   - timeout: Max seconds to wait before failing.
+    ///   - interval: How often to poll (in seconds).
+    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
+        try await waitUntilServiceMeetsCondition(serviceName, condition: .service_started, timeout: timeout, interval: interval)
     }
 
     private func stopOldStuff(_ services: [String], remove: Bool) async throws {

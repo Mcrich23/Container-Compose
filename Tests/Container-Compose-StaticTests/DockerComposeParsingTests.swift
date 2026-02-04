@@ -176,8 +176,8 @@ struct DockerComposeParsingTests {
         
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services["web"]??.depends_on?.contains("db") == true)
+
+        #expect(compose.services["web"]??.depends_on?.keys.contains("db") == true)
     }
     
     @Test("Parse compose with build context")
@@ -406,7 +406,7 @@ struct DockerComposeParsingTests {
         #expect(compose.services["wordpress"] != nil)
         #expect(compose.services["db"] != nil)
         #expect(compose.volumes?.count == 2)
-        #expect(compose.services["wordpress"]??.depends_on?.contains("db") == true)
+        #expect(compose.services["wordpress"]??.depends_on?.keys.contains("db") == true)
     }
     
     @Test("Parse three-tier web application")
@@ -493,5 +493,95 @@ struct DockerComposeParsingTests {
         #expect(dbIndex < apiIndex)
         #expect(cacheIndex < apiIndex)
         #expect(apiIndex < frontendIndex)
+    }
+
+    // MARK: - Depends On Condition Tests
+
+    @Test("Parse depends_on with service_healthy condition")
+    func parseDependsOnWithHealthyCondition() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYamlWithHealthyCondition
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services.count == 2)
+
+        #expect(compose.services["web"] != nil)
+        #expect(compose.services["web"]??.depends_on != nil)
+        #expect(compose.services["web"]??.depends_on?["db"] != nil)
+        #expect(compose.services["web"]??.depends_on?["db"]?.condition == .service_healthy)
+    }
+
+    @Test("Parse depends_on with mixed conditions")
+    func parseDependsOnWithMixedConditions() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYamlWithMixedConditions
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services.count == 4)
+
+        #expect(compose.services["web"] != nil)
+        #expect(compose.services["web"]??.depends_on != nil)
+
+        // Verify web service has all three conditions
+        #expect(compose.services["web"]??.depends_on?["app"]?.condition == .service_started)
+        #expect(compose.services["web"]??.depends_on?["db"]?.condition == .service_healthy)
+        #expect(compose.services["web"]??.depends_on?["migration"]?.condition == .service_completed_successfully)
+
+        // Verify app also depends on db with healthy condition
+        #expect(compose.services["app"]??.depends_on?["db"]?.condition == .service_healthy)
+    }
+
+    @Test("Parse depends_on with simple array format - backward compatibility")
+    func parseDependsOnArrayFormat() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYamlWithSimpleArrayDependsOn
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services.count == 3)
+
+        #expect(compose.services["web"] != nil)
+        #expect(compose.services["web"]??.depends_on != nil)
+
+        // Array format should be converted to dictionary with default condition
+        #expect(compose.services["web"]??.depends_on?["db"]?.condition == .service_started)
+        #expect(compose.services["web"]??.depends_on?["cache"]?.condition == .service_started)
+    }
+
+    @Test("Parse depends_on with empty dictionary values")
+    func parseDependsOnEmptyDictValues() throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYamlWithEmptyDictDependsOn
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services.count == 3)
+
+        #expect(compose.services["web"] != nil)
+        #expect(compose.services["web"]??.depends_on != nil)
+
+        // Empty dict values should be converted to default condition
+        #expect(compose.services["web"]??.depends_on?["db"]?.condition == .service_started)
+        #expect(compose.services["web"]??.depends_on?["cache"]?.condition == .service_started)
+    }
+
+    @Test("Verify DependencyConfig default values")
+    func verifyDependencyConfigDefaults() throws {
+        let config = DependencyConfig()
+
+        #expect(config.condition == .service_started)
+        #expect(config.restart == nil)
+        #expect(config.required == nil)
+    }
+
+    @Test("Verify DependencyConfig with all fields")
+    func verifyDependencyConfigAllFields() throws {
+        let config = DependencyConfig(
+            condition: .service_healthy,
+            restart: true,
+            required: false
+        )
+
+        #expect(config.condition == .service_healthy)
+        #expect(config.restart == true)
+        #expect(config.required == false)
     }
 }
