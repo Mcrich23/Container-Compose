@@ -86,7 +86,7 @@ public struct ComposeDown: AsyncParsableCommand {
                 "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
             )
         } else {
-            projectName = URL(fileURLWithPath: cwd).lastPathComponent  // Default to directory name
+            projectName = deriveProjectName(cwd: cwd)
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
         }
 
