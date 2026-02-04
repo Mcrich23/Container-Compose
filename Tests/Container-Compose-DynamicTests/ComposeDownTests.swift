@@ -44,7 +44,7 @@ struct ComposeDownTests {
             containers.count == 2,
             "Expected 2 containers for \(project.name), found \(containers.count)")
 
-        #expect(containers.filter({ $0.status == .running }).count == 2, "Expected 2 running containers for \(project.name), found \(containers.count)")
+        #expect(containers.filter({ $0.status == .running }).count == 2, "Expected 2 running containers for \(project.name), found \(containers.filter({ $0.status == .running }).count)")
 
         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
         try await composeDown.run()
@@ -58,7 +58,7 @@ struct ComposeDownTests {
             containers.count == 2,
             "Expected 2 containers for \(project.name), found \(containers.count)")
 
-        #expect(containers.filter({ $0.status == .stopped}).count == 2, "Expected 2 stopped containers for \(project.name), found \(containers.count)")
+        #expect(containers.filter({ $0.status == .stopped}).count == 2, "Expected 2 stopped containers for \(project.name), found \(containers.filter({ $0.status == .stopped }).count)")
     }
 
     @Test("What goes up must come down - container_name")
