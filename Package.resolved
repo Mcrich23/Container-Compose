@@ -16,7 +16,7 @@
       "location" : "https://github.com/mcrich23/container",
       "state" : {
         "branch" : "add-command-option-group-function-macro",
-        "revision" : "c7adfe76b98553828c714cfec8db93f43decb7f2"
+        "revision" : "1d4e030cd537fd8325f2a91fd05e0bec9419753f"
       }
     },
     {
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/containerization.git",
       "state" : {
-        "revision" : "26f3dcc796c89baf729827770c011cd694debcbf",
-        "version" : "0.21.1"
+        "revision" : "c3fe889a2f739ee4a9b0faccedd9f36f3862dc29",
+        "version" : "0.24.5"
       }
     },
     {
@@ -260,6 +260,15 @@
       "state" : {
         "revision" : "3d6871d5b4a5cd519adf233fbb576e0a2af71c17",
         "version" : "5.4.0"
+      }
+    },
+    {
+      "identity" : "zstd",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/facebook/zstd.git",
+      "state" : {
+        "revision" : "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+        "version" : "1.5.7"
       }
     }
   ],
