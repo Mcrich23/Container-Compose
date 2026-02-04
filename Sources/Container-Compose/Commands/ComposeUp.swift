@@ -43,8 +43,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     @Flag(
         name: [.customShort("d"), .customLong("detach")],
-        help: "Detatches from container logs. Note: If you do NOT detatch, killing this process will NOT kill the container. To kill the container, run container-compose down")
-    var detatch: Bool = false
+        help: "Detaches from container logs. Note: If you do NOT detach, killing this process will NOT kill the container. To kill the container, run container-compose down")
+    var detach: Bool = false
 
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
     var composeFilename: String = "compose.yml"
@@ -169,7 +169,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             try await configService(service, serviceName: serviceName, from: dockerCompose)
         }
 
-        if !detatch {
+        if !detach {
             await waitForever()
         }
     }
@@ -363,7 +363,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Add detach flag if specified on the CLI
-        if detatch {
+        if detach {
             runCommandArgs.append("-d")
         }
 
