@@ -234,6 +234,39 @@ struct ComposeUpTests {
         #expect(webContainer.status == .running)
         #expect(dbContainer.status == .running)
     }
+
+        @Test("Test container created with non-default CPU and memory limits")
+        func testCpuAndMemoryLimits() async throws {
+                let yaml = """
+                version: "3.8"
+                services:
+                    app:
+                        image: nginx:alpine
+                        deploy:
+                            resources:
+                                limits:
+                                    cpus: "1"
+                                    memory: "512MB"
+                """
+
+                let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+                try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
+                let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
+
+                var composeUp = try ComposeUp.parse(["-d", "--cwd", tempLocation.deletingLastPathComponent().path(percentEncoded: false)])
+                try await composeUp.run()
+
+                let containers = try await ClientContainer.list()
+                        .filter { $0.configuration.id.contains(folderName) }
+
+                guard let appContainer = containers.first(where: { $0.configuration.id == "\(folderName)-app" }) else {
+                        throw Errors.containerNotFound
+                }
+
+                #expect(appContainer.configuration.resources.cpus == 1)
+                #expect(appContainer.configuration.resources.memoryInBytes == 512.mib())
+        }
     
     enum Errors: Error {
         case containerNotFound

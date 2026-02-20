@@ -378,6 +378,27 @@ struct DockerComposeParsingTests {
         
         #expect(compose.services["app"]??.platform == "linux/amd64")
     }
+
+    @Test("Parse deploy resources limits (cpus and memory)")
+    func parseComposeWithDeployResources() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            deploy:
+              resources:
+                limits:
+                  cpus: "0.5"
+                  memory: "512M"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.deploy?.resources?.limits?.cpus == "0.5")
+        #expect(compose.services["app"]??.deploy?.resources?.limits?.memory == "512M")
+    }
     
     @Test("Service must have image or build - should fail without either")
     func serviceRequiresImageOrBuild() throws {
