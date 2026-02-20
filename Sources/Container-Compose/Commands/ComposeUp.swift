@@ -489,6 +489,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("--read-only")
         }
 
+        // Add resource limits
+        if let cpus = service.deploy?.resources?.limits?.cpus {
+            runCommandArgs.append(contentsOf: ["--cpus", cpus])
+        }
+        if let memory = service.deploy?.resources?.limits?.memory {
+            runCommandArgs.append(contentsOf: ["--memory", memory])
+        }
+
         // Handle service-level configs (note: still only parsing/logging, not attaching)
         if let serviceConfigs = service.configs {
             print(
