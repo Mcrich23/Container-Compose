@@ -181,11 +181,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         fatalError("unreachable")
     }
 
-    private func getIPForRunningService(_ serviceName: String) async throws -> String? {
-        guard let projectName else { return nil }
-
-        let containerName = "\(projectName)-\(serviceName)"
-
+    private func getIPForContainer(_ containerName: String) async throws -> String? {
         let container = try await ClientContainer.get(id: containerName)
         let ip = container.networks.compactMap { $0.ipv4Gateway.description }.first
 
@@ -197,26 +193,30 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
     ///   - timeout: Max seconds to wait before failing.
     ///   - interval: How often to poll (in seconds).
-    /// - Returns: `true` if the container reached "running" state within the timeout.
-    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
-        guard let projectName else { return }
-        let containerName = "\(projectName)-\(serviceName)"
-
+    private func waitUntilContainerIsRunning(_ containerName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
         let deadline = Date().addingTimeInterval(timeout)
+        var lastStatus: RuntimeStatus?
 
         while Date() < deadline {
-            let container = try? await ClientContainer.get(id: containerName)
-            if container?.status == .running {
-                return
+            do {
+                let container = try await ClientContainer.get(id: containerName)
+                lastStatus = container.status
+                if container.status == .running {
+                    print("Container '\(containerName)' is now running.")
+                    return
+                }
+            } catch {
+                // Container doesn't exist yet, keep polling
             }
 
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
 
+        let statusMessage = lastStatus.map { "Last status: \($0)" } ?? "Container was never found"
         throw NSError(
             domain: "ContainerWait", code: 1,
             userInfo: [
-                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running. \(statusMessage)"
             ])
     }
 
@@ -245,8 +245,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     // MARK: Compose Top Level Functions
 
-    private mutating func updateEnvironmentWithServiceIP(_ serviceName: String) async throws {
-        let ip = try await getIPForRunningService(serviceName)
+    private mutating func updateEnvironmentWithServiceIP(_ serviceName: String, containerName: String) async throws {
+        let ip = try await getIPForContainer(containerName)
         self.containerIps[serviceName] = ip
         for (key, value) in environmentVariables.map({ ($0, $1) }) where value == serviceName {
             self.environmentVariables[key] = ip ?? value
@@ -551,6 +551,18 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         self.containerConsoleColors[serviceName] = serviceColor
 
+        // Check if container already exists
+        if let existingContainer = try? await ClientContainer.get(id: containerName) {
+            if existingContainer.status == .running {
+                print("Container '\(containerName)' is already running.")
+                try await updateEnvironmentWithServiceIP(serviceName, containerName: containerName)
+                return
+            } else {
+                print("Error: Container '\(containerName)' already exists with status: \(existingContainer.status).")
+                return
+            }
+        }
+
         Task { [self, serviceColor] in
             @Sendable
             func handleOutput(_ output: String) {
@@ -564,8 +576,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         do {
-            try await waitUntilServiceIsRunning(serviceName)
-            try await updateEnvironmentWithServiceIP(serviceName)
+            try await waitUntilContainerIsRunning(containerName)
+            try await updateEnvironmentWithServiceIP(serviceName, containerName: containerName)
         } catch {
             print(error)
         }
