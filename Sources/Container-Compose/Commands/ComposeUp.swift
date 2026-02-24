@@ -559,6 +559,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
             print("\nStarting service: \(serviceName)")
             print("Starting \(serviceName)")
+            print("Running: container run \(runCommandArgs.joined(separator: " "))")
             print("----------------------------------------\n")
             let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
         }
@@ -642,6 +643,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let buildCommand = try Application.BuildCommand.parse(commands)
         print("\n----------------------------------------")
         print("Building image for service: \(serviceName) (Tag: \(imageToRun))")
+        print("Running: container build \(commands.joined(separator: " "))")
         try buildCommand.validate()
         try await buildCommand.run()
         print("Image build for \(serviceName) completed.")
