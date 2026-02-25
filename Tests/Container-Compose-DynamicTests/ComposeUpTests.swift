@@ -267,6 +267,119 @@ struct ComposeUpTests {
                 #expect(appContainer.configuration.resources.cpus == 1)
                 #expect(appContainer.configuration.resources.memoryInBytes == 512.mib())
         }
+
+    @Test("Test compose mounts existing host file as volume")
+    func testComposeMountsExistingHostFileAsVolume() async throws {
+        let yaml = """
+            version: "3.8"
+            services:
+              app:
+                image: nginx:alpine
+                volumes:
+                  - ./config.txt:/etc/myconfig.txt
+            """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+        let hostFileURL = project.base.appending(path: "config.txt")
+        try "single-file-mount".write(to: hostFileURL, atomically: true, encoding: .utf8)
+        let expectedHostFilePath = hostFileURL.standardizedFileURL.path(percentEncoded: false)
+
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false)])
+        try await composeUp.run()
+
+        let containers = try await ClientContainer.list()
+            .filter { $0.configuration.id.contains(project.name) }
+
+        guard let appContainer = containers.first(where: { $0.configuration.id == "\(project.name)-app" }) else {
+            throw Errors.containerNotFound
+        }
+
+        #expect(
+            appContainer.configuration.mounts.contains {
+                $0.source == expectedHostFilePath && $0.destination == "/etc/myconfig.txt"
+            },
+            "Expected file mount source '\(expectedHostFilePath)' to '/etc/myconfig.txt', found mounts: \(appContainer.configuration.mounts)"
+        )
+    }
+
+    @Test("Test compose normalizes and creates relative directory mount paths")
+    func testComposeNormalizesAndCreatesRelativeDirectoryMountPaths() async throws {
+        let yaml = """
+            version: "3.8"
+            services:
+              app:
+                image: nginx:alpine
+                volumes:
+                  - ./mounts/../mounts/rel-data:/mnt/data
+            """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+        let expectedDirectoryPath = project.base.appending(path: "mounts/rel-data")
+            .standardizedFileURL
+            .path(percentEncoded: false)
+
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false)])
+        try await composeUp.run()
+
+        let containers = try await ClientContainer.list()
+            .filter { $0.configuration.id.contains(project.name) }
+
+        guard let appContainer = containers.first(where: { $0.configuration.id == "\(project.name)-app" }) else {
+            throw Errors.containerNotFound
+        }
+
+        #expect(
+            appContainer.configuration.mounts.contains {
+                normalizePath($0.source) == normalizePath(expectedDirectoryPath) && $0.destination == "/mnt/data"
+            },
+            "Expected normalized relative mount source '\(expectedDirectoryPath)' to '/mnt/data', found mounts: \(appContainer.configuration.mounts)"
+        )
+
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: expectedDirectoryPath, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue)
+    }
+
+    @Test("Test compose named volume mount preserves full destination path")
+    func testComposeNamedVolumeMountPreservesFullDestinationPath() async throws {
+        let destinationPath = "/var/lib/app/data"
+        let yaml = """
+            version: "3.8"
+            services:
+              app:
+                image: nginx:alpine
+                volumes:
+                  - app_data:\(destinationPath)
+            volumes:
+              app_data:
+            """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+        let expectedVolumeSource = URL.homeDirectory
+            .appending(path: ".containers/Volumes/\(project.name)/app_data")
+            .path(percentEncoded: false)
+
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false)])
+        try await composeUp.run()
+
+        let containers = try await ClientContainer.list()
+            .filter { $0.configuration.id.contains(project.name) }
+
+        guard let appContainer = containers.first(where: { $0.configuration.id == "\(project.name)-app" }) else {
+            throw Errors.containerNotFound
+        }
+
+        #expect(
+            appContainer.configuration.mounts.contains {
+                normalizePath($0.source) == normalizePath(expectedVolumeSource) && $0.destination == destinationPath
+            },
+            "Expected named volume source '\(expectedVolumeSource)' to mount at '\(destinationPath)', found mounts: \(appContainer.configuration.mounts)"
+        )
+
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: expectedVolumeSource, isDirectory: &isDirectory))
+        #expect(isDirectory.boolValue)
+    }
     
     enum Errors: Error {
         case containerNotFound
@@ -277,6 +390,10 @@ struct ComposeUpTests {
         let dict = Dictionary(uniqueKeysWithValues: array)
         
         return dict
+    }
+
+    private func normalizePath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path(percentEncoded: false)
     }
 }
 
