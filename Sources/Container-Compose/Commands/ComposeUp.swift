@@ -677,15 +677,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             let normalizedHostPath = URL(fileURLWithPath: fullHostPath).standardizedFileURL.path(percentEncoded: false)
 
             if fileManager.fileExists(atPath: normalizedHostPath, isDirectory: &isDirectory) {
-                if isDirectory.boolValue {
-                    // Host path exists and is a directory, add the volume
-                    runCommandArgs.append("-v")
-                    // Use normalized absolute path for container command (container tool requires absolute paths)
-                    runCommandArgs.append("\(normalizedHostPath):\(destination)")
-                } else {
-                    // Host path exists but is a file
-                    print("Warning: Volume mount source '\(source)' is a file. The 'container' tool does not support direct file mounts. Skipping this volume.")
-                }
+                // Host path exists (file or directory), add the volume.
+                runCommandArgs.append("-v")
+                // Use normalized absolute path for container command (container tool requires absolute paths)
+                runCommandArgs.append("\(normalizedHostPath):\(destination)")
             } else {
                 // Host path does not exist, assume it's meant to be a directory and try to create it.
                 do {
