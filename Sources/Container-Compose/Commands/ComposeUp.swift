@@ -673,35 +673,30 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             var isDirectory: ObjCBool = false
             // Ensure the path is absolute or relative to the current directory for FileManager
             let fullHostPath = (source.starts(with: "/") || source.starts(with: "~")) ? source : (cwd + "/" + source)
+            // Normalize the path to remove ./ and ../ components, and convert to absolute path
+            let normalizedHostPath = URL(fileURLWithPath: fullHostPath).standardizedFileURL.path(percentEncoded: false)
 
-            if fileManager.fileExists(atPath: fullHostPath, isDirectory: &isDirectory) {
-                if isDirectory.boolValue {
-                    // Host path exists and is a directory, add the volume
-                    runCommandArgs.append("-v")
-                    // Reconstruct the volume string without mode, ensuring it's source:destination
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
-                } else {
-                    // Host path exists but is a file
-                    print("Warning: Volume mount source '\(source)' is a file. The 'container' tool does not support direct file mounts. Skipping this volume.")
-                }
+            if fileManager.fileExists(atPath: normalizedHostPath, isDirectory: &isDirectory) {
+                // Host path exists (file or directory), add the volume.
+                runCommandArgs.append("-v")
+                // Use normalized absolute path for container command (container tool requires absolute paths)
+                runCommandArgs.append("\(normalizedHostPath):\(destination)")
             } else {
                 // Host path does not exist, assume it's meant to be a directory and try to create it.
                 do {
-                    try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
-                    print("Info: Created missing host directory for volume: \(fullHostPath)")
+                    try fileManager.createDirectory(atPath: normalizedHostPath, withIntermediateDirectories: true, attributes: nil)
+                    print("Info: Created missing host directory for volume: \(normalizedHostPath)")
                     runCommandArgs.append("-v")
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
+                    // Use normalized absolute path for container command (container tool requires absolute paths)
+                    runCommandArgs.append("\(normalizedHostPath):\(destination)")
                 } catch {
-                    print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
+                    print("Error: Could not create host directory '\(normalizedHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
                 }
             }
         } else {
             guard let projectName else { return [] }
             let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
             let volumePath = volumeUrl.path(percentEncoded: false)
-
-            let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
-            let destinationPath = destinationUrl.path(percentEncoded: false)
 
             print(
                 "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
@@ -711,7 +706,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // Host path exists and is a directory, add the volume
             runCommandArgs.append("-v")
             // Reconstruct the volume string without mode, ensuring it's source:destination
-            runCommandArgs.append("\(volumePath):\(destinationPath)")  // Use original source for command argument
+            runCommandArgs.append("\(volumePath):\(destination)")  // Use original source for command argument
         }
 
         return runCommandArgs
