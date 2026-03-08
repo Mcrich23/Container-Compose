@@ -267,6 +267,46 @@ struct ComposeUpTests {
                 #expect(appContainer.configuration.resources.cpus == 1)
                 #expect(appContainer.configuration.resources.memoryInBytes == 512.mib())
         }
+
+    @Test("Test compose up with explicit IP port mapping")
+    func testComposeUpWithExplicitIPPortMapping() async throws {
+        let yaml = """
+            version: "3.8"
+            services:
+                web:
+                    image: nginx:alpine
+                    ports:
+                        - "127.0.0.1:18081:80"
+            """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false)])
+        try await composeUp.run()
+
+        var containers = try await ClientContainer.list()
+            .filter({
+                $0.configuration.id.contains(project.name)
+            })
+
+        guard let webContainer = containers.first(where: { $0.configuration.id == "\(project.name)-web" }) else {
+            throw Errors.containerNotFound
+        }
+
+        #expect(webContainer.status == .running)
+        #expect(webContainer.configuration.publishedPorts.map({ "\($0.hostAddress):\($0.hostPort):\($0.containerPort)" }) == ["127.0.0.1:18081:80"])
+
+        var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
+        try await composeDown.run()
+
+        containers = try await ClientContainer.list()
+            .filter({
+                $0.configuration.id.contains(project.name)
+            })
+
+        #expect(containers.count == 1)
+        #expect(containers.filter({ $0.status == .stopped }).count == 1)
+    }
     
     enum Errors: Error {
         case containerNotFound

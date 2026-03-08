@@ -104,6 +104,48 @@ public func deriveProjectName(cwd: String) -> String {
     return projectName
 }
 
+/// Converts Docker Compose port specification into a container run -p format.
+/// Handles various formats: "PORT", "HOST:PORT", "IP:HOST:PORT", and optional protocol.
+/// - Parameter portSpec: The port specification string from docker-compose.yml.
+/// - Returns: A properly formatted port binding for `container run -p`.
+public func composePortToRunArg(_ portSpec: String) -> String {
+    // Check for protocol suffix (e.g., "/tcp" or "/udp")
+    var protocolSuffix = ""
+    var portBody = portSpec
+    if let slashRange = portSpec.range(of: "/", options: [.backwards]) {
+        let afterSlash = portSpec[slashRange.lowerBound...]
+        let protocolPart = String(afterSlash)
+        if protocolPart == "/tcp" || protocolPart == "/udp" {
+            protocolSuffix = protocolPart
+            portBody = String(portSpec[..<slashRange.lowerBound])
+        }
+    }
+
+    let components = portBody.split(separator: ":", maxSplits: 3).map(String.init)
+    switch components.count {
+    case 1:
+        let containerPort = components[0]
+        return "0.0.0.0:\(containerPort):\(containerPort)\(protocolSuffix)"
+    case 2:
+        let hostPart = components[0]
+        let containerPart = components[1]
+        let hasIPv4 = hostPart.contains(".")
+        let hasIPv6 = hostPart.contains(":") && hostPart.hasPrefix("[") && hostPart.hasSuffix("]")
+        if hasIPv4 || hasIPv6 {
+            return "\(hostPart):\(containerPart)\(protocolSuffix)"
+        } else {
+            return "0.0.0.0:\(hostPart):\(containerPart)\(protocolSuffix)"
+        }
+    case 3:
+        let ipPart = components[0]
+        let hostPart = components[1]
+        let containerPart = components[2]
+        return "\(ipPart):\(hostPart):\(containerPart)\(protocolSuffix)"
+    default:
+        return portSpec
+    }
+}
+
 extension String: @retroactive Error {}
 
 /// A structure representing the result of a command-line process execution.

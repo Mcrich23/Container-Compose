@@ -442,7 +442,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
              for port in ports {
                  let resolvedPort = resolveVariable(port, with: environmentVariables)
                  runCommandArgs.append("-p")
-                 runCommandArgs.append("0.0.0.0:\(resolvedPort)")
+                 runCommandArgs.append(composePortToRunArg(resolvedPort))
              }
          }
 
