@@ -44,8 +44,8 @@ struct HealthcheckConfigurationTests {
         let decoder = YAMLDecoder()
         let healthcheck = try decoder.decode(Healthcheck.self, from: yaml)
         
-        #expect(healthcheck.test?.count == 2)
-        #expect(healthcheck.test?.first == "redis-cli")
+        #expect(healthcheck.test?.count == 3)
+        #expect(healthcheck.test?.first == "CMD-SHELL")
     }
     
     @Test("Parse healthcheck with interval")
