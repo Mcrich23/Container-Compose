@@ -36,7 +36,7 @@ struct HealthcheckConfigurationTests {
     }
     
     @Test("Parse healthcheck with test command (string)")
-    func parseHealthcheckWithTestAsSignleString() throws {
+    func parseHealthcheckWithTestAsSingleString() throws {
         let yaml = """
         test: "redis-cli ping"
         """
