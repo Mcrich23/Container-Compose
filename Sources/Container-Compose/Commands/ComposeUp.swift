@@ -204,15 +204,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let containerName = "\(projectName)-\(serviceName)"
 
         let deadline = Date().addingTimeInterval(timeout)
+        let client = ContainerClient()
 
         while Date() < deadline {
-            let client = ContainerClient()
+            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             let container = try? await client.get(id: containerName)
             if container?.status == .running {
                 return
             }
-
-            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
 
         throw NSError(
