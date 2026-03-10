@@ -35,6 +35,19 @@ struct HealthcheckConfigurationTests {
         #expect(healthcheck.test?.first == "CMD")
     }
     
+    @Test("Parse healthcheck with test command")
+    func parseHealthcheckWithTestAsSignleString() throws {
+        let yaml = """
+        test: "redis-cli ping"
+        """
+        
+        let decoder = YAMLDecoder()
+        let healthcheck = try decoder.decode(Healthcheck.self, from: yaml)
+        
+        #expect(healthcheck.test?.count == 1)
+        #expect(healthcheck.test?.first == "redis-cli ping")
+    }
+    
     @Test("Parse healthcheck with interval")
     func parseHealthcheckWithInterval() throws {
         let yaml = """
