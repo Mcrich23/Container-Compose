@@ -35,7 +35,7 @@ struct ComposeDownTests {
         ])
         try await composeUp.run()
 
-        var containers = try await ClientContainer.list()
+        var containers = try await ContainerClient().list()
             .filter({
                 $0.configuration.id.contains(project.name)
             })
@@ -49,7 +49,7 @@ struct ComposeDownTests {
         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
         try await composeDown.run()
 
-        containers = try await ClientContainer.list()
+        containers = try await ContainerClient().list()
             .filter({
                 $0.configuration.id.contains(project.name)
             })
@@ -75,7 +75,7 @@ struct ComposeDownTests {
         ])
         try await composeUp.run()
 
-        var containers = try await ClientContainer.list()
+        var containers = try await ContainerClient().list()
             .filter({
                 $0.configuration.id.contains(containerName)
             })
@@ -91,7 +91,7 @@ struct ComposeDownTests {
         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
         try await composeDown.run()
 
-        containers = try await ClientContainer.list()
+        containers = try await ContainerClient().list()
             .filter({
                 $0.configuration.id.contains(containerName)
             })

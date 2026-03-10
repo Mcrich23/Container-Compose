@@ -37,7 +37,9 @@ struct ComposeUpTests {
         try await composeUp.run()
         
         // Get these containers
-        let containers = try await ClientContainer.list()
+        let client = ContainerClient()
+        
+        let containers = try await client.list()
             .filter({
                 $0.configuration.id.contains(tempLocation.deletingLastPathComponent().lastPathComponent)
             })
@@ -96,7 +98,7 @@ struct ComposeUpTests {
 //        try await composeUp.run()
 //        
 //        // Get the containers created by this compose file
-//        let containers = try await ClientContainer.list()
+//        let containers = try await ContainerClient().list()
 //            .filter({
 //                $0.configuration.id.contains(folderName)
 //            })
@@ -175,7 +177,7 @@ struct ComposeUpTests {
 //        try await composeUp.run()
 //        
 //        // Get the containers created by this compose file
-//        let containers = try await ClientContainer.list()
+//        let containers = try await ContainerClient().list()
 //            .filter({
 //                $0.configuration.id.contains(folderName)
 //            })
@@ -195,7 +197,7 @@ struct ComposeUpTests {
         try await composeUp.run()
         
         // Get the containers created by this compose file
-        let containers = try await ClientContainer.list()
+        let containers = try await ContainerClient().list()
             .filter {
                 $0.configuration.id.contains(folderName)
             }
@@ -257,7 +259,7 @@ struct ComposeUpTests {
                 var composeUp = try ComposeUp.parse(["-d", "--cwd", tempLocation.deletingLastPathComponent().path(percentEncoded: false)])
                 try await composeUp.run()
 
-                let containers = try await ClientContainer.list()
+                let containers = try await ContainerClient().list()
                         .filter { $0.configuration.id.contains(folderName) }
 
                 guard let appContainer = containers.first(where: { $0.configuration.id == "\(folderName)-app" }) else {
@@ -284,7 +286,7 @@ struct ComposeUpTests {
         var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false)])
         try await composeUp.run()
 
-        var containers = try await ClientContainer.list()
+        var containers = try await ContainerClient().list()
             .filter({
                 $0.configuration.id.contains(project.name)
             })
@@ -299,7 +301,7 @@ struct ComposeUpTests {
         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
         try await composeDown.run()
 
-        containers = try await ClientContainer.list()
+        containers = try await ContainerClient().list()
             .filter({
                 $0.configuration.id.contains(project.name)
             })

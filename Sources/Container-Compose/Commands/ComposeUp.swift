@@ -186,7 +186,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         let containerName = "\(projectName)-\(serviceName)"
 
-        let container = try await ClientContainer.get(id: containerName)
+        let client = ContainerClient()
+        let container = try await client.get(id: containerName)
         let ip = container.networks.compactMap { $0.ipv4Gateway.description }.first
 
         return ip
@@ -205,7 +206,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let deadline = Date().addingTimeInterval(timeout)
 
         while Date() < deadline {
-            let container = try? await ClientContainer.get(id: containerName)
+            let client = ContainerClient()
+            let container = try? await client.get(id: containerName)
             if container?.status == .running {
                 return
             }
@@ -226,16 +228,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         for container in containers {
             print("Stopping container: \(container)")
-            guard let container = try? await ClientContainer.get(id: container) else { continue }
+            let client = ContainerClient()
+            guard let container = try? await client.get(id: container) else { continue }
 
             do {
-                try await container.stop()
+                try await client.stop(id: container.id)
             } catch {
                 print("Error Stopping Container: \(error)")
             }
             if remove {
                 do {
-                    try await container.delete()
+                    try await client.delete(id: container.id)
                 } catch {
                     print("Error Removing Container: \(error)")
                 }
