@@ -1,0 +1,12 @@
+services:
+  redis:
+    restart: always
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: "redis-cli ping"
+      interval: 5s
+      retries: 20
+    ports:
+      - "6379:6379"

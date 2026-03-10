@@ -48,4 +48,22 @@ public struct Healthcheck: Codable, Hashable {
         self.retries = retries
         self.timeout = timeout
     }
+    
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Handle if `test` is a single string instead of an array
+        if let test = try? container.decodeIfPresent([String].self, forKey: .test) {
+            self.test = test
+        } else if let testString = try? container.decodeIfPresent(String.self, forKey: .test) {
+            self.test = ["CMD-SHELL", testString]
+        } else {
+            self.test = nil
+        }
+        
+        self.start_period = try container.decodeIfPresent(String.self, forKey: .start_period)
+        self.interval = try container.decodeIfPresent(String.self, forKey: .interval)
+        self.retries = try container.decodeIfPresent(Int.self, forKey: .retries)
+        self.timeout = try container.decodeIfPresent(String.self, forKey: .timeout)
+    }
 }
