@@ -186,7 +186,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         let containerName = "\(projectName)-\(serviceName)"
 
-        let container = try await ClientContainer.get(id: containerName)
+        let client = ContainerClient()
+        let container = try await client.get(id: containerName)
         let ip = container.networks.compactMap { $0.ipv4Gateway.description }.first
 
         return ip
@@ -203,14 +204,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let containerName = "\(projectName)-\(serviceName)"
 
         let deadline = Date().addingTimeInterval(timeout)
+        let client = ContainerClient()
 
         while Date() < deadline {
-            let container = try? await ClientContainer.get(id: containerName)
+            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            let container = try? await client.get(id: containerName)
             if container?.status == .running {
                 return
             }
-
-            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
 
         throw NSError(
@@ -226,16 +227,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         for container in containers {
             print("Stopping container: \(container)")
-            guard let container = try? await ClientContainer.get(id: container) else { continue }
+            let client = ContainerClient()
+            guard let container = try? await client.get(id: container) else { continue }
 
             do {
-                try await container.stop()
+                try await client.stop(id: container.id)
             } catch {
                 print("Error Stopping Container: \(error)")
             }
             if remove {
                 do {
-                    try await container.delete()
+                    try await client.delete(id: container.id)
                 } catch {
                     print("Error Removing Container: \(error)")
                 }
