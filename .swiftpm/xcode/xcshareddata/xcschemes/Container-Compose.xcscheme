@@ -106,7 +106,7 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "--cwd=/Users/mcrich/Xcode/Assignment-Manager-API"
+            argument = "--cwd=/Users/mcrich/Xcode/Container-Compose/Sample\ Compose\ Files/Healthchecked\ Redis"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
