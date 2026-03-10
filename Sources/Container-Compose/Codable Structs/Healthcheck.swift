@@ -56,7 +56,7 @@ public struct Healthcheck: Codable, Hashable {
         if let test = try? container.decodeIfPresent([String].self, forKey: .test) {
             self.test = test
         } else if let testString = try? container.decodeIfPresent(String.self, forKey: .test) {
-            self.test = ["CMD-SHELL"] + testString.components(separatedBy: " ")
+            self.test = ["CMD-SHELL", testString]
         } else {
             self.test = nil
         }
