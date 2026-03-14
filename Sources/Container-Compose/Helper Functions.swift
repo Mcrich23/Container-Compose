@@ -26,6 +26,15 @@ import Yams
 import Rainbow
 import ContainerCommands
 
+public func resolvedPath(for path: String, relativeTo baseURL: URL) -> String {
+    if path.hasPrefix("/") || path.hasPrefix("~") {
+        return NSString(string: path).expandingTildeInPath
+    }
+
+    return baseURL.appending(path: path).path
+}
+
+
 /// Loads environment variables from a .env file.
 /// - Parameter path: The full path to the .env file.
 /// - Returns: A dictionary of key-value pairs representing environment variables.

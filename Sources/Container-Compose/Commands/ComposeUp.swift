@@ -47,8 +47,42 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var detach: Bool = false
 
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String = "compose.yml"
-    private var composePath: String { "\(cwd)/\(composeFilename)" }  // Path to compose.yml
+    var composeFilename: String?
+
+    private static let supportedComposeFilenames = [
+        "compose.yml",
+        "compose.yaml",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+    ]
+
+    private var cwdURL: URL {
+        URL(fileURLWithPath: cwd)
+    }
+
+    private var composePath: String {
+        if let composeFilename {
+            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
+        }
+
+        for filename in Self.supportedComposeFilenames {
+            let candidate = cwdURL.appending(path: filename).path
+            if fileManager.fileExists(atPath: candidate) {
+                return candidate
+            }
+        }
+
+        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
+    }
+
+    private var envFilePath: String {
+        let envFile = process.envFile.first ?? ".env"
+        return resolvedPath(for: envFile, relativeTo: cwdURL)
+    }
+
+    private var composeDirectory: String {
+        URL(fileURLWithPath: composePath).deletingLastPathComponent().path
+    }
 
     @Flag(name: [.customShort("b"), .customLong("build")])
     var rebuild: Bool = false
@@ -63,7 +97,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var logging: Flags.Logging
 
     private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
-    var envFilePath: String { "\(cwd)/\(process.envFile.first ?? ".env")" }  // Path to optional .env file
 
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
@@ -76,20 +109,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
-        // Check for supported filenames and extensions
-        let filenames = [
-            "compose.yml",
-            "compose.yaml",
-            "docker-compose.yml",
-            "docker-compose.yaml",
-        ]
-        for filename in filenames {
-            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
-                composeFilename = filename
-                break
-            }
-        }
-
         // Read compose.yml content
         guard let yamlData = fileManager.contents(atPath: composePath) else {
             let path = URL(fileURLWithPath: composePath)
@@ -406,7 +425,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         if let envFiles = service.env_file {
             for envFile in envFiles {
-                let additionalEnvVars = loadEnvFile(path: "\(cwd)/\(envFile)")
+                let additionalEnvVars = loadEnvFile(path: URL(fileURLWithPath: envFile, relativeTo: URL(fileURLWithPath: composeDirectory)).path)
                 combinedEnv.merge(additionalEnvVars) { (current, _) in current }
             }
         }
@@ -610,15 +629,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Build command arguments
-        var commands = ["\(self.cwd)/\(buildConfig.context)"]
-        
+        var commands = [URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory)).path]
+
         // Add build arguments
         for (key, value) in buildConfig.args ?? [:] {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
         }
-        
+
         // Add Dockerfile path
-        commands.append(contentsOf: ["--file", "\(self.cwd)/\(buildConfig.dockerfile ?? "Dockerfile")"])
+        commands.append(contentsOf: ["--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: URL(fileURLWithPath: composeDirectory)).path])
         
         // Add caching options
         if noCache {

@@ -44,27 +44,38 @@ public struct ComposeDown: AsyncParsableCommand {
     private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
 
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String = "compose.yml"
-    private var composePath: String { "\(cwd)/\(composeFilename)" }  // Path to compose.yml
+    var composeFilename: String?
+
+    private static let supportedComposeFilenames = [
+        "compose.yml",
+        "compose.yaml",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+    ]
+
+    private var cwdURL: URL {
+        URL(fileURLWithPath: cwd)
+    }
+
+    private var composePath: String {
+        if let composeFilename {
+            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
+        }
+
+        for filename in Self.supportedComposeFilenames {
+            let candidate = cwdURL.appending(path: filename).path
+            if fileManager.fileExists(atPath: candidate) {
+                return candidate
+            }
+        }
+
+        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
+    }
 
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
 
     public mutating func run() async throws {
-
-        // Check for supported filenames and extensions
-        let filenames = [
-            "compose.yml",
-            "compose.yaml",
-            "docker-compose.yml",
-            "docker-compose.yaml",
-        ]
-        for filename in filenames {
-            if fileManager.fileExists(atPath: "\(cwd)/\(filename)") {
-                composeFilename = filename
-                break
-            }
-        }
 
         // Read docker-compose.yml content
         guard let yamlData = fileManager.contents(atPath: composePath) else {
