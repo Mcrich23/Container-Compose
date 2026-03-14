@@ -27,11 +27,8 @@ import Rainbow
 import ContainerCommands
 
 public func resolvedPath(for path: String, relativeTo baseURL: URL) -> String {
-    if path.hasPrefix("/") || path.hasPrefix("~") {
-        return NSString(string: path).expandingTildeInPath
-    }
-
-    return baseURL.appending(path: path).path
+    let expandedPath = NSString(string: path).expandingTildeInPath
+    return URL(fileURLWithPath: expandedPath, relativeTo: baseURL).standardizedFileURL.path
 }
 
 
