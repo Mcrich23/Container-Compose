@@ -16,7 +16,7 @@
       "location" : "https://github.com/mcrich23/container",
       "state" : {
         "branch" : "add-command-option-group-function-macro",
-        "revision" : "a3bf110f407bb8772d56f149f76668fe6f2d3067"
+        "revision" : "33a37da6dea26a2e8e3919b9cf5d1816a5337d0a"
       }
     },
     {
@@ -168,8 +168,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-nio.git",
       "state" : {
-        "revision" : "e932d3c4d8f77433c8f7093b5ebcbf91463948a0",
-        "version" : "2.95.0"
+        "revision" : "b31565862a8f39866af50bc6676160d8dda7de35",
+        "version" : "2.96.0"
       }
     },
     {
@@ -222,8 +222,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-protobuf.git",
       "state" : {
-        "revision" : "86970144a0b86068c81ff48ee29b3f97cae0b879",
-        "version" : "1.36.0"
+        "revision" : "a008af1a102ff3dd6cc3764bb69bf63226d0f5f6",
+        "version" : "1.36.1"
       }
     },
     {
