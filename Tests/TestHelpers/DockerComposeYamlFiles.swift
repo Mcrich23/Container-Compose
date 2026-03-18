@@ -17,6 +17,14 @@
 import Foundation
 
 public struct DockerComposeYamlFiles {
+    // A very simple compose file; use for lightweight non-parsing tests
+    public static let dockerComposeYaml0 = """
+        version: '3.8'
+        services:
+          web:
+            image: nginx:alpine
+        """
+
     public static let dockerComposeYaml1 = """
         version: '3.8'
 
@@ -275,9 +283,9 @@ public struct DockerComposeYamlFiles {
     /// TemporaryProject.
     /// - Parameter yaml: The Docker Compose YAML content to copy.
     /// - Returns: A TemporaryProject containing the URL and project name.
-    public static func copyYamlToTemporaryLocation(yaml: String) throws -> TemporaryProject {
+    public static func copyYamlToTemporaryLocation(yaml: String, filename: String = "docker-compose.yaml") throws -> TemporaryProject {
         let tempLocation = URL.temporaryDirectory.appending(
-            path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+            path: "Container-Compose_Tests_\(UUID().uuidString)/\(filename)")
         let tempBase = tempLocation.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: tempBase, withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
