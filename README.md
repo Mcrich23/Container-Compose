@@ -1,12 +1,12 @@
 # Container-Compose
 
-Container-Compose brings (limited) Docker Compose support to [Apple Container](https://github.com/apple/container), allowing you to define and orchestrate multi-container applications on Apple platforms using familiar Compose files. This project is not a Docker or Docker Compose wrapper but a tool to bridge Compose workflows with Apple's container management ecosystem.
+**Container-Compose is a (mostly) drop-in replacement for `docker-compose` that orchestrates [Apple Containers](https://opensource.apple.com/projects/container/) using the [`container`](https://github.com/apple/container) command.** It brings (currently limited) Docker Compose support, allowing you to define and orchestrate multi-container applications on Apple platforms using familiar compose files. This project aims to bridge Compose workflows with Apple's container management ecosystem. _It is not a Docker or Docker Compose wrapper._
 
 > **Note:** Container-Compose does not automatically configure DNS for macOS 15 (Sequoia). Use macOS 26 (Tahoe) for an optimal experience.
 
 ## Features
 
-- **Compose file support:** Parse and interpret `docker-compose.yml` files to configure Apple Containers.
+- **Compose file support:** Parse and interpret Docker Compose files (`docker-compose.yml`) to configure Apple Containers.
 - **Apple Container orchestration:** Launch and manage multiple containerized services using Apple’s native container runtime.
 - **Environment configuration:** Support for environment variable files (`.env`) to customize deployments.
 - **Service dependencies:** Specify service dependencies and startup order.
