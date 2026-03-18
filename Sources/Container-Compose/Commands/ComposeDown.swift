@@ -87,7 +87,7 @@ public struct ComposeDown: AsyncParsableCommand {
             )
         } else {
             projectName = deriveProjectName(cwd: cwd)
-            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
+            print("Info: No 'name' field found in `\(composeFilename)`. Using directory name as project name: \(projectName ?? "")")
         }
 
         var services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap({ serviceName, service in
