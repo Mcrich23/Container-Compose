@@ -61,7 +61,14 @@ After installation, simply run:
 container-compose up
 ```
 
-You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
+By default, `container-compose` looks for compose files in the current directory with any of these names:
+
+- `compose.yml`
+- `compose.yaml`
+- `docker-compose.yml`
+- `docker-compose.yaml`
+
+If your compose file does not use one of these names, you will need to use the `--file` option to specify which compose file to use. If your environment file is not `./.env`, you may also need to use the `--env-file` option to specify its location.
 
 ## Contributing
 

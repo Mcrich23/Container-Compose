@@ -43,7 +43,7 @@ public struct ComposeDown: AsyncParsableCommand {
 
     private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
+    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your compose file")
     var composeFilename: String = "compose.yml"
     private var composePath: String { "\(cwd)/\(composeFilename)" }  // Path to compose.yml
 
@@ -66,7 +66,7 @@ public struct ComposeDown: AsyncParsableCommand {
             }
         }
 
-        // Read docker-compose.yml content
+        // Read compose file content
         guard let yamlData = fileManager.contents(atPath: composePath) else {
             let path = URL(fileURLWithPath: composePath)
                 .deletingLastPathComponent()
@@ -81,7 +81,7 @@ public struct ComposeDown: AsyncParsableCommand {
         // Determine project name for container naming
         if let name = dockerCompose.name {
             projectName = name
-            print("Info: Docker Compose project name parsed as: \(name)")
+            print("Info: compose file project name parsed as: \(name)")
             print(
                 "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
             )

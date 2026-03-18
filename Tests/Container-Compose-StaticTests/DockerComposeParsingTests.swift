@@ -23,7 +23,7 @@ import TestHelpers
 @Suite("DockerCompose YAML Parsing Tests")
 struct DockerComposeParsingTests {
     // MARK: File Snippets
-    @Test("Parse basic docker-compose.yml with single service")
+    @Test("Parse basic compose file with single service")
     func parseBasicCompose() throws {
         let yaml = """
         version: '3.8'

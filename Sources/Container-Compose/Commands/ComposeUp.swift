@@ -46,7 +46,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         help: "Detaches from container logs. Note: If you do NOT detach, killing this process will NOT kill the container. To kill the container, run container-compose down")
     var detach: Bool = false
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
+    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your compose file")
     var composeFilename: String = "compose.yml"
     private var composePath: String { "\(cwd)/\(composeFilename)" }  // Path to compose.yml
 
@@ -90,7 +90,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Read compose.yml content
+        // Read compose file content
         guard let yamlData = fileManager.contents(atPath: composePath) else {
             let path = URL(fileURLWithPath: composePath)
                 .deletingLastPathComponent()
@@ -107,14 +107,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Handle 'version' field
         if let version = dockerCompose.version {
-            print("Info: Docker Compose file version parsed as: \(version)")
+            print("Info: compose file version parsed as: \(version)")
             print("Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.")
         }
 
         // Determine project name for container naming
         if let name = dockerCompose.name {
             projectName = name
-            print("Info: Docker Compose project name parsed as: \(name)")
+            print("Info: compose project name parsed as: \(name)")
             print(
                 "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
             )
@@ -141,7 +141,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         try await stopOldStuff(services.map({ $0.serviceName }), remove: true)
 
         // Process top-level networks
-        // This creates named networks defined in the docker-compose.yml
+        // This creates named networks defined in the compose file
         if let networks = dockerCompose.networks {
             print("\n--- Processing Networks ---")
             for (networkName, networkConfig) in networks {
@@ -151,7 +151,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Process top-level volumes
-        // This creates named volumes defined in the docker-compose.yml
+        // This creates named volumes defined in the compose file
         if let volumes = dockerCompose.volumes {
             print("\n--- Processing Volumes ---")
             for (volumeName, volumeConfig) in volumes {
@@ -161,7 +161,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("--- Volumes Processed ---\n")
         }
 
-        // Process each service defined in the docker-compose.yml
+        // Process each service defined in the compose file
         print("\n--- Processing Services ---")
 
         print(services.map(\.serviceName))
