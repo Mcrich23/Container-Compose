@@ -22,7 +22,7 @@
 //
 
 
-/// Represents the top-level structure of a docker-compose.yml file.
+/// Represents the top-level structure of a Docker Compose file.
 public struct DockerCompose: Codable {
     /// The Compose file format version (e.g., '3.8')
     public let version: String?

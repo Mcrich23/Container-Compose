@@ -106,7 +106,7 @@ public func deriveProjectName(cwd: String) -> String {
 
 /// Converts Docker Compose port specification into a container run -p format.
 /// Handles various formats: "PORT", "HOST:PORT", "IP:HOST:PORT", and optional protocol.
-/// - Parameter portSpec: The port specification string from docker-compose.yml.
+/// - Parameter portSpec: The port specification string from Docker Compose file.
 /// - Returns: A properly formatted port binding for `container run -p`.
 public func composePortToRunArg(_ portSpec: String) -> String {
     // Check for protocol suffix (e.g., "/tcp" or "/udp")

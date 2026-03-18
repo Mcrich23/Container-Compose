@@ -17,6 +17,14 @@
 import Foundation
 
 public struct DockerComposeYamlFiles {
+    // A very simple compose file; use for lightweight non-parsing tests
+    public static let dockerComposeYaml0 = """
+        version: '3.8'
+        services:
+          web:
+            image: nginx:alpine
+        """
+
     public static let dockerComposeYaml1 = """
         version: '3.8'
 
@@ -259,25 +267,25 @@ public struct DockerComposeYamlFiles {
             """
     }
 
-    /// Represents a temporary Docker Compose project copied to a temporary location for testing.
+    /// Represents a temporary compose project copied to a temporary location for testing.
     public struct TemporaryProject {
-        /// The URL of the temporary docker-compose.yaml file.
+        /// The URL of the temporary compose file file.
         public let url: URL
 
-        /// The base directory containing the temporary docker-compose.yaml file.
+        /// The base directory containing the temporary compose file.
         public let base: URL
 
         /// The project name derived from the temporary directory name.
         public let name: String
     }
 
-    /// Copies the provided Docker Compose YAML content to a temporary location and returns a
+    /// Copies the provided compose YAML content to a temporary location and returns a
     /// TemporaryProject.
-    /// - Parameter yaml: The Docker Compose YAML content to copy.
+    /// - Parameter yaml: The compose YAML content to copy.
     /// - Returns: A TemporaryProject containing the URL and project name.
-    public static func copyYamlToTemporaryLocation(yaml: String) throws -> TemporaryProject {
+    public static func copyYamlToTemporaryLocation(yaml: String, filename: String = "docker-compose.yaml") throws -> TemporaryProject {
         let tempLocation = URL.temporaryDirectory.appending(
-            path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+            path: "Container-Compose_Tests_\(UUID().uuidString)/\(filename)")
         let tempBase = tempLocation.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: tempBase, withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)

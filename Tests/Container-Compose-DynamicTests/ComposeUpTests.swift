@@ -28,7 +28,43 @@ struct ComposeUpTests {
         var composeDown = try ComposeDown.parse(["--cwd", location.path(percentEncoded: false)])
         try await composeDown.run()
     }
-    
+
+    // TODO: use eventual --dry-run flag for this test or factor out to tests 
+    // for eventual `config` command
+    //
+    // TODO: iterate the test above for default file present in directory and 
+    // for absolute paths, both of which are reportedly broken 
+    // (see issues #33 and #63)
+    @Test("ComposeUp uses compose file from --file flag")
+    func testComposeUpUsesComposeFileFromFileFlag() async throws {
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml0
+        let yamlFilename = "my_strangely_named_compose.yml"
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml, filename: yamlFilename)
+        
+        let testOutput = Pipe()
+        let origStdOut = dup(STDOUT_FILENO)
+        dup2(testOutput.fileHandleForWriting.fileDescriptor, STDOUT_FILENO)
+        
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false), "--file", yamlFilename])
+        try await composeUp.run()
+
+        var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false), "--file", yamlFilename])
+        try await composeDown.run()
+
+        dup2(origStdOut, STDOUT_FILENO)
+        close(origStdOut)
+        testOutput.fileHandleForWriting.closeFile()
+
+        let testOutputData = testOutput.fileHandleForReading.readDataToEndOfFile()
+        let outputText = String(data: testOutputData, encoding: .utf8) ?? ""
+
+        let expectedPattern = try Regex("No 'name' field found in `\(yamlFilename)`")
+        let matches = outputText.matches(of: expectedPattern)
+        #expect(matches.count == 2)
+
+        try? await stopInstance(location: project.base)
+    }
+
     @Test("Test WordPress with MySQL compose file")
     func testWordPressCompose() async throws {
         let yaml = DockerComposeYamlFiles.dockerComposeYaml1
@@ -322,7 +358,7 @@ struct ComposeUpTests {
         
         try? await stopInstance(location: project.base)
     }
-    
+
     enum Errors: Error {
         case containerNotFound
     }
