@@ -26,6 +26,12 @@ import Yams
 import Rainbow
 import ContainerCommands
 
+public func resolvedPath(for path: String, relativeTo baseURL: URL) -> String {
+    let expandedPath = NSString(string: path).expandingTildeInPath
+    return URL(fileURLWithPath: expandedPath, relativeTo: baseURL).standardizedFileURL.path
+}
+
+
 /// Loads environment variables from a .env file.
 /// - Parameter path: The full path to the .env file.
 /// - Returns: A dictionary of key-value pairs representing environment variables.

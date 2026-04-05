@@ -32,6 +32,24 @@ struct HelperFunctionsTests {
         #expect(projectName == "_devcontainers")
     }
 
+    @Test("Resolve explicit relative paths against base URL")
+    func testResolvedPathRelativeSegments() throws {
+        let baseURL = URL(fileURLWithPath: "/tmp/project/compose/compose.yml").deletingLastPathComponent()
+
+        #expect(resolvedPath(for: "./file.yaml", relativeTo: baseURL) == "/tmp/project/compose/file.yaml")
+        #expect(resolvedPath(for: "../shared/file.yaml", relativeTo: baseURL) == "/tmp/project/shared/file.yaml")
+        #expect(resolvedPath(for: "configs/dev/compose.yaml", relativeTo: baseURL) == "/tmp/project/compose/configs/dev/compose.yaml")
+    }
+
+    @Test("Resolve absolute and tilde paths without rebasing")
+    func testResolvedPathAbsoluteAndTilde() throws {
+        let baseURL = URL(fileURLWithPath: "/tmp/project/compose")
+        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+
+        #expect(resolvedPath(for: "/var/tmp/compose.yaml", relativeTo: baseURL) == "/var/tmp/compose.yaml")
+        #expect(resolvedPath(for: "~/compose.yaml", relativeTo: baseURL) == "\(homePath)/compose.yaml")
+    }
+
     @Test("Compose port - simple container port")
     func testPortSimple() throws {
         let result = composePortToRunArg("3000")
