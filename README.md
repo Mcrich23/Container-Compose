@@ -63,6 +63,49 @@ container-compose up
 
 You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
 
+## Utilities
+
+For guest-kernel swaps when testing SMB/NFS support with Apple `container`, this repo includes:
+
+```sh
+./scripts/setup-container-kernel.sh --binary /path/to/vmlinux --force
+```
+
+That script installs the kernel with `container system kernel set`, restarts the `container` services, and prints the configured kernel path before and after the change.
+Omit `--force` to be prompted before replacing the configured kernel, or add `--dry-run` to preview the commands without changing your system.
+After changing the default kernel, recreate existing test containers so their lightweight VMs boot with the new kernel.
+
+### Building an SMB-ready guest kernel
+
+SMB/CIFS mounts require a guest kernel with CIFS support enabled. Apple `containerization` includes that support in `kernel/config-arm64` as of apple/containerization#681, and Kata's common filesystem fragment also enables CIFS support.
+
+Build a compatible kernel from `apple/containerization`:
+
+```sh
+git clone https://github.com/apple/containerization.git
+cd containerization/kernel
+
+# Optional sanity check: the config should include CIFS and NFS support.
+grep -E 'CONFIG_(CIFS|NFS_FS)=' config-arm64
+
+make
+```
+
+The build uses Apple `container` to build inside a containerized toolchain. When it completes, the kernel artifact is:
+
+```sh
+containerization/kernel/vmlinux
+```
+
+Install that kernel for Apple `container` with this repo's helper:
+
+```sh
+cd /path/to/Container-Compose
+./scripts/setup-container-kernel.sh --binary /path/to/containerization/kernel/vmlinux --force
+```
+
+Then recreate existing test containers so their lightweight VMs boot with the new kernel.
+
 ## Contributing
 
 Contributions are welcome! Please open issues or submit pull requests to help improve this project.
