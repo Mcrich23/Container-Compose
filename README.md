@@ -63,6 +63,16 @@ container-compose up
 
 You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
 
+## Utilities
+
+For guest-kernel swaps when testing SMB/NFS support with Apple `container`, this repo includes:
+
+```sh
+./scripts/setup-container-kernel.sh --binary /path/to/vmlinux --force
+```
+
+That script installs the kernel with `container system kernel set`, restarts the `container` services, and prints the configured kernel before and after the change.
+
 ## Contributing
 
 Contributions are welcome! Please open issues or submit pull requests to help improve this project.

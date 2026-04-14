@@ -103,6 +103,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private var environmentVariables: [String: String] = [:]
     private var containerIps: [String: String] = [:]
     private var containerConsoleColors: [String: NamedColor] = [:]
+    private var composeVolumes: [String: Volume] = [:]
 
     private static let availableContainerConsoleColors: Set<NamedColor> = [
         .blue, .cyan, .magenta, .lightBlack, .lightBlue, .lightCyan, .lightYellow, .yellow, .lightGreen, .green,
@@ -120,6 +121,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Decode the YAML file into the DockerCompose struct
         let dockerComposeString = String(data: yamlData, encoding: .utf8)!
         let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        composeVolumes = dockerCompose.volumes?.compactMapValues { $0 } ?? [:]
 
         // Load environment variables from .env file
         environmentVariables = loadEnvFile(path: envFilePath)
@@ -175,7 +177,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\n--- Processing Volumes ---")
             for (volumeName, volumeConfig) in volumes {
                 guard let volumeConfig else { continue }
-                await createVolumeHardLink(name: volumeName, config: volumeConfig)
+                await createVolume(name: volumeName, config: volumeConfig)
             }
             print("--- Volumes Processed ---\n")
         }
@@ -274,17 +276,98 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
-    private func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
-        guard let projectName else { return }
-        let actualVolumeName = volumeConfig.name ?? volumeName  // Use explicit name or key as name
+    private func createVolume(name volumeName: String, config volumeConfig: Volume) async {
+        let actualVolumeName = effectiveVolumeName(for: volumeName)
+        let normalizedVolume = normalizedVolumeConfiguration(from: volumeConfig)
 
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(actualVolumeName)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
+        if let externalVolume = volumeConfig.external, externalVolume.isExternal {
+            print("Info: Volume '\(volumeName)' is declared as external.")
+            print("This tool assumes external volume '\(externalVolume.name ?? actualVolumeName)' already exists and will not attempt to create it.")
+            return
+        }
 
-        print(
-            "Warning: Volume source '\(actualVolumeName)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
-        )
-        try? fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+        do {
+            let existingVolume = try await ClientVolume.inspect(actualVolumeName)
+            if existingVolume.driver != normalizedVolume.driver || existingVolume.options != normalizedVolume.driverOpts {
+                print(
+                    "Error: Volume '\(volumeName)' already exists as '\(actualVolumeName)', but its configuration does not match the Compose file."
+                )
+                print(
+                    "Existing driver/options: \(existingVolume.driver) \(existingVolume.options). Expected: \(normalizedVolume.driver) \(normalizedVolume.driverOpts)."
+                )
+                print("Delete the existing volume and re-run `container-compose up` to recreate it with the correct settings.")
+            } else {
+                print("Volume '\(volumeName)' already exists as '\(actualVolumeName)'")
+            }
+            return
+        } catch {
+            // Fall through to creation.
+        }
+
+        do {
+            let labels = volumeConfig.labels ?? [:]
+            _ = try await ClientVolume.create(
+                name: actualVolumeName,
+                driver: normalizedVolume.driver,
+                driverOpts: normalizedVolume.driverOpts,
+                labels: labels
+            )
+            print("Created volume: \(volumeName) (Actual name: \(actualVolumeName), Driver: \(normalizedVolume.driver))")
+        } catch {
+            print("Error: Failed to create volume '\(volumeName)' as '\(actualVolumeName)': \(error.localizedDescription)")
+        }
+    }
+
+    private func effectiveVolumeName(for volumeName: String) -> String {
+        guard let config = composeVolumes[volumeName] else {
+            return volumeName
+        }
+
+        if let external = config.external, external.isExternal {
+            return external.name ?? config.name ?? volumeName
+        }
+
+        return config.name ?? volumeName
+    }
+
+    private func normalizedVolumeConfiguration(from volumeConfig: Volume) -> (driver: String, driverOpts: [String: String]) {
+        let driver = volumeConfig.driver ?? "local"
+        let driverOpts = volumeConfig.driver_opts ?? [:]
+
+        guard driver == "local", let type = driverOpts["type"]?.lowercased() else {
+            return (driver, driverOpts)
+        }
+
+        switch type {
+        case "cifs", "smb":
+            return ("smb", normalizeNetworkDriverOptions(driverOpts))
+        case "nfs":
+            return ("nfs", normalizeNetworkDriverOptions(driverOpts))
+        default:
+            return (driver, driverOpts)
+        }
+    }
+
+    private func normalizeNetworkDriverOptions(_ driverOpts: [String: String]) -> [String: String] {
+        var normalized = driverOpts
+
+        if let device = normalized.removeValue(forKey: "device") {
+            normalized["share"] = device
+        }
+
+        if let optionString = normalized.removeValue(forKey: "o") {
+            for rawOption in optionString.split(separator: ",").map(String.init) where !rawOption.isEmpty {
+                let parts = rawOption.split(separator: "=", maxSplits: 1).map(String.init)
+                if parts.count == 2 {
+                    normalized[parts[0]] = parts[1]
+                } else {
+                    normalized[rawOption] = ""
+                }
+            }
+        }
+
+        normalized.removeValue(forKey: "type")
+        return normalized
     }
 
     private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
@@ -674,18 +757,21 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private func configVolume(_ volume: String) async throws -> [String] {
         let resolvedVolume = resolveVariable(volume, with: environmentVariables)
 
-        var runCommandArgs: [String] = []
-
-        // Parse the volume string: destination[:mode]
+        // Parse the volume string: source:destination[:mode] or destination for anonymous volumes.
         let components = resolvedVolume.split(separator: ":", maxSplits: 2).map(String.init)
 
+        if components.count == 1 {
+            return ["-v", resolvedVolume]
+        }
+
         guard components.count >= 2 else {
-            print("Warning: Volume entry '\(resolvedVolume)' has an invalid format (expected 'source:destination'). Skipping.")
+            print("Warning: Volume entry '\(resolvedVolume)' has an invalid format. Skipping.")
             return []
         }
 
         let source = components[0]
         let destination = components[1]
+        let mode = components.count == 3 ? components[2] : nil
 
         // Check if the source looks like a host path (contains '/' or starts with '.')
         // This heuristic helps distinguish bind mounts from named volume references.
@@ -693,14 +779,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // This is likely a bind mount (local path to container path)
             var isDirectory: ObjCBool = false
             // Ensure the path is absolute or relative to the current directory for FileManager
-            let fullHostPath = (source.starts(with: "/") || source.starts(with: "~")) ? source : (cwd + "/" + source)
+            let expandedSource = NSString(string: source).expandingTildeInPath
+            let fullHostPath = source.starts(with: "/") || source.starts(with: "~") ? expandedSource : (cwd + "/" + source)
 
             if fileManager.fileExists(atPath: fullHostPath, isDirectory: &isDirectory) {
                 if isDirectory.boolValue {
-                    // Host path exists and is a directory, add the volume
-                    runCommandArgs.append("-v")
-                    // Reconstruct the volume string without mode, ensuring it's source:destination
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
+                    return ["-v", resolvedVolume]
                 } else {
                     // Host path exists but is a file
                     print("Warning: Volume mount source '\(source)' is a file. The 'container' tool does not support direct file mounts. Skipping this volume.")
@@ -710,32 +794,23 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 do {
                     try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
                     print("Info: Created missing host directory for volume: \(fullHostPath)")
-                    runCommandArgs.append("-v")
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
+                    return ["-v", resolvedVolume]
                 } catch {
                     print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
                 }
             }
         } else {
-            guard let projectName else { return [] }
-            let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
-            let volumePath = volumeUrl.path(percentEncoded: false)
-
-            let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
-            let destinationPath = destinationUrl.path(percentEncoded: false)
-
-            print(
-                "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
-            )
-            try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
-
-            // Host path exists and is a directory, add the volume
-            runCommandArgs.append("-v")
-            // Reconstruct the volume string without mode, ensuring it's source:destination
-            runCommandArgs.append("\(volumePath):\(destinationPath)")  // Use original source for command argument
+            let actualSource = effectiveVolumeName(for: source)
+            let volumeArgument: String
+            if let mode, !mode.isEmpty {
+                volumeArgument = "\(actualSource):\(destination):\(mode)"
+            } else {
+                volumeArgument = "\(actualSource):\(destination)"
+            }
+            return ["-v", volumeArgument]
         }
 
-        return runCommandArgs
+        return []
     }
 }
 
@@ -769,9 +844,14 @@ extension ComposeUp {
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            process.environment = ProcessInfo.processInfo.environment.merging([
-                "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            ]) { _, new in new }
+            let defaultSearchPath = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            var environment = ProcessInfo.processInfo.environment
+            if let inheritedPath = environment["PATH"], !inheritedPath.isEmpty {
+                environment["PATH"] = "\(inheritedPath):\(defaultSearchPath)"
+            } else {
+                environment["PATH"] = defaultSearchPath
+            }
+            process.environment = environment
 
             let stdoutHandle = stdoutPipe.fileHandleForReading
             let stderrHandle = stderrPipe.fileHandleForReading
