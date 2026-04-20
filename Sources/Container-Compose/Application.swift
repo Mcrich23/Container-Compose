@@ -30,6 +30,7 @@ public struct Main: AsyncParsableCommand {
         subcommands: [
             ComposeUp.self,
             ComposeDown.self,
+            ComposeBuild.self,
             Version.self
         ])
     
