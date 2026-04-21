@@ -335,7 +335,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
             print("Creating network: \(networkName) (Actual name: \(actualNetworkName))")
             print("Executing container network create: container \(networkCreateArgs.joined(separator: " "))")
-            guard (try? await ClientNetwork.get(id: actualNetworkName)) == nil else {
+            guard (try? await NetworkClient().get(id: actualNetworkName)) == nil else {
                 print("Network '\(networkName)' already exists")
                 return
             }
@@ -660,7 +660,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         commands.append(contentsOf: ["--cpus", "\(cpuCount)"])
         commands.append(contentsOf: ["--memory", memoryLimit])
 
-        let buildCommand = try Application.BuildCommand.parse(commands)
+        var buildCommand = try Application.BuildCommand.parse(commands)
         print("\n----------------------------------------")
         print("Building image for service: \(serviceName) (Tag: \(imageToRun))")
         try buildCommand.validate()
