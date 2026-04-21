@@ -30,12 +30,30 @@ jobs:
       
     - name: Setup Swift
       uses: swift-actions/setup-swift@v3
+
+    - name: Ensure jq is installed
+      run: |
+        if ! command -v jq >/dev/null 2>&1; then
+          brew install jq
+        fi
+
+    - name: Download latest Container installer
+      run: |
+        curl -s https://api.github.com/repos/apple/container/releases/latest \
+          | jq -r '.assets[] | select(.name | endswith("-installer-signed.pkg")) | .browser_download_url' \
+          | xargs -I{} curl -L "{}" -o container-latest-installer-signed.pkg
+
+    - name: Install Container package
+      run: sudo installer -pkg container-latest-installer-signed.pkg -target /
+
+    - name: Start container system
+      run: container system start
     
     - name: Build
       run: swift build --build-tests
       
-    - name: Run static tests
-      run: swift test --filter Container-Compose-StaticTests.
+    - name: Run tests
+      run: swift test
 
     - name: Upload static test results
       uses: actions/upload-artifact@v4
