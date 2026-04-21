@@ -25,13 +25,13 @@ public struct Main: AsyncParsableCommand {
     }
     public static let configuration: CommandConfiguration = .init(
         commandName: Self.commandName,
-        abstract: "A tool to use manage Docker Compose files with Apple Container",
+        abstract: "A tool to use and manage Docker Compose files with Apple Container",
         version: Self.versionString,
         subcommands: [
             ComposeUp.self,
             ComposeDown.self,
             Version.self
         ])
-    
+
     public init() {}
 }
