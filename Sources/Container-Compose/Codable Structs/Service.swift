@@ -192,8 +192,14 @@ public struct Service: Codable, Hashable {
         
         if let dependsOnString = try? container.decodeIfPresent(String.self, forKey: .depends_on) {
             depends_on = [dependsOnString]
+        } else if let dependsOnArray = try? container.decodeIfPresent([String].self, forKey: .depends_on) {
+            depends_on = dependsOnArray
+        } else if let dependsOnMap = try? container.decodeIfPresent([String: [String: String]].self, forKey: .depends_on) {
+            // Map form: depends_on: { db: { condition: service_healthy } }
+            // Preserve dependency order; conditions are not applicable to Apple Container.
+            depends_on = dependsOnMap.keys.sorted()
         } else {
-            depends_on = try container.decodeIfPresent([String].self, forKey: .depends_on)
+            depends_on = nil
         }
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
