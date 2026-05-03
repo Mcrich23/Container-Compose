@@ -594,7 +594,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     private func pullImage(_ imageName: String, platform: String?) async throws {
         let imageList = try await ClientImage.list()
-        guard !imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageName }) else {
+        // An image is considered already-local if any of:
+        //   - the stored reference matches `imageName` exactly (multi-path local builds, e.g. `myorg/foo:local`)
+        //   - the stored reference is `imageName` with a registry prefix (`docker.io/library/nginx:latest`
+        //     when the user wrote `nginx:latest` or `library/nginx:latest`)
+        //   - the last `/`-separated component of the stored reference matches `imageName`
+        //     (legacy fallback for short references like `alpine:latest`)
+        let exists = imageList.contains { ref in
+            let stored = ref.description.reference
+            return stored == imageName
+                || stored.hasSuffix("/\(imageName)")
+                || stored.components(separatedBy: "/").last == imageName
+        }
+        guard !exists else {
             return
         }
 
