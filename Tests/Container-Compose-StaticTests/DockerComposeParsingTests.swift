@@ -180,6 +180,32 @@ struct DockerComposeParsingTests {
         #expect(compose.services["web"]??.depends_on?.contains("db") == true)
     }
     
+    @Test("Parse compose with depends_on map form (condition syntax)")
+    func parseComposeWithDependenciesMapForm() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          web:
+            image: nginx:latest
+            depends_on:
+              db:
+                condition: service_healthy
+              cache:
+                condition: service_started
+          db:
+            image: postgres:14
+          cache:
+            image: redis:7
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["web"]??.depends_on?.contains("db") == true)
+        #expect(compose.services["web"]??.depends_on?.contains("cache") == true)
+        #expect(compose.services["web"]??.depends_on?.count == 2)
+    }
+
     @Test("Parse compose with build context")
     func parseComposeWithBuild() throws {
         let yaml = """
