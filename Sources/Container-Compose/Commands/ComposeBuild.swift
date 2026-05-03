@@ -131,14 +131,17 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
     ) async throws {
         let imageTag = service.image ?? "\(serviceName):latest"
 
-        var commands = [URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory)).path]
+        // Per Compose spec: `context` is relative to the compose file's directory,
+        // and `dockerfile` is relative to the resolved `context` (not the compose dir).
+        let contextURL = URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory))
+        var commands = [contextURL.path]
 
         for (key, value) in buildConfig.args ?? [:] {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
         }
 
         commands.append(contentsOf: [
-            "--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: URL(fileURLWithPath: composeDirectory)).path,
+            "--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: contextURL).path,
             "--tag", imageTag,
         ])
 

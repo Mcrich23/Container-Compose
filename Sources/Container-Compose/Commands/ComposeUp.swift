@@ -640,8 +640,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             return imageToRun
         }
 
-        // Build command arguments
-        var commands = [URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory)).path]
+        // Per Compose spec: `context` is relative to the compose file's directory,
+        // and `dockerfile` is relative to the resolved `context` (not the compose dir).
+        let contextURL = URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory))
+        var commands = [contextURL.path]
 
         // Add build arguments
         for (key, value) in buildConfig.args ?? [:] {
@@ -649,7 +651,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Add Dockerfile path
-        commands.append(contentsOf: ["--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: URL(fileURLWithPath: composeDirectory)).path])
+        commands.append(contentsOf: ["--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: contextURL).path])
         
         // Add caching options
         if noCache {
