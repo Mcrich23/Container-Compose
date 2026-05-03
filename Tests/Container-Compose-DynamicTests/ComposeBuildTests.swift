@@ -155,4 +155,89 @@ struct ComposeBuildTests {
         // Should complete without throwing even though nothing is built
         try await composeBuild.run()
     }
+
+    // Per Compose spec: `dockerfile:` is resolved relative to the build `context:`,
+    // not relative to the compose file's directory. See issue #34, PR #37.
+    @Test("Build with subdirectory context resolves default Dockerfile inside the context")
+    func buildContextSubdirResolvesDockerfileInsideContext() async throws {
+        let yaml = """
+        services:
+          ctxsub:
+            build:
+              context: ./sub
+        """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        // Dockerfile lives inside the context dir, NOT next to the compose file.
+        let subDir = project.base.appending(path: "sub")
+        try FileManager.default.createDirectory(at: subDir, withIntermediateDirectories: true)
+        try "FROM alpine:latest"
+            .write(to: subDir.appending(path: "Dockerfile"), atomically: false, encoding: .utf8)
+
+        var composeBuild = try ComposeBuild.parse([
+            "--cwd", project.base.path(percentEncoded: false),
+        ])
+        try await composeBuild.run()
+
+        #expect(try await imageExists(named: "ctxsub:latest"))
+    }
+
+    // Same intent as above but with a sibling/parent-relative context, which is
+    // the shape every real-world monorepo compose file uses.
+    @Test("Build with parent-relative context resolves Dockerfile in the sibling dir")
+    func buildContextParentRelativeResolvesDockerfileInContext() async throws {
+        let yaml = """
+        services:
+          ctxsibling:
+            build:
+              context: ../sub
+        """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        // Move the compose file one level deeper so `../sub` is meaningful.
+        let composeDir = project.base.appending(path: "compose-dir")
+        try FileManager.default.createDirectory(at: composeDir, withIntermediateDirectories: true)
+        let movedCompose = composeDir.appending(path: "docker-compose.yaml")
+        try FileManager.default.moveItem(at: project.url, to: movedCompose)
+
+        let subDir = project.base.appending(path: "sub")
+        try FileManager.default.createDirectory(at: subDir, withIntermediateDirectories: true)
+        try "FROM alpine:latest"
+            .write(to: subDir.appending(path: "Dockerfile"), atomically: false, encoding: .utf8)
+
+        var composeBuild = try ComposeBuild.parse([
+            "--cwd", composeDir.path(percentEncoded: false),
+        ])
+        try await composeBuild.run()
+
+        #expect(try await imageExists(named: "ctxsibling:latest"))
+    }
+
+    // Custom dockerfile name, still must be resolved relative to context.
+    @Test("Build with custom dockerfile filename resolves it inside the context")
+    func buildContextCustomDockerfileResolvesInsideContext() async throws {
+        let yaml = """
+        services:
+          ctxcustom:
+            build:
+              context: ./build
+              dockerfile: Dockerfile.dev
+        """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        let buildDir = project.base.appending(path: "build")
+        try FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
+        try "FROM alpine:latest"
+            .write(to: buildDir.appending(path: "Dockerfile.dev"), atomically: false, encoding: .utf8)
+
+        var composeBuild = try ComposeBuild.parse([
+            "--cwd", project.base.path(percentEncoded: false),
+        ])
+        try await composeBuild.run()
+
+        #expect(try await imageExists(named: "ctxcustom:latest"))
+    }
 }
