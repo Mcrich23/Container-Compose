@@ -323,6 +323,57 @@ struct ComposeUpTests {
         try? await stopInstance(location: project.base)
     }
     
+    // A locally-built image whose reference contains a `/` (e.g. `myorg/foo:local`)
+    // must not trigger a registry pull when referenced from a compose file.
+    // Regression test for the issue where `pullImage`'s match check only compared
+    // the last `/`-separated path component of the stored image reference against
+    // the requested image name, missing exact and registry-prefixed matches.
+    @Test("Compose up with a locally-built multi-path image does not attempt a registry pull")
+    func composeUpUsesLocalMultiPathImage() async throws {
+        let imageRef = "containercompose-localpullttest/foo:local"
+
+        // Step 1: build the image locally with a multi-path tag.
+        let buildYaml = """
+        services:
+          foo:
+            image: \(imageRef)
+            build:
+              context: .
+              dockerfile: Dockerfile
+        """
+        let buildProject = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: buildYaml)
+        let dockerfilePath = buildProject.base.appending(path: "Dockerfile").path(percentEncoded: false)
+        try "FROM alpine:latest".write(toFile: dockerfilePath, atomically: false, encoding: .utf8)
+
+        var composeBuild = try ComposeBuild.parse([
+            "--cwd", buildProject.base.path(percentEncoded: false),
+        ])
+        try await composeBuild.run()
+
+        // Step 2: in a different project dir, run `up` referencing that image by name.
+        // On the bug, `pullImage` does not recognize the local image and tries to
+        // pull `containercompose-localpullttest/foo:local` from the default registry,
+        // which fails 401.
+        let upYaml = """
+        services:
+          app:
+            image: \(imageRef)
+            command: ["sleep", "30"]
+        """
+        let upProject = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: upYaml)
+
+        var composeUp = try ComposeUp.parse([
+            "-d", "--cwd", upProject.base.path(percentEncoded: false),
+        ])
+        try await composeUp.run()
+
+        let containers = try await ContainerClient().list()
+            .filter { $0.configuration.id == "\(upProject.name)-app" }
+        #expect(containers.count == 1)
+
+        try? await stopInstance(location: upProject.base)
+    }
+
     enum Errors: Error {
         case containerNotFound
     }
