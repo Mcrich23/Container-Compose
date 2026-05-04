@@ -177,7 +177,21 @@ public struct Service: Codable, Hashable {
         restart = try container.decodeIfPresent(String.self, forKey: .restart)
         healthcheck = try container.decodeIfPresent(Healthcheck.self, forKey: .healthcheck)
         volumes = try container.decodeIfPresent([String].self, forKey: .volumes)
-        environment = try container.decodeIfPresent([String: String].self, forKey: .environment)
+
+        // `environment:` accepts both forms per the Compose spec:
+        //   environment:                          environment:
+        //     KEY: value                            - KEY=value
+        //     OTHER: value          equivalent       - OTHER=value
+        //                                            - INHERIT_FROM_HOST
+        // Try the map form first; fall back to list form.
+        if let asMap = try? container.decodeIfPresent([String: String].self, forKey: .environment) {
+            environment = asMap
+        } else if let asList = try? container.decodeIfPresent([String].self, forKey: .environment) {
+            environment = Service.parseEnvironmentList(asList)
+        } else {
+            environment = nil
+        }
+
         env_file = try container.decodeIfPresent([String].self, forKey: .env_file)
         ports = try container.decodeIfPresent([String].self, forKey: .ports)
 
@@ -220,6 +234,30 @@ public struct Service: Codable, Hashable {
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
     }
     
+    /// Translates the list-form of `environment:` into the same `[String: String]`
+    /// shape produced by the map form. Handles two cases:
+    ///   - `KEY=value`  → `KEY: value`  (split on first `=`; later `=` chars
+    ///                                   stay in the value, so DSN-style values
+    ///                                   like `postgres://u:p@h/db?sslmode=req`
+    ///                                   round-trip correctly)
+    ///   - `KEY`        → `KEY: <process env value, or "">`  (Compose's
+    ///                                   "inherit from host" shorthand; if
+    ///                                   the host doesn't define it, falls
+    ///                                   back to an empty string)
+    static func parseEnvironmentList(_ entries: [String]) -> [String: String] {
+        var dict: [String: String] = [:]
+        for entry in entries {
+            if let eqIdx = entry.firstIndex(of: "=") {
+                let key = String(entry[..<eqIdx])
+                let value = String(entry[entry.index(after: eqIdx)...])
+                dict[key] = value
+            } else {
+                dict[entry] = ProcessInfo.processInfo.environment[entry] ?? ""
+            }
+        }
+        return dict
+    }
+
     /// Returns the services in topological order based on `depends_on` relationships.
     public static func topoSortConfiguredServices(
         _ services: [(serviceName: String, service: Service)]
