@@ -59,6 +59,9 @@ public struct Service: Codable, Hashable {
     /// Services this service depends on (for startup order)
     public let depends_on: [String]?
 
+    /// Detailed dependency options keyed by service name
+    public let dependencyConfigurations: [String: ServiceDependency]?
+
     /// User or UID to run the container as
     public let user: String?
 
@@ -86,6 +89,9 @@ public struct Service: Codable, Hashable {
     /// Platform architecture for the service
     public let platform: String?
 
+    /// Profiles that activate this service
+    public let profiles: [String]?
+
     /// Service-specific config usage (primarily for Swarm)
     public let configs: [ServiceConfig]?
 
@@ -104,7 +110,7 @@ public struct Service: Codable, Hashable {
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
-             container_name, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform
+             container_name, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform, profiles
     }
     
     /// Public memberwise initializer for testing
@@ -120,6 +126,7 @@ public struct Service: Codable, Hashable {
         ports: [String]? = nil,
         command: [String]? = nil,
         depends_on: [String]? = nil,
+        dependencyConfigurations: [String: ServiceDependency]? = nil,
         user: String? = nil,
         container_name: String? = nil,
         networks: [String]? = nil,
@@ -129,6 +136,7 @@ public struct Service: Codable, Hashable {
         read_only: Bool? = nil,
         working_dir: String? = nil,
         platform: String? = nil,
+        profiles: [String]? = nil,
         configs: [ServiceConfig]? = nil,
         secrets: [ServiceSecret]? = nil,
         stdin_open: Bool? = nil,
@@ -146,6 +154,7 @@ public struct Service: Codable, Hashable {
         self.ports = ports
         self.command = command
         self.depends_on = depends_on
+        self.dependencyConfigurations = dependencyConfigurations
         self.user = user
         self.container_name = container_name
         self.networks = networks
@@ -155,6 +164,7 @@ public struct Service: Codable, Hashable {
         self.read_only = read_only
         self.working_dir = working_dir
         self.platform = platform
+        self.profiles = profiles
         self.configs = configs
         self.secrets = secrets
         self.stdin_open = stdin_open
@@ -192,8 +202,20 @@ public struct Service: Codable, Hashable {
         
         if let dependsOnString = try? container.decodeIfPresent(String.self, forKey: .depends_on) {
             depends_on = [dependsOnString]
+            dependencyConfigurations = [dependsOnString: ServiceDependency(condition: "service_started")]
         } else {
-            depends_on = try container.decodeIfPresent([String].self, forKey: .depends_on)
+            if let dependencyList = try? container.decodeIfPresent([String].self, forKey: .depends_on) {
+                depends_on = dependencyList
+                dependencyConfigurations = Dictionary(uniqueKeysWithValues: dependencyList.map {
+                    ($0, ServiceDependency(condition: "service_started"))
+                })
+            } else if let dependencyMap = try? container.decodeIfPresent([String: ServiceDependency].self, forKey: .depends_on) {
+                depends_on = dependencyMap.keys.sorted()
+                dependencyConfigurations = dependencyMap
+            } else {
+                depends_on = nil
+                dependencyConfigurations = nil
+            }
         }
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
@@ -218,6 +240,11 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
+        if let profile = try? container.decodeIfPresent(String.self, forKey: .profiles) {
+            profiles = [profile]
+        } else {
+            profiles = try container.decodeIfPresent([String].self, forKey: .profiles)
+        }
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.

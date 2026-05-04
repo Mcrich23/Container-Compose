@@ -179,6 +179,28 @@ struct DockerComposeParsingTests {
         
         #expect(compose.services["web"]??.depends_on?.contains("db") == true)
     }
+
+    @Test("Parse compose with profiles")
+    func parseComposeWithProfiles() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            profiles:
+              - dev
+              - ci
+          worker:
+            image: alpine:latest
+            profiles: batch
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.profiles == ["dev", "ci"])
+        #expect(compose.services["worker"]??.profiles == ["batch"])
+    }
     
     @Test("Parse compose with build context")
     func parseComposeWithBuild() throws {
