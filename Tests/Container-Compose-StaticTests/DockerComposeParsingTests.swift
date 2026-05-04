@@ -192,7 +192,8 @@ struct DockerComposeParsingTests {
               - ci
           worker:
             image: alpine:latest
-            profiles: batch
+            profiles:
+              - batch
         """
 
         let decoder = YAMLDecoder()

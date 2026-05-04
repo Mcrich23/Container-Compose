@@ -240,11 +240,7 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
-        if let profile = try? container.decodeIfPresent(String.self, forKey: .profiles) {
-            profiles = [profile]
-        } else {
-            profiles = try container.decodeIfPresent([String].self, forKey: .profiles)
-        }
+        profiles = try container.decodeIfPresent([String].self, forKey: .profiles)
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.

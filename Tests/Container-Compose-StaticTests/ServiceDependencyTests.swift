@@ -86,6 +86,7 @@ struct ServiceDependencyTests {
         #expect(app.dependencyConfigurations?["db"]?.condition == "service_healthy")
         #expect(app.dependencyConfigurations?["db"]?.required == true)
         #expect(app.dependencyConfigurations?["init"]?.condition == "service_completed_successfully")
+        #expect(app.dependencyConfigurations?["init"]?.required == true)
         #expect(app.dependencyConfigurations?["init"]?.restart == false)
         #expect(app.dependencyConfigurations?["optional_metrics"]?.condition == "service_started")
         #expect(app.dependencyConfigurations?["optional_metrics"]?.required == false)

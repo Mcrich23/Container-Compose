@@ -25,9 +25,22 @@ public struct ServiceDependency: Codable, Hashable {
     /// Whether explicit dependency restarts should also restart this service.
     public let restart: Bool?
 
-    public init(condition: String? = nil, required: Bool? = nil, restart: Bool? = nil) {
+    public init(condition: String? = "service_started", required: Bool? = true, restart: Bool? = nil) {
         self.condition = condition
         self.required = required
         self.restart = restart
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case condition, required, restart
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            condition: try container.decodeIfPresent(String.self, forKey: .condition) ?? "service_started",
+            required: try container.decodeIfPresent(Bool.self, forKey: .required) ?? true,
+            restart: try container.decodeIfPresent(Bool.self, forKey: .restart)
+        )
     }
 }
