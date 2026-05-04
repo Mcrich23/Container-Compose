@@ -685,6 +685,25 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return imageToRun
     }
 
+    /// Normalize a bind-mount source path to an absolute, `.`/`..`-collapsed
+    /// host path suitable for passing to `container run -v`.
+    ///
+    ///   - `./foo`, `foo/bar`, `../foo`  → `<cwd>/foo`, `<cwd>/foo/bar`, `<parent>/foo`
+    ///   - `/abs/foo`                    → unchanged
+    ///   - `~/foo`                       → kept as-is (apple/container handles tilde
+    ///                                     expansion itself; FileManager would
+    ///                                     not, so leaving it literal preserves
+    ///                                     the existing pre-fix behavior)
+    static func resolveBindMountSource(_ source: String, cwd: String) -> String {
+        // Already-absolute or tilde-prefixed paths pass through; the daemon
+        // (or FileManager for the directory-create branch) handles them.
+        if source.starts(with: "/") || source.starts(with: "~") {
+            return source
+        }
+        let joined = "\(cwd)/\(source)"
+        return URL(fileURLWithPath: joined).standardizedFileURL.path(percentEncoded: false)
+    }
+
     private func configVolume(_ volume: String) async throws -> [String] {
         let resolvedVolume = resolveVariable(volume, with: environmentVariables)
 
@@ -704,17 +723,18 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Check if the source looks like a host path (contains '/' or starts with '.')
         // This heuristic helps distinguish bind mounts from named volume references.
         if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
-            // This is likely a bind mount (local path to container path)
+            // This is likely a bind mount (local path to container path).
+            // Apple `container` rejects relative paths in `-v` (its volume-name
+            // regex is `^[A-Za-z0-9][A-Za-z0-9_.-]*$`, which fails on `./app`).
+            // Resolve to an absolute, normalized path before passing through.
+            let normalizedHostPath = Self.resolveBindMountSource(source, cwd: cwd)
             var isDirectory: ObjCBool = false
-            // Ensure the path is absolute or relative to the current directory for FileManager
-            let fullHostPath = (source.starts(with: "/") || source.starts(with: "~")) ? source : (cwd + "/" + source)
 
-            if fileManager.fileExists(atPath: fullHostPath, isDirectory: &isDirectory) {
+            if fileManager.fileExists(atPath: normalizedHostPath, isDirectory: &isDirectory) {
                 if isDirectory.boolValue {
                     // Host path exists and is a directory, add the volume
                     runCommandArgs.append("-v")
-                    // Reconstruct the volume string without mode, ensuring it's source:destination
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
+                    runCommandArgs.append("\(normalizedHostPath):\(destination)")
                 } else {
                     // Host path exists but is a file
                     print("Warning: Volume mount source '\(source)' is a file. The 'container' tool does not support direct file mounts. Skipping this volume.")
@@ -722,12 +742,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             } else {
                 // Host path does not exist, assume it's meant to be a directory and try to create it.
                 do {
-                    try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
-                    print("Info: Created missing host directory for volume: \(fullHostPath)")
+                    try fileManager.createDirectory(atPath: normalizedHostPath, withIntermediateDirectories: true, attributes: nil)
+                    print("Info: Created missing host directory for volume: \(normalizedHostPath)")
                     runCommandArgs.append("-v")
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
+                    runCommandArgs.append("\(normalizedHostPath):\(destination)")
                 } catch {
-                    print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
+                    print("Error: Could not create host directory '\(normalizedHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
                 }
             }
         } else {
