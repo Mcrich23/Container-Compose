@@ -140,7 +140,25 @@ struct DockerComposeParsingTests {
         #expect(compose.services["app"]??.environment?["DATABASE_URL"] == "postgres://localhost/mydb")
         #expect(compose.services["app"]??.environment?["DEBUG"] == "true")
     }
-    
+
+    @Test("Parse compose with environment list")
+    func parseComposeWithEnvironmentList() throws {
+        let yaml = """
+        services:
+          app:
+            image: alpine:latest
+            environment:
+              - REDIS_CLUSTER=yes
+              - EMPTY_VALUE=
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.environment?["REDIS_CLUSTER"] == "yes")
+        #expect(compose.services["app"]??.environment?["EMPTY_VALUE"] == "")
+    }
+
     @Test("Parse compose with ports")
     func parseComposeWithPorts() throws {
         let yaml = """

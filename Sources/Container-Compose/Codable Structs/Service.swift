@@ -50,6 +50,9 @@ public struct Service: Codable, Hashable {
     /// List of .env files to load environment variables from
     public let env_file: [String]?
 
+    /// Detailed env file entries keyed by list order
+    public let envFileConfigurations: [ServiceEnvFile]?
+
     /// Port mappings (e.g., "hostPort:containerPort")
     public let ports: [String]?
 
@@ -117,6 +120,7 @@ public struct Service: Codable, Hashable {
         volumes: [String]? = nil,
         environment: [String: String]? = nil,
         env_file: [String]? = nil,
+        envFileConfigurations: [ServiceEnvFile]? = nil,
         ports: [String]? = nil,
         command: [String]? = nil,
         depends_on: [String]? = nil,
@@ -143,6 +147,7 @@ public struct Service: Codable, Hashable {
         self.volumes = volumes
         self.environment = environment
         self.env_file = env_file
+        self.envFileConfigurations = envFileConfigurations
         self.ports = ports
         self.command = command
         self.depends_on = depends_on
@@ -177,8 +182,20 @@ public struct Service: Codable, Hashable {
         restart = try container.decodeIfPresent(String.self, forKey: .restart)
         healthcheck = try container.decodeIfPresent(Healthcheck.self, forKey: .healthcheck)
         volumes = try container.decodeIfPresent([String].self, forKey: .volumes)
-        environment = try container.decodeIfPresent([String: String].self, forKey: .environment)
-        env_file = try container.decodeIfPresent([String].self, forKey: .env_file)
+        environment = try Self.decodeEnvironment(container, forKey: .environment)
+        if let envFile = try? container.decodeIfPresent(String.self, forKey: .env_file) {
+            env_file = [envFile]
+            envFileConfigurations = [ServiceEnvFile(path: envFile)]
+        } else if let envFiles = try? container.decodeIfPresent([String].self, forKey: .env_file) {
+            env_file = envFiles
+            envFileConfigurations = envFiles.map { ServiceEnvFile(path: $0) }
+        } else if let envFiles = try? container.decodeIfPresent([ServiceEnvFile].self, forKey: .env_file) {
+            env_file = envFiles.map(\.path)
+            envFileConfigurations = envFiles
+        } else {
+            env_file = nil
+            envFileConfigurations = nil
+        }
         ports = try container.decodeIfPresent([String].self, forKey: .ports)
 
         // Decode 'command' which can be either a single string or an array of strings.
@@ -218,6 +235,24 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
+    }
+
+    private static func decodeEnvironment(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> [String: String]? {
+        guard container.contains(key) else { return nil }
+        if let mapping = try? container.decode([String: String].self, forKey: key) {
+            return mapping
+        }
+        let entries = try container.decode([String].self, forKey: key)
+        var environment: [String: String] = [:]
+        for entry in entries {
+            let parts = entry.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            if parts.count == 2 {
+                environment[String(parts[0])] = String(parts[1])
+            } else if let value = ProcessInfo.processInfo.environment[entry] {
+                environment[entry] = value
+            }
+        }
+        return environment
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.
