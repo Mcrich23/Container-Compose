@@ -176,7 +176,7 @@ public struct Service: Codable, Hashable {
 
         restart = try container.decodeIfPresent(String.self, forKey: .restart)
         healthcheck = try container.decodeIfPresent(Healthcheck.self, forKey: .healthcheck)
-        volumes = try container.decodeIfPresent([String].self, forKey: .volumes)
+        volumes = try Self.decodeVolumeList(container, forKey: .volumes)
         environment = try container.decodeIfPresent([String: String].self, forKey: .environment)
         env_file = try container.decodeIfPresent([String].self, forKey: .env_file)
         ports = try container.decodeIfPresent([String].self, forKey: .ports)
@@ -185,7 +185,7 @@ public struct Service: Codable, Hashable {
         if let cmdArray = try? container.decodeIfPresent([String].self, forKey: .command) {
             command = cmdArray
         } else if let cmdString = try? container.decodeIfPresent(String.self, forKey: .command) {
-            command = [cmdString]
+            command = composeShellSplit(cmdString)
         } else {
             command = nil
         }
@@ -205,7 +205,7 @@ public struct Service: Codable, Hashable {
         if let entrypointArray = try? container.decodeIfPresent([String].self, forKey: .entrypoint) {
             entrypoint = entrypointArray
         } else if let entrypointString = try? container.decodeIfPresent(String.self, forKey: .entrypoint) {
-            entrypoint = [entrypointString]
+            entrypoint = composeShellSplit(entrypointString)
         } else {
             entrypoint = nil
         }
@@ -218,6 +218,12 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
+    }
+
+    private static func decodeVolumeList(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> [String]? {
+        guard container.contains(key) else { return nil }
+        let volumes = try container.decode([ServiceVolume].self, forKey: key)
+        return volumes.map(\.mount)
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.

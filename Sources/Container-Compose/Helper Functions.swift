@@ -60,6 +60,73 @@ public func loadEnvFile(path: String) -> [String: String] {
     return envVars
 }
 
+public func composeShellSplit(_ input: String) -> [String] {
+    enum Quote {
+        case single
+        case double
+    }
+
+    var tokens: [String] = []
+    var current = ""
+    var quote: Quote?
+    var escaping = false
+    var tokenStarted = false
+
+    for character in input {
+        if escaping {
+            current.append(character)
+            tokenStarted = true
+            escaping = false
+            continue
+        }
+
+        switch quote {
+        case .single:
+            if character == "'" {
+                quote = nil
+            } else {
+                current.append(character)
+            }
+        case .double:
+            if character == "\"" {
+                quote = nil
+            } else if character == "\\" {
+                escaping = true
+            } else {
+                current.append(character)
+            }
+        case nil:
+            if character == "\\" {
+                escaping = true
+                tokenStarted = true
+            } else if character == "'" {
+                quote = .single
+                tokenStarted = true
+            } else if character == "\"" {
+                quote = .double
+                tokenStarted = true
+            } else if character.isWhitespace {
+                if tokenStarted {
+                    tokens.append(current)
+                    current = ""
+                    tokenStarted = false
+                }
+            } else {
+                current.append(character)
+                tokenStarted = true
+            }
+        }
+    }
+
+    if escaping {
+        current.append("\\")
+    }
+    if tokenStarted {
+        tokens.append(current)
+    }
+    return tokens
+}
+
 /// Resolves environment variables within a string (e.g., ${VAR:-default}, ${VAR:?error}).
 /// This function supports default values and error-on-missing variable syntax.
 /// - Parameters:

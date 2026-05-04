@@ -229,8 +229,27 @@ struct DockerComposeParsingTests {
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
         
-        #expect(compose.services["app"]??.command?.count == 1)
-        #expect(compose.services["app"]??.command?.first == "echo hello")
+        #expect(compose.services["app"]??.command == ["echo", "hello"])
+    }
+
+    @Test("Parse compose command string with quotes")
+    func parseComposeCommandStringWithQuotes() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            command: --enable-debug-command yes --save ""
+          shell:
+            image: alpine:latest
+            entrypoint: sh -lc "echo hello world"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.command == ["--enable-debug-command", "yes", "--save", ""])
+        #expect(compose.services["shell"]??.entrypoint == ["sh", "-lc", "echo hello world"])
     }
     
     @Test("Parse compose with restart policy")
