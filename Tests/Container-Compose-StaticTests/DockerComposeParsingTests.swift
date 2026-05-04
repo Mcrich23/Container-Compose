@@ -159,6 +159,55 @@ struct DockerComposeParsingTests {
         #expect(compose.services["app"]??.environment?["EMPTY_VALUE"] == "")
     }
 
+    @Test("Parse compose with Docker-compatible environment scalars")
+    func parseComposeWithEnvironmentScalars() throws {
+        setenv("HOST_ENV_VALUE", "from-host", 1)
+        defer { unsetenv("HOST_ENV_VALUE") }
+
+        let yaml = """
+        services:
+          app:
+            image: alpine:latest
+            environment:
+              FOO: "1"
+              BAR: 2
+              ENABLED: true
+              EMPTY_VALUE: ""
+              UNSET_VALUE:
+              HOST_ENV_VALUE:
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        let environment = try #require(compose.services["app"]??.environment)
+
+        #expect(environment["FOO"] == "1")
+        #expect(environment["BAR"] == "2")
+        #expect(environment["ENABLED"] == "true")
+        #expect(environment["EMPTY_VALUE"] == "")
+        #expect(environment["UNSET_VALUE"] == nil)
+        #expect(environment["HOST_ENV_VALUE"] == "from-host")
+    }
+
+    @Test("Parse compose env_file defaults required")
+    func parseComposeEnvFileDefaultsRequired() throws {
+        let yaml = """
+        services:
+          app:
+            image: alpine:latest
+            env_file:
+              - .env
+              - path: .env.local
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        let envFiles = try #require(compose.services["app"]??.envFileConfigurations)
+
+        #expect(envFiles.map(\.path) == [".env", ".env.local"])
+        #expect(envFiles.allSatisfy { $0.required == true })
+    }
+
     @Test("Parse compose with ports")
     func parseComposeWithPorts() throws {
         let yaml = """

@@ -25,7 +25,7 @@ public struct ServiceEnvFile: Codable, Hashable {
     /// Optional file format such as `raw`.
     public let format: String?
 
-    public init(path: String, required: Bool? = nil, format: String? = nil) {
+    public init(path: String, required: Bool? = true, format: String? = nil) {
         self.path = path
         self.required = required
         self.format = format
@@ -43,7 +43,7 @@ public struct ServiceEnvFile: Codable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             path: try container.decode(String.self, forKey: .path),
-            required: try container.decodeIfPresent(Bool.self, forKey: .required),
+            required: try container.decodeIfPresent(Bool.self, forKey: .required) ?? true,
             format: try container.decodeIfPresent(String.self, forKey: .format)
         )
     }

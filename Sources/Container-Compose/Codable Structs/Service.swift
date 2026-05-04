@@ -239,20 +239,60 @@ public struct Service: Codable, Hashable {
 
     private static func decodeEnvironment(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> [String: String]? {
         guard container.contains(key) else { return nil }
-        if let mapping = try? container.decode([String: String].self, forKey: key) {
-            return mapping
+        if let mapping = try? container.decode([String: EnvironmentValue].self, forKey: key) {
+            var environment: [String: String] = [:]
+            for (name, value) in mapping {
+                if let value = value.value {
+                    environment[name] = value
+                } else if let value = ProcessInfo.processInfo.environment[name] {
+                    environment[name] = value
+                }
+            }
+            return environment
         }
         let entries = try container.decode([String].self, forKey: key)
         var environment: [String: String] = [:]
         for entry in entries {
             let parts = entry.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
             if parts.count == 2 {
-                environment[String(parts[0])] = String(parts[1])
+                let name = String(parts[0])
+                if name.last?.isWhitespace == true {
+                    throw DecodingError.dataCorruptedError(
+                        forKey: key,
+                        in: container,
+                        debugDescription: "environment variable '\(name)' is declared with a trailing space"
+                    )
+                }
+                environment[name] = String(parts[1])
             } else if let value = ProcessInfo.processInfo.environment[entry] {
                 environment[entry] = value
             }
         }
         return environment
+    }
+
+    private struct EnvironmentValue: Decodable {
+        let value: String?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if container.decodeNil() {
+                value = nil
+            } else if let string = try? container.decode(String.self) {
+                value = string
+            } else if let bool = try? container.decode(Bool.self) {
+                value = String(bool)
+            } else if let int = try? container.decode(Int.self) {
+                value = String(int)
+            } else if let double = try? container.decode(Double.self) {
+                value = String(double)
+            } else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "environment values must be string, number, boolean, or null"
+                )
+            }
+        }
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.
