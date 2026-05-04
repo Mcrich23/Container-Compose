@@ -243,11 +243,11 @@ public struct Service: Codable, Hashable {
         privileged = try container.decodeIfPresent(Bool.self, forKey: .privileged)
         read_only = try container.decodeIfPresent(Bool.self, forKey: .read_only)
         tmpfs = try Self.decodeStringList(container, forKey: .tmpfs)
-        cap_add = try Self.decodeStringList(container, forKey: .cap_add)
-        cap_drop = try Self.decodeStringList(container, forKey: .cap_drop)
+        cap_add = try container.decodeIfPresent([String].self, forKey: .cap_add)
+        cap_drop = try container.decodeIfPresent([String].self, forKey: .cap_drop)
         ulimits = try container.decodeIfPresent([String: ServiceUlimit].self, forKey: .ulimits)
-        initProcess = try container.decodeIfPresent(Bool.self, forKey: .initProcess)
-        security_opt = try Self.decodeStringList(container, forKey: .security_opt)
+        initProcess = try Self.decodeBool(container, forKey: .initProcess)
+        security_opt = try container.decodeIfPresent([String].self, forKey: .security_opt)
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
         configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)
         secrets = try container.decodeIfPresent([ServiceSecret].self, forKey: .secrets)
@@ -261,6 +261,40 @@ public struct Service: Codable, Hashable {
             return [string]
         }
         return try container.decodeIfPresent([String].self, forKey: key)
+    }
+
+    private static func decodeBool(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> Bool? {
+        try container.decodeIfPresent(BoolOrString.self, forKey: key)?.value
+    }
+
+    private struct BoolOrString: Decodable {
+        let value: Bool
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let bool = try? container.decode(Bool.self) {
+                value = bool
+                return
+            }
+            if let string = try? container.decode(String.self) {
+                switch string.lowercased() {
+                case "true":
+                    value = true
+                case "false":
+                    value = false
+                default:
+                    throw DecodingError.dataCorruptedError(
+                        in: container,
+                        debugDescription: "Expected 'true' or 'false'."
+                    )
+                }
+                return
+            }
+            throw DecodingError.typeMismatch(
+                Bool.self,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Expected a boolean or string.")
+            )
+        }
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.

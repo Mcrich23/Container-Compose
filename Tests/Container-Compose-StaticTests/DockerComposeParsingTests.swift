@@ -192,13 +192,14 @@ struct DockerComposeParsingTests {
               - /tmp:size=64m
             cap_add:
               - NET_ADMIN
-            cap_drop: ALL
+            cap_drop:
+              - ALL
             ulimits:
               nofile:
                 soft: 1024
                 hard: 2048
               nproc: 65535
-            init: true
+            init: "true"
             security_opt:
               - "no-new-privileges:true"
         """
@@ -215,6 +216,24 @@ struct DockerComposeParsingTests {
         #expect(app.ulimits?["nproc"]?.value == "65535")
         #expect(app.initProcess == true)
         #expect(app.security_opt == ["no-new-privileges:true"])
+    }
+
+    @Test("Compose ulimit object requires soft and hard")
+    func composeUlimitObjectRequiresSoftAndHard() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            ulimits:
+              nofile:
+                soft: 1024
+        """
+
+        let decoder = YAMLDecoder()
+        #expect(throws: Error.self) {
+            try decoder.decode(DockerCompose.self, from: yaml)
+        }
     }
     
     @Test("Parse compose with build context")

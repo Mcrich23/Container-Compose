@@ -40,10 +40,14 @@ public struct ServiceUlimit: Codable, Hashable {
             return
         }
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(
-            soft: try Self.decodeScalar(container, forKey: .soft),
-            hard: try Self.decodeScalar(container, forKey: .hard)
-        )
+        let soft = try Self.decodeScalar(container, forKey: .soft)
+        let hard = try Self.decodeScalar(container, forKey: .hard)
+        guard soft != nil, hard != nil else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Ulimit object entries must include both 'soft' and 'hard'.")
+            )
+        }
+        self.init(soft: soft, hard: hard)
     }
 
     private static func decodeScalar(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> String? {
