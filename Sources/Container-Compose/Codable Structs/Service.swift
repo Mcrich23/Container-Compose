@@ -80,6 +80,24 @@ public struct Service: Codable, Hashable {
     /// Mount container's root filesystem as read-only
     public let read_only: Bool?
 
+    /// Mount tmpfs paths inside the container
+    public let tmpfs: [String]?
+
+    /// Linux capabilities to add
+    public let cap_add: [String]?
+
+    /// Linux capabilities to drop
+    public let cap_drop: [String]?
+
+    /// Container ulimit settings
+    public let ulimits: [String: ServiceUlimit]?
+
+    /// Run an init process as PID 1
+    public let initProcess: Bool?
+
+    /// Security options such as no-new-privileges
+    public let security_opt: [String]?
+
     /// Working directory inside the container
     public let working_dir: String?
 
@@ -104,7 +122,7 @@ public struct Service: Codable, Hashable {
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
-             container_name, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform
+             container_name, networks, hostname, entrypoint, privileged, read_only, tmpfs, cap_add, cap_drop, ulimits, initProcess = "init", security_opt, working_dir, configs, secrets, stdin_open, tty, platform
     }
     
     /// Public memberwise initializer for testing
@@ -127,6 +145,12 @@ public struct Service: Codable, Hashable {
         entrypoint: [String]? = nil,
         privileged: Bool? = nil,
         read_only: Bool? = nil,
+        tmpfs: [String]? = nil,
+        cap_add: [String]? = nil,
+        cap_drop: [String]? = nil,
+        ulimits: [String: ServiceUlimit]? = nil,
+        initProcess: Bool? = nil,
+        security_opt: [String]? = nil,
         working_dir: String? = nil,
         platform: String? = nil,
         configs: [ServiceConfig]? = nil,
@@ -153,6 +177,12 @@ public struct Service: Codable, Hashable {
         self.entrypoint = entrypoint
         self.privileged = privileged
         self.read_only = read_only
+        self.tmpfs = tmpfs
+        self.cap_add = cap_add
+        self.cap_drop = cap_drop
+        self.ulimits = ulimits
+        self.initProcess = initProcess
+        self.security_opt = security_opt
         self.working_dir = working_dir
         self.platform = platform
         self.configs = configs
@@ -212,12 +242,25 @@ public struct Service: Codable, Hashable {
 
         privileged = try container.decodeIfPresent(Bool.self, forKey: .privileged)
         read_only = try container.decodeIfPresent(Bool.self, forKey: .read_only)
+        tmpfs = try Self.decodeStringList(container, forKey: .tmpfs)
+        cap_add = try Self.decodeStringList(container, forKey: .cap_add)
+        cap_drop = try Self.decodeStringList(container, forKey: .cap_drop)
+        ulimits = try container.decodeIfPresent([String: ServiceUlimit].self, forKey: .ulimits)
+        initProcess = try container.decodeIfPresent(Bool.self, forKey: .initProcess)
+        security_opt = try Self.decodeStringList(container, forKey: .security_opt)
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
         configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)
         secrets = try container.decodeIfPresent([ServiceSecret].self, forKey: .secrets)
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
+    }
+
+    private static func decodeStringList(_ container: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) throws -> [String]? {
+        if let string = try? container.decodeIfPresent(String.self, forKey: key) {
+            return [string]
+        }
+        return try container.decodeIfPresent([String].self, forKey: key)
     }
     
     /// Returns the services in topological order based on `depends_on` relationships.

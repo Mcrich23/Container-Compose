@@ -179,6 +179,43 @@ struct DockerComposeParsingTests {
         
         #expect(compose.services["web"]??.depends_on?.contains("db") == true)
     }
+
+    @Test("Parse compose runtime options")
+    func parseComposeRuntimeOptions() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            tmpfs:
+              - /run
+              - /tmp:size=64m
+            cap_add:
+              - NET_ADMIN
+            cap_drop: ALL
+            ulimits:
+              nofile:
+                soft: 1024
+                hard: 2048
+              nproc: 65535
+            init: true
+            security_opt:
+              - "no-new-privileges:true"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        let app = try #require(compose.services["app"] ?? nil)
+
+        #expect(app.tmpfs == ["/run", "/tmp:size=64m"])
+        #expect(app.cap_add == ["NET_ADMIN"])
+        #expect(app.cap_drop == ["ALL"])
+        #expect(app.ulimits?["nofile"]?.soft == "1024")
+        #expect(app.ulimits?["nofile"]?.hard == "2048")
+        #expect(app.ulimits?["nproc"]?.value == "65535")
+        #expect(app.initProcess == true)
+        #expect(app.security_opt == ["no-new-privileges:true"])
+    }
     
     @Test("Parse compose with build context")
     func parseComposeWithBuild() throws {
