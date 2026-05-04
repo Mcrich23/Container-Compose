@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import Yams
 @testable import ContainerComposeCore
 
 @Suite("Service Dependency Resolution Tests")
@@ -51,6 +52,43 @@ struct ServiceDependencyTests {
         let firstTwo = Set([sorted[0].serviceName, sorted[1].serviceName])
         #expect(firstTwo.contains("db"))
         #expect(firstTwo.contains("redis"))
+    }
+
+    @Test("Parse long-form depends_on conditions")
+    func parseLongFormDependsOnConditions() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: myapp:latest
+            depends_on:
+              db:
+                condition: service_healthy
+                required: true
+              init:
+                condition: service_completed_successfully
+                restart: false
+              optional_metrics:
+                condition: service_started
+                required: false
+          db:
+            image: postgres:16
+          init:
+            image: alpine:latest
+          optional_metrics:
+            image: alpine:latest
+        """
+
+        let compose = try YAMLDecoder().decode(DockerCompose.self, from: yaml)
+        let app = try #require(compose.services["app"] ?? nil)
+
+        #expect(app.depends_on == ["db", "init", "optional_metrics"])
+        #expect(app.dependencyConfigurations?["db"]?.condition == "service_healthy")
+        #expect(app.dependencyConfigurations?["db"]?.required == true)
+        #expect(app.dependencyConfigurations?["init"]?.condition == "service_completed_successfully")
+        #expect(app.dependencyConfigurations?["init"]?.restart == false)
+        #expect(app.dependencyConfigurations?["optional_metrics"]?.condition == "service_started")
+        #expect(app.dependencyConfigurations?["optional_metrics"]?.required == false)
     }
     
     @Test("Complex dependency chain - web -> app -> db")
@@ -121,15 +159,14 @@ struct ServiceDependencyTests {
         #expect(sorted[0].serviceName == "web")
     }
     
-    @Test("Service depends on non-existent service - should not crash")
-    func dependsOnNonExistentService() throws {
+    @Test("Topological sort leaves missing dependency validation to service selection")
+    func topologicalSortLeavesMissingDependencyValidationToServiceSelection() throws {
         let web = Service(image: "nginx", depends_on: ["nonexistent"])
         
         let services: [(String, Service)] = [("web", web)]
         let sorted = try Service.topoSortConfiguredServices(services)
         
-        // Should complete without crashing
+        // The lower-level sort helper preserves legacy tolerance; lifecycle selection fails fast.
         #expect(sorted.count == 1)
     }
 }
-
