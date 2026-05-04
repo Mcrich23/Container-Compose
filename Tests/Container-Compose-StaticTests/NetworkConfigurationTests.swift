@@ -65,7 +65,53 @@ struct NetworkConfigurationTests {
         #expect(compose.services["app"]??.networks?.contains("frontend") == true)
         #expect(compose.services["app"]??.networks?.contains("backend") == true)
     }
-    
+
+    @Test("Parse service network object syntax")
+    func parseServiceNetworkObjectSyntax() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: myapp:latest
+            networks:
+              backend:
+                aliases:
+                  - app.local
+                ipv4_address: 10.10.0.5
+        networks:
+          backend:
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        let app = try #require(compose.services["app"] ?? nil)
+
+        #expect(app.networks == ["backend"])
+        #expect(app.networkConfigurations?["backend"]?.aliases == ["app.local"])
+        #expect(app.networkConfigurations?["backend"]?.ipv4_address == "10.10.0.5")
+    }
+
+    @Test("Parse service network object syntax with null value")
+    func parseServiceNetworkObjectSyntaxWithNullValue() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          redis:
+            image: redis:alpine
+            networks:
+              netbridge:
+        networks:
+          netbridge:
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        let redis = try #require(compose.services["redis"] ?? nil)
+
+        #expect(redis.networks == ["netbridge"])
+        #expect(redis.networkConfigurations?["netbridge"] == ServiceNetwork())
+    }
+
     @Test("Parse network with driver")
     func parseNetworkWithDriver() throws {
         let yaml = """
@@ -121,7 +167,25 @@ struct NetworkConfigurationTests {
         #expect(network.labels?["com.example.description"] == "Frontend Network")
         #expect(network.labels?["com.example.version"] == "1.0")
     }
-    
+
+    @Test("Parse network ipam subnets")
+    func parseNetworkIPAMSubnets() throws {
+        let yaml = """
+        internal: true
+        ipam:
+          config:
+            - subnet: 172.18.0.0/16
+            - subnet: fd00:abcd::/64
+        """
+
+        let decoder = YAMLDecoder()
+        let network = try decoder.decode(Network.self, from: yaml)
+
+        #expect(network.isInternal == true)
+        #expect(network.ipam?.ipv4Subnet == "172.18.0.0/16")
+        #expect(network.ipam?.ipv6Subnet == "fd00:abcd::/64")
+    }
+
     @Test("Multiple networks in compose")
     func multipleNetworksInCompose() throws {
         let yaml = """
@@ -187,4 +251,3 @@ struct NetworkConfigurationTests {
         #expect(compose.services["web"] != nil)
     }
 }
-

@@ -40,10 +40,12 @@ public struct Network: Codable {
     public let name: String?
     /// Indicates if the network is external (pre-existing)
     public let external: ExternalNetwork?
+    /// IPAM configuration for subnets and related allocation options.
+    public let ipam: NetworkIPAM?
 
     /// Updated CodingKeys to map 'internal' from YAML to 'isInternal' Swift property
     enum CodingKeys: String, CodingKey {
-        case driver, driver_opts, attachable, enable_ipv6, isInternal = "internal", labels, name, external
+        case driver, driver_opts, attachable, enable_ipv6, isInternal = "internal", labels, name, external, ipam
     }
 
     /// Custom initializer to handle `external: true` (boolean) or `external: { name: "my_net" }` (object).
@@ -56,6 +58,7 @@ public struct Network: Codable {
         isInternal = try container.decodeIfPresent(Bool.self, forKey: .isInternal) // Use isInternal here
         labels = try container.decodeIfPresent([String: String].self, forKey: .labels)
         name = try container.decodeIfPresent(String.self, forKey: .name)
+        ipam = try container.decodeIfPresent(NetworkIPAM.self, forKey: .ipam)
 
         if let externalBool = try? container.decodeIfPresent(Bool.self, forKey: .external) {
             external = ExternalNetwork(isExternal: externalBool, name: nil)
@@ -64,5 +67,35 @@ public struct Network: Codable {
         } else {
             external = nil
         }
+    }
+
+}
+
+public struct NetworkIPAM: Codable {
+    public let driver: String?
+    public let config: [NetworkIPAMConfig]?
+    public let options: [String: String]?
+
+    public var ipv4Subnet: String? {
+        config?.compactMap(\.subnet).first { !$0.contains(":") }
+    }
+
+    public var ipv6Subnet: String? {
+        config?.compactMap(\.subnet).first { $0.contains(":") }
+    }
+
+}
+
+public struct NetworkIPAMConfig: Codable {
+    public let subnet: String?
+    public let ipRange: String?
+    public let gateway: String?
+    public let auxAddresses: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case subnet
+        case ipRange = "ip_range"
+        case gateway
+        case auxAddresses = "aux_addresses"
     }
 }

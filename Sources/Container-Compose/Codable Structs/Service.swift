@@ -68,6 +68,9 @@ public struct Service: Codable, Hashable {
     /// List of networks the service will connect to
     public let networks: [String]?
 
+    /// Service-level network options keyed by network name
+    public let networkConfigurations: [String: ServiceNetwork]?
+
     /// Container hostname
     public let hostname: String?
 
@@ -123,6 +126,7 @@ public struct Service: Codable, Hashable {
         user: String? = nil,
         container_name: String? = nil,
         networks: [String]? = nil,
+        networkConfigurations: [String: ServiceNetwork]? = nil,
         hostname: String? = nil,
         entrypoint: [String]? = nil,
         privileged: Bool? = nil,
@@ -149,6 +153,7 @@ public struct Service: Codable, Hashable {
         self.user = user
         self.container_name = container_name
         self.networks = networks
+        self.networkConfigurations = networkConfigurations
         self.hostname = hostname
         self.entrypoint = entrypoint
         self.privileged = privileged
@@ -198,7 +203,18 @@ public struct Service: Codable, Hashable {
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
         container_name = try container.decodeIfPresent(String.self, forKey: .container_name)
-        networks = try container.decodeIfPresent([String].self, forKey: .networks)
+        if let networkList = try? container.decodeIfPresent([String].self, forKey: .networks) {
+            networks = networkList
+            networkConfigurations = Dictionary(uniqueKeysWithValues: networkList.map {
+                ($0, ServiceNetwork())
+            })
+        } else if let networkMap = try? container.decodeIfPresent([String: ServiceNetwork?].self, forKey: .networks) {
+            networks = networkMap.keys.sorted()
+            networkConfigurations = networkMap.mapValues { $0 ?? ServiceNetwork() }
+        } else {
+            networks = nil
+            networkConfigurations = nil
+        }
         hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         
         // Decode 'entrypoint' which can be either a single string or an array of strings.
