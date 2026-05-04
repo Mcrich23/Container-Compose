@@ -77,7 +77,16 @@ struct NetworkConfigurationTests {
               backend:
                 aliases:
                   - app.local
+                driver_opts:
+                  com.docker.network.endpoint.expose: "true"
+                gw_priority: 10
+                interface_name: eth0
                 ipv4_address: 10.10.0.5
+                ipv6_address: 2001:3984:3989::10
+                link_local_ips:
+                  - fe80::1
+                mac_address: "02:42:72:98:65:08"
+                priority: 100
         networks:
           backend:
         """
@@ -88,7 +97,14 @@ struct NetworkConfigurationTests {
 
         #expect(app.networks == ["backend"])
         #expect(app.networkConfigurations?["backend"]?.aliases == ["app.local"])
+        #expect(app.networkConfigurations?["backend"]?.driver_opts?["com.docker.network.endpoint.expose"] == "true")
+        #expect(app.networkConfigurations?["backend"]?.gw_priority == 10)
+        #expect(app.networkConfigurations?["backend"]?.interface_name == "eth0")
         #expect(app.networkConfigurations?["backend"]?.ipv4_address == "10.10.0.5")
+        #expect(app.networkConfigurations?["backend"]?.ipv6_address == "2001:3984:3989::10")
+        #expect(app.networkConfigurations?["backend"]?.link_local_ips == ["fe80::1"])
+        #expect(app.networkConfigurations?["backend"]?.mac_address == "02:42:72:98:65:08")
+        #expect(app.networkConfigurations?["backend"]?.priority == 100)
     }
 
     @Test("Parse service network object syntax with null value")
