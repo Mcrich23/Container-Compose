@@ -185,7 +185,7 @@ public struct Service: Codable, Hashable {
         if let cmdArray = try? container.decodeIfPresent([String].self, forKey: .command) {
             command = cmdArray
         } else if let cmdString = try? container.decodeIfPresent(String.self, forKey: .command) {
-            command = composeShellSplit(cmdString)
+            command = try composeShellSplit(cmdString)
         } else {
             command = nil
         }
@@ -205,7 +205,7 @@ public struct Service: Codable, Hashable {
         if let entrypointArray = try? container.decodeIfPresent([String].self, forKey: .entrypoint) {
             entrypoint = entrypointArray
         } else if let entrypointString = try? container.decodeIfPresent(String.self, forKey: .entrypoint) {
-            entrypoint = composeShellSplit(entrypointString)
+            entrypoint = try composeShellSplit(entrypointString)
         } else {
             entrypoint = nil
         }

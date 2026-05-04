@@ -29,18 +29,32 @@ public struct ServiceVolume: Codable, Hashable {
         }
 
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decodeIfPresent(String.self, forKey: .type) ?? "volume"
+        let type = try container.decode(String.self, forKey: .type)
         let source = try container.decodeIfPresent(String.self, forKey: .source)
         let target = try container.decode(String.self, forKey: .target)
-        let readOnly = try container.decodeIfPresent(Bool.self, forKey: .read_only) ?? false
+        let readOnly = try Self.decodeBool(container, forKey: .read_only) ?? false
         let consistency = try container.decodeIfPresent(String.self, forKey: .consistency)
+        let bind = try container.decodeIfPresent(BindOptions.self, forKey: .bind)
+        let volume = try container.decodeIfPresent(VolumeOptions.self, forKey: .volume)
 
         var options: [String] = []
         if readOnly {
             options.append("ro")
         }
+        if let selinux = bind?.selinux, !selinux.isEmpty {
+            options.append(selinux)
+        }
+        if let propagation = bind?.propagation, !propagation.isEmpty {
+            options.append(propagation)
+        }
         if let consistency, !consistency.isEmpty {
             options.append(consistency)
+        }
+        if volume?.nocopy == true {
+            options.append("nocopy")
+        }
+        if !readOnly, !options.isEmpty {
+            options.insert("rw", at: 0)
         }
         let suffix = options.isEmpty ? "" : ":\(options.joined(separator: ","))"
 
@@ -71,7 +85,7 @@ public struct ServiceVolume: Codable, Hashable {
             throw DecodingError.dataCorruptedError(
                 forKey: .type,
                 in: container,
-                debugDescription: "Unsupported service volume type '\(type)'."
+                debugDescription: "Unsupported service volume type '\(type)'. Only 'bind' and 'volume' can be represented as mount strings."
             )
         }
     }
@@ -87,5 +101,59 @@ public struct ServiceVolume: Codable, Hashable {
         case target
         case read_only
         case consistency
+        case bind
+        case volume
+    }
+
+    private struct BindOptions: Codable, Hashable {
+        let selinux: String?
+        let propagation: String?
+    }
+
+    private struct VolumeOptions: Decodable, Hashable {
+        let nocopy: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case nocopy
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            nocopy = try ServiceVolume.decodeBool(container, forKey: .nocopy)
+        }
+    }
+
+    private static func decodeBool<K>(_ container: KeyedDecodingContainer<K>, forKey key: K) throws -> Bool? where K: CodingKey {
+        try container.decodeIfPresent(BoolOrString.self, forKey: key)?.value
+    }
+
+    private struct BoolOrString: Decodable {
+        let value: Bool
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let bool = try? container.decode(Bool.self) {
+                value = bool
+                return
+            }
+            if let string = try? container.decode(String.self) {
+                switch string.lowercased() {
+                case "true":
+                    value = true
+                case "false":
+                    value = false
+                default:
+                    throw DecodingError.dataCorruptedError(
+                        in: container,
+                        debugDescription: "Expected 'true' or 'false'."
+                    )
+                }
+                return
+            }
+            throw DecodingError.typeMismatch(
+                Bool.self,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Expected a boolean or string.")
+            )
+        }
     }
 }

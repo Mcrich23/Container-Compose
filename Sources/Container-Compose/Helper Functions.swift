@@ -60,7 +60,21 @@ public func loadEnvFile(path: String) -> [String: String] {
     return envVars
 }
 
-public func composeShellSplit(_ input: String) -> [String] {
+enum ComposeShellSplitError: Error, LocalizedError {
+    case trailingEscape
+    case unterminatedQuote
+
+    var errorDescription: String? {
+        switch self {
+        case .trailingEscape:
+            return "Command string ends with an unfinished escape."
+        case .unterminatedQuote:
+            return "Command string contains an unterminated quote."
+        }
+    }
+}
+
+public func composeShellSplit(_ input: String) throws -> [String] {
     enum Quote {
         case single
         case double
@@ -119,7 +133,10 @@ public func composeShellSplit(_ input: String) -> [String] {
     }
 
     if escaping {
-        current.append("\\")
+        throw ComposeShellSplitError.trailingEscape
+    }
+    if quote != nil {
+        throw ComposeShellSplitError.unterminatedQuote
     }
     if tokenStarted {
         tokens.append(current)

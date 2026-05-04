@@ -99,6 +99,36 @@ struct DockerComposeParsingTests {
         #expect(compose.services["db"]??.volumes?.count == 1)
         #expect(compose.services["db"]??.volumes?.first == "db-data:/var/lib/postgresql/data")
     }
+
+    @Test("Parse compose long-form volume options")
+    func parseComposeLongFormVolumeOptions() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            volumes:
+              - type: bind
+                source: ./data
+                target: /data
+                read_only: "true"
+                bind:
+                  selinux: z
+                  propagation: rslave
+              - type: volume
+                source: cache
+                target: /cache
+                volume:
+                  nocopy: "true"
+        volumes:
+          cache:
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.volumes == ["./data:/data:ro,z,rslave", "cache:/cache:rw,nocopy"])
+    }
     
     @Test("Parse compose with networks")
     func parseComposeWithNetworks() throws {
@@ -250,6 +280,22 @@ struct DockerComposeParsingTests {
 
         #expect(compose.services["app"]??.command == ["--enable-debug-command", "yes", "--save", ""])
         #expect(compose.services["shell"]??.entrypoint == ["sh", "-lc", "echo hello world"])
+    }
+
+    @Test("Malformed compose command string should fail")
+    func malformedComposeCommandStringShouldFail() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            command: "sh -lc 'echo hello"
+        """
+
+        let decoder = YAMLDecoder()
+        #expect(throws: Error.self) {
+            try decoder.decode(DockerCompose.self, from: yaml)
+        }
     }
     
     @Test("Parse compose with restart policy")
