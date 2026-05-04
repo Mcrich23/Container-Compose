@@ -6,6 +6,10 @@ import PackageDescription
 let package = Package(
     name: "Container-Compose",
     platforms: [.macOS(.v15)],
+    products: [
+        .library(name: "ContainerComposeCore", targets: ["ContainerComposeCore"]),
+        .executable(name: "container-compose", targets: ["Container-Compose"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.1"),
         .package(url: "https://github.com/mcrich23/container", branch: "add-command-option-group-function-macro"),
