@@ -99,6 +99,41 @@ struct DockerComposeParsingTests {
         #expect(compose.services["db"]??.volumes?.count == 1)
         #expect(compose.services["db"]??.volumes?.first == "db-data:/var/lib/postgresql/data")
     }
+
+    @Test("Parse compose with SMB/NFS volume configuration")
+    func parseComposeWithNetworkVolumes() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            volumes:
+              - media-share:/media
+              - backups:/backups:ro
+        volumes:
+          media-share:
+            driver: smb
+            driver_opts:
+              share: //fileserver/media
+              username: mediauser
+          backups:
+            driver: nfs
+            name: remote-backups
+            driver_opts:
+              share: nas.local:/exports/backups
+              vers: "4.1"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.volumes?["media-share"]??.driver == "smb")
+        #expect(compose.volumes?["media-share"]??.driver_opts?["share"] == "//fileserver/media")
+        #expect(compose.volumes?["backups"]??.driver == "nfs")
+        #expect(compose.volumes?["backups"]??.name == "remote-backups")
+        #expect(compose.volumes?["backups"]??.driver_opts?["share"] == "nas.local:/exports/backups")
+        #expect(compose.services["app"]??.volumes == ["media-share:/media", "backups:/backups:ro"])
+    }
     
     @Test("Parse compose with networks")
     func parseComposeWithNetworks() throws {

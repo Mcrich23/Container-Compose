@@ -322,6 +322,51 @@ struct ComposeUpTests {
         
         try? await stopInstance(location: project.base)
     }
+
+    @Test("Test compose up uses explicit top-level volume name")
+    func testComposeUpUsesTopLevelVolumeName() async throws {
+        let volumeName = "compose-volume-\(UUID().uuidString.lowercased())"
+        let yaml = """
+            version: "3.8"
+            services:
+                app:
+                    image: nginx:alpine
+                    volumes:
+                        - app-data:/usr/share/nginx/html
+            volumes:
+                app-data:
+                    name: \(volumeName)
+            """
+
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false)])
+        try await composeUp.run()
+
+        let containers = try await ContainerClient().list()
+            .filter {
+                $0.configuration.id.contains(project.name)
+            }
+
+        guard let appContainer = containers.first(where: { $0.configuration.id == "\(project.name)-app" }) else {
+            throw Errors.containerNotFound
+        }
+
+        #expect(appContainer.status == .running)
+        #expect(appContainer.configuration.mounts.count == 1)
+        #expect(appContainer.configuration.mounts.first?.volumeName == volumeName)
+        #expect(appContainer.configuration.mounts.first?.destination == "/usr/share/nginx/html")
+
+        let createdVolume = try await ClientVolume.inspect(volumeName)
+        #expect(createdVolume.name == volumeName)
+        #expect(createdVolume.driver == "local")
+
+        var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
+        try await composeDown.run()
+
+        try? await ClientVolume.delete(name: volumeName)
+        try? await stopInstance(location: project.base)
+    }
     
     // A locally-built image whose reference contains a `/` (e.g. `myorg/foo:local`)
     // must not trigger a registry pull when referenced from a compose file.
