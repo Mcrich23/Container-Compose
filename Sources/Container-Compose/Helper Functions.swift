@@ -153,15 +153,8 @@ public func composePortToRunArg(_ portSpec: String) -> String {
 }
 
 /// Converts a Docker Compose `volumes:` entry into the `--volume` arguments for `container run`.
-///
-/// - Parameters:
-///   - volume: The raw volume string from the compose file (e.g. `"./cfg.yaml:/app/cfg.yaml:ro"`).
-///   - cwd: The compose project directory used to resolve relative host paths.
-///   - fileManager: The `FileManager` used for existence checks and directory creation.
-///   - environmentVariables: Variables loaded from the project's `.env` file.
-///   - projectName: The compose project name, required for named-volume path synthesis.
-/// - Returns: Either `["-v", "<host>:<container>[:<mode>]"]` or `[]` if the volume should be skipped.
-public func composeVolumeToRunArgs(
+/// Internal so tests can reach it via `@testable import ContainerComposeCore`.
+func composeVolumeToRunArgs(
     _ volume: String,
     cwd: String,
     fileManager: FileManager = .default,
