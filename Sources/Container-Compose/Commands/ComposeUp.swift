@@ -686,70 +686,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func configVolume(_ volume: String) async throws -> [String] {
-        let resolvedVolume = resolveVariable(volume, with: environmentVariables)
-
-        var runCommandArgs: [String] = []
-
-        // Parse the volume string: destination[:mode]
-        let components = resolvedVolume.split(separator: ":", maxSplits: 2).map(String.init)
-
-        guard components.count >= 2 else {
-            print("Warning: Volume entry '\(resolvedVolume)' has an invalid format (expected 'source:destination'). Skipping.")
-            return []
-        }
-
-        let source = components[0]
-        let destination = components[1]
-
-        // Check if the source looks like a host path (contains '/' or starts with '.')
-        // This heuristic helps distinguish bind mounts from named volume references.
-        if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
-            // This is likely a bind mount (local path to container path)
-            var isDirectory: ObjCBool = false
-            // Ensure the path is absolute or relative to the current directory for FileManager
-            let fullHostPath = (source.starts(with: "/") || source.starts(with: "~")) ? source : (cwd + "/" + source)
-
-            if fileManager.fileExists(atPath: fullHostPath, isDirectory: &isDirectory) {
-                if isDirectory.boolValue {
-                    // Host path exists and is a directory, add the volume
-                    runCommandArgs.append("-v")
-                    // Reconstruct the volume string without mode, ensuring it's source:destination
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
-                } else {
-                    // Host path exists but is a file
-                    print("Warning: Volume mount source '\(source)' is a file. The 'container' tool does not support direct file mounts. Skipping this volume.")
-                }
-            } else {
-                // Host path does not exist, assume it's meant to be a directory and try to create it.
-                do {
-                    try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
-                    print("Info: Created missing host directory for volume: \(fullHostPath)")
-                    runCommandArgs.append("-v")
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
-                } catch {
-                    print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
-                }
-            }
-        } else {
-            guard let projectName else { return [] }
-            let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
-            let volumePath = volumeUrl.path(percentEncoded: false)
-
-            let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
-            let destinationPath = destinationUrl.path(percentEncoded: false)
-
-            print(
-                "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
-            )
-            try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
-
-            // Host path exists and is a directory, add the volume
-            runCommandArgs.append("-v")
-            // Reconstruct the volume string without mode, ensuring it's source:destination
-            runCommandArgs.append("\(volumePath):\(destinationPath)")  // Use original source for command argument
-        }
-
-        return runCommandArgs
+        try composeVolumeToRunArgs(volume, cwd: cwd, fileManager: fileManager, environmentVariables: environmentVariables, projectName: projectName)
     }
 }
 

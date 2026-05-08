@@ -99,3 +99,106 @@ struct HelperFunctionsTests {
     }
 
 }
+
+@Suite("Compose Volume Tests")
+struct ComposeVolumeTests {
+
+    private func makeTempDir() throws -> URL {
+        let tmp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        return tmp
+    }
+
+    @Test("Single-file bind mount with :ro mode is forwarded")
+    func testFileMountWithMode() throws {
+        let tmp = try makeTempDir()
+        let hostFile = tmp.appending(path: "config.yaml")
+        FileManager.default.createFile(atPath: hostFile.path, contents: nil)
+
+        let result = try composeVolumeToRunArgs(
+            "\(hostFile.path):/app/config.yaml:ro",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(hostFile.path):/app/config.yaml:ro"])
+    }
+
+    @Test("Single-file bind mount without mode is forwarded")
+    func testFileMountNoMode() throws {
+        let tmp = try makeTempDir()
+        let hostFile = tmp.appending(path: "init.sh")
+        FileManager.default.createFile(atPath: hostFile.path, contents: nil)
+
+        let result = try composeVolumeToRunArgs(
+            "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh"])
+    }
+
+    @Test("Directory bind mount is forwarded")
+    func testDirectoryMount() throws {
+        let tmp = try makeTempDir()
+        let dataDir = tmp.appending(path: "data")
+        try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+
+        let result = try composeVolumeToRunArgs(
+            "\(dataDir.path):/app/data",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(dataDir.path):/app/data"])
+    }
+
+    @Test("Directory bind mount with :ro mode preserves mode")
+    func testDirectoryMountWithMode() throws {
+        let tmp = try makeTempDir()
+        let dataDir = tmp.appending(path: "data")
+        try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+
+        let result = try composeVolumeToRunArgs(
+            "\(dataDir.path):/app/data:ro",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(dataDir.path):/app/data:ro"])
+    }
+
+    @Test("Relative file bind mount resolved against cwd")
+    func testRelativeFileMountResolvedAgainstCwd() throws {
+        let tmp = try makeTempDir()
+        FileManager.default.createFile(atPath: tmp.appending(path: "config.yaml").path, contents: nil)
+
+        let result = try composeVolumeToRunArgs(
+            "./config.yaml:/app/config.yaml:ro",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "./config.yaml:/app/config.yaml:ro"])
+    }
+
+    @Test("Missing host path is auto-created as a directory")
+    func testMissingHostPathAutoCreated() throws {
+        let tmp = try makeTempDir()
+        let newDir = tmp.appending(path: "new-volume")
+        #expect(!FileManager.default.fileExists(atPath: newDir.path))
+
+        let result = try composeVolumeToRunArgs(
+            "\(newDir.path):/app/data",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(newDir.path):/app/data"])
+        var isDir: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: newDir.path, isDirectory: &isDir))
+        #expect(isDir.boolValue)
+    }
+
+    @Test("Invalid volume format returns empty array")
+    func testInvalidFormatReturnsEmpty() throws {
+        let result = try composeVolumeToRunArgs("nodestination", cwd: "/tmp", projectName: "test")
+        #expect(result == [])
+    }
+
+}
