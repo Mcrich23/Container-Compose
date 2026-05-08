@@ -700,32 +700,32 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         let source = components[0]
         let destination = components[1]
+        let mode = components.count == 3 ? components[2] : nil
+
+        // Reconstruct the volume argument, preserving the mode (e.g. ":ro") if present.
+        func bindMountArg(source: String) -> String {
+            if let mode { return "\(source):\(destination):\(mode)" }
+            return "\(source):\(destination)"
+        }
 
         // Check if the source looks like a host path (contains '/' or starts with '.')
         // This heuristic helps distinguish bind mounts from named volume references.
         if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
-            // This is likely a bind mount (local path to container path)
-            var isDirectory: ObjCBool = false
-            // Ensure the path is absolute or relative to the current directory for FileManager
+            // This is likely a bind mount (local path to container path).
+            // Apple `container` supports both directory and single-file bind mounts
+            // via `--volume host:container[:mode]`, so both are forwarded the same way.
             let fullHostPath = (source.starts(with: "/") || source.starts(with: "~")) ? source : (cwd + "/" + source)
 
-            if fileManager.fileExists(atPath: fullHostPath, isDirectory: &isDirectory) {
-                if isDirectory.boolValue {
-                    // Host path exists and is a directory, add the volume
-                    runCommandArgs.append("-v")
-                    // Reconstruct the volume string without mode, ensuring it's source:destination
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
-                } else {
-                    // Host path exists but is a file
-                    print("Warning: Volume mount source '\(source)' is a file. The 'container' tool does not support direct file mounts. Skipping this volume.")
-                }
+            if fileManager.fileExists(atPath: fullHostPath) {
+                runCommandArgs.append("-v")
+                runCommandArgs.append(bindMountArg(source: source))
             } else {
                 // Host path does not exist, assume it's meant to be a directory and try to create it.
                 do {
                     try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
                     print("Info: Created missing host directory for volume: \(fullHostPath)")
                     runCommandArgs.append("-v")
-                    runCommandArgs.append("\(source):\(destination)")  // Use original source for command argument
+                    runCommandArgs.append(bindMountArg(source: source))
                 } catch {
                     print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
                 }
