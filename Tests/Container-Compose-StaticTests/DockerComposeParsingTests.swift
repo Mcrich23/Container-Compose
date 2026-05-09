@@ -99,6 +99,123 @@ struct DockerComposeParsingTests {
         #expect(compose.services["db"]??.volumes?.count == 1)
         #expect(compose.services["db"]??.volumes?.first == "db-data:/var/lib/postgresql/data")
     }
+
+    @Test("Parse compose with SMB/NFS volume configuration")
+    func parseComposeWithNetworkVolumes() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            volumes:
+              - media-share:/media
+              - backups:/backups:ro
+        volumes:
+          media-share:
+            driver: smb
+            driver_opts:
+              share: //fileserver/media
+              username: mediauser
+          backups:
+            driver: nfs
+            name: remote-backups
+            driver_opts:
+              share: nas.local:/exports/backups
+              vers: "4.1"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.volumes?["media-share"]??.driver == "smb")
+        #expect(compose.volumes?["media-share"]??.driver_opts?["share"] == "//fileserver/media")
+        #expect(compose.volumes?["backups"]??.driver == "nfs")
+        #expect(compose.volumes?["backups"]??.name == "remote-backups")
+        #expect(compose.volumes?["backups"]??.driver_opts?["share"] == "nas.local:/exports/backups")
+        #expect(compose.services["app"]??.volumes == ["media-share:/media", "backups:/backups:ro"])
+    }
+
+    @Test("Normalize direct SMB and NFS volume drivers")
+    func normalizeDirectNetworkVolumeDrivers() {
+        let smb = Volume(
+            driver: "smb",
+            driver_opts: [
+                "share": "//fileserver/media",
+                "username": "mediauser",
+            ]
+        )
+        let nfs = Volume(
+            driver: "nfs",
+            driver_opts: [
+                "share": "nas.local:/exports/backups",
+                "vers": "4.1",
+            ]
+        )
+
+        #expect(
+            VolumeConfigurationNormalizer.normalized(from: smb) == NormalizedVolumeConfiguration(
+                driver: "smb",
+                driverOpts: [
+                    "share": "//fileserver/media",
+                    "username": "mediauser",
+                ]
+            )
+        )
+        #expect(
+            VolumeConfigurationNormalizer.normalized(from: nfs) == NormalizedVolumeConfiguration(
+                driver: "nfs",
+                driverOpts: [
+                    "share": "nas.local:/exports/backups",
+                    "vers": "4.1",
+                ]
+            )
+        )
+    }
+
+    @Test("Normalize Docker-style CIFS and NFS volume options")
+    func normalizeDockerStyleNetworkVolumeOptions() {
+        let cifs = Volume(
+            driver: "local",
+            driver_opts: [
+                "type": "cifs",
+                "device": "//fileserver/media",
+                "o": "username=mediauser,password=secret,vers=3.0,mfsymlinks",
+            ]
+        )
+        let nfs = Volume(
+            driver: "local",
+            driver_opts: [
+                "type": "nfs",
+                "device": "nas.local:/exports/backups",
+                "o": "addr=nas.local,vers=4.1,proto=tcp,nolock",
+            ]
+        )
+
+        #expect(
+            VolumeConfigurationNormalizer.normalized(from: cifs) == NormalizedVolumeConfiguration(
+                driver: "smb",
+                driverOpts: [
+                    "share": "//fileserver/media",
+                    "username": "mediauser",
+                    "password": "secret",
+                    "vers": "3.0",
+                    "mfsymlinks": "",
+                ]
+            )
+        )
+        #expect(
+            VolumeConfigurationNormalizer.normalized(from: nfs) == NormalizedVolumeConfiguration(
+                driver: "nfs",
+                driverOpts: [
+                    "share": "nas.local:/exports/backups",
+                    "addr": "nas.local",
+                    "vers": "4.1",
+                    "proto": "tcp",
+                    "nolock": "",
+                ]
+            )
+        )
+    }
     
     @Test("Parse compose with networks")
     func parseComposeWithNetworks() throws {

@@ -39,6 +39,7 @@ public enum YamlError: Error, LocalizedError {
 public enum ComposeError: Error, LocalizedError {
     case imageNotFound(String)
     case invalidProjectName
+    case volumeConfigurationMismatch(String)
 
     public var errorDescription: String? {
         switch self {
@@ -46,6 +47,8 @@ public enum ComposeError: Error, LocalizedError {
             return "Service \(name) must define either 'image' or 'build'."
         case .invalidProjectName:
             return "Could not find project name."
+        case .volumeConfigurationMismatch(let name):
+            return "Volume \(name) already exists with a different configuration."
         }
     }
 }
