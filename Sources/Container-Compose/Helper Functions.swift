@@ -180,17 +180,17 @@ func composeVolumeToRunArgs(
     }
 
     if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
-        let fullHostPath = (source.starts(with: "/") || source.starts(with: "~")) ? source : (cwd + "/" + source)
+        let fullHostPath = resolvedPath(for: source, relativeTo: URL(fileURLWithPath: cwd, isDirectory: true))
 
         if fileManager.fileExists(atPath: fullHostPath) {
             args.append("-v")
-            args.append(bindMountArg(source: source))
+            args.append(bindMountArg(source: fullHostPath))
         } else {
             do {
                 try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
                 print("Info: Created missing host directory for volume: \(fullHostPath)")
                 args.append("-v")
-                args.append(bindMountArg(source: source))
+                args.append(bindMountArg(source: fullHostPath))
             } catch {
                 print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
             }
@@ -208,7 +208,8 @@ func composeVolumeToRunArgs(
         try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
 
         args.append("-v")
-        args.append("\(volumePath):\(destinationPath)")
+        let modeStr = mode.map { ":\($0)" } ?? ""
+        args.append("\(volumePath):\(destinationPath)\(modeStr)")
     }
 
     return args
