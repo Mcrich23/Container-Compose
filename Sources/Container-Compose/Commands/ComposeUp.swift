@@ -194,9 +194,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     func waitForever() async -> Never {
-        for await _ in AsyncStream<Void>(unfolding: {}) {
-            // This will never run
-        }
+        // `AsyncStream<Void>(unfolding: () async -> Void?)` ends only when the
+        // closure returns `nil`. An empty closure returns `()`, which Swift
+        // auto-wraps as `.some(())` — never `nil` — so the previous
+        // `for await _ in AsyncStream<Void>(unfolding: {})` produced an
+        // infinite stream of `Void` values with no `await` between them and
+        // pinned a CPU core at 100% (issue #27).
+        //
+        // Suspending on a continuation that is never resumed parks the task
+        // indefinitely with zero CPU. `withUnsafeContinuation` (rather than
+        // `withCheckedContinuation`) avoids the runtime's "continuation leaked"
+        // diagnostic — leaking is the intent here, since the contract is to
+        // wait until the process is killed.
+        await withUnsafeContinuation { (_: UnsafeContinuation<Void, Never>) in }
         fatalError("unreachable")
     }
 
