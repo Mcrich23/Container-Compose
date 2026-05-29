@@ -200,6 +200,43 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         fatalError("unreachable")
     }
 
+    /// Translates Compose's `entrypoint` + `command` into args for `container run`.
+    ///
+    /// Compose semantics:
+    ///   - `entrypoint` (when set) replaces the image's ENTRYPOINT.
+    ///   - `command` (when set) replaces the image's CMD and is passed to the
+    ///     resolved entrypoint as its argv tail.
+    ///   - Both can be set together; they are NOT mutually exclusive.
+    ///
+    /// Mapping to `container run`:
+    ///   - First element of `entrypoint` → `--entrypoint <bin>` flag (must
+    ///     precede the image — `container run` only accepts a single executable
+    ///     for `--entrypoint`, not a full argv).
+    ///   - Remaining `entrypoint` elements + every `command` element → positional
+    ///     args after the image.
+    ///
+    /// Notable case from issue #77: `entrypoint: ["/bin/bash", "-c"]` +
+    /// `command: ["<multi-line script>"]` becomes
+    /// `--entrypoint /bin/bash <image> -c <script>`, so bash receives both its
+    /// `-c` flag and the script as a single argument.
+    static func entrypointAndCommandArgs(
+        entrypoint: [String]?,
+        command: [String]?
+    ) -> (entrypointFlag: String?, positional: [String]) {
+        var positional: [String] = []
+        let entrypointFlag: String?
+        if let entrypoint, !entrypoint.isEmpty {
+            entrypointFlag = entrypoint.first
+            positional.append(contentsOf: entrypoint.dropFirst())
+        } else {
+            entrypointFlag = nil
+        }
+        if let command {
+            positional.append(contentsOf: command)
+        }
+        return (entrypointFlag, positional)
+    }
+
     private func getIPForRunningService(_ serviceName: String) async throws -> String? {
         guard let projectName else { return nil }
 
@@ -552,15 +589,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("-t")  // --tty
         }
 
-        runCommandArgs.append(imageToRun)  // Add the image name as the final argument before command/entrypoint
-
-        // Add entrypoint or command
-        if let entrypointParts = service.entrypoint {
-            runCommandArgs.append("--entrypoint")
-            runCommandArgs.append(contentsOf: entrypointParts)
-        } else if let commandParts = service.command {
-            runCommandArgs.append(contentsOf: commandParts)
+        // Translate `entrypoint` + `command` into the right shape for
+        // `container run`. Both can be set together — they are NOT mutually
+        // exclusive in Compose semantics — and `--entrypoint` must precede
+        // the image. See the helper below for the full mapping.
+        let argv = Self.entrypointAndCommandArgs(
+            entrypoint: service.entrypoint,
+            command: service.command
+        )
+        if let entrypointFlag = argv.entrypointFlag {
+            runCommandArgs.append(contentsOf: ["--entrypoint", entrypointFlag])
         }
+        runCommandArgs.append(imageToRun)
+        runCommandArgs.append(contentsOf: argv.positional)
 
         var serviceColor: NamedColor = Self.availableContainerConsoleColors.randomElement()!
 
