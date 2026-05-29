@@ -99,3 +99,125 @@ struct HelperFunctionsTests {
     }
 
 }
+
+/// Trait that creates a unique temporary directory before a test runs and removes it after.
+/// The directory URL is available inside the test body via `TempDirTrait.current`.
+struct TempDirTrait: TestTrait, TestScoping {
+    @TaskLocal static var current: URL = FileManager.default.temporaryDirectory
+
+    func provideScope(
+        for test: Test,
+        testCase: Test.Case?,
+        performing function: @Sendable () async throws -> Void
+    ) async throws {
+        let tmp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try await TempDirTrait.$current.withValue(tmp) {
+            try await function()
+        }
+    }
+}
+
+extension Trait where Self == TempDirTrait {
+    /// Provides each test with a fresh temp directory that is removed when the test finishes.
+    static var tempDir: TempDirTrait { TempDirTrait() }
+}
+
+@Suite("Compose Volume Tests")
+struct ComposeVolumeTests {
+
+    @Test("Single-file bind mount with :ro mode is forwarded", .tempDir)
+    func testFileMountWithMode() throws {
+        let tmp = TempDirTrait.current
+        let hostFile = tmp.appending(path: "config.yaml")
+        FileManager.default.createFile(atPath: hostFile.path, contents: nil)
+
+        let result = try composeVolumeToRunArgs(
+            "\(hostFile.path):/app/config.yaml:ro",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(hostFile.path):/app/config.yaml:ro"])
+    }
+
+    @Test("Single-file bind mount without mode is forwarded", .tempDir)
+    func testFileMountNoMode() throws {
+        let tmp = TempDirTrait.current
+        let hostFile = tmp.appending(path: "init.sh")
+        FileManager.default.createFile(atPath: hostFile.path, contents: nil)
+
+        let result = try composeVolumeToRunArgs(
+            "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh"])
+    }
+
+    @Test("Directory bind mount is forwarded", .tempDir)
+    func testDirectoryMount() throws {
+        let tmp = TempDirTrait.current
+        let dataDir = tmp.appending(path: "data")
+        try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+
+        let result = try composeVolumeToRunArgs(
+            "\(dataDir.path):/app/data",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(dataDir.path):/app/data"])
+    }
+
+    @Test("Directory bind mount with :ro mode preserves mode", .tempDir)
+    func testDirectoryMountWithMode() throws {
+        let tmp = TempDirTrait.current
+        let dataDir = tmp.appending(path: "data")
+        try FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
+
+        let result = try composeVolumeToRunArgs(
+            "\(dataDir.path):/app/data:ro",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(dataDir.path):/app/data:ro"])
+    }
+
+    @Test("Relative file bind mount resolved to absolute path against cwd", .tempDir)
+    func testRelativeFileMountResolvedAgainstCwd() throws {
+        let tmp = TempDirTrait.current
+        let hostFile = tmp.appending(path: "config.yaml")
+        FileManager.default.createFile(atPath: hostFile.path, contents: nil)
+
+        let result = try composeVolumeToRunArgs(
+            "./config.yaml:/app/config.yaml:ro",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(hostFile.path):/app/config.yaml:ro"])
+    }
+
+    @Test("Missing host path is auto-created as a directory", .tempDir)
+    func testMissingHostPathAutoCreated() throws {
+        let tmp = TempDirTrait.current
+        let newDir = tmp.appending(path: "new-volume")
+        #expect(!FileManager.default.fileExists(atPath: newDir.path))
+
+        let result = try composeVolumeToRunArgs(
+            "\(newDir.path):/app/data",
+            cwd: tmp.path,
+            projectName: "test"
+        )
+        #expect(result == ["-v", "\(newDir.path):/app/data"])
+        var isDir: ObjCBool = false
+        #expect(FileManager.default.fileExists(atPath: newDir.path, isDirectory: &isDir))
+        #expect(isDir.boolValue)
+    }
+
+    @Test("Invalid volume format returns empty array")
+    func testInvalidFormatReturnsEmpty() throws {
+        let result = try composeVolumeToRunArgs("nodestination", cwd: "/tmp", projectName: "test")
+        #expect(result == [])
+    }
+
+}

@@ -152,6 +152,69 @@ public func composePortToRunArg(_ portSpec: String) -> String {
     }
 }
 
+/// Converts a Docker Compose `volumes:` entry into the `--volume` arguments for `container run`.
+/// Internal so tests can reach it via `@testable import ContainerComposeCore`.
+func composeVolumeToRunArgs(
+    _ volume: String,
+    cwd: String,
+    fileManager: FileManager = .default,
+    environmentVariables: [String: String] = [:],
+    projectName: String?
+) throws -> [String] {
+    let resolvedVolume = resolveVariable(volume, with: environmentVariables)
+    var args: [String] = []
+
+    let components = resolvedVolume.split(separator: ":", maxSplits: 2).map(String.init)
+    guard components.count >= 2 else {
+        print("Warning: Volume entry '\(resolvedVolume)' has an invalid format (expected 'source:destination'). Skipping.")
+        return []
+    }
+
+    let source = components[0]
+    let destination = components[1]
+    let mode = components.count == 3 ? components[2] : nil
+
+    func bindMountArg(source: String) -> String {
+        if let mode { return "\(source):\(destination):\(mode)" }
+        return "\(source):\(destination)"
+    }
+
+    if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
+        let fullHostPath = resolvedPath(for: source, relativeTo: URL(fileURLWithPath: cwd, isDirectory: true))
+
+        if fileManager.fileExists(atPath: fullHostPath) {
+            args.append("-v")
+            args.append(bindMountArg(source: fullHostPath))
+        } else {
+            do {
+                try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
+                print("Info: Created missing host directory for volume: \(fullHostPath)")
+                args.append("-v")
+                args.append(bindMountArg(source: fullHostPath))
+            } catch {
+                print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
+            }
+        }
+    } else {
+        guard let projectName else { return [] }
+        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
+        let volumePath = volumeUrl.path(percentEncoded: false)
+        let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
+        let destinationPath = destinationUrl.path(percentEncoded: false)
+
+        print(
+            "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
+        )
+        try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+
+        args.append("-v")
+        let modeStr = mode.map { ":\($0)" } ?? ""
+        args.append("\(volumePath):\(destinationPath)\(modeStr)")
+    }
+
+    return args
+}
+
 extension String: @retroactive Error {}
 
 /// A structure representing the result of a command-line process execution.
