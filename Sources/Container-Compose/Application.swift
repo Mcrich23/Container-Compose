@@ -33,6 +33,9 @@ public struct Main: AsyncParsableCommand {
             ComposeBuild.self,
             Version.self
         ])
+    
+    @OptionGroup
+    var composeFileOptions: ComposeFileOptions
 
     public init() {}
 }
