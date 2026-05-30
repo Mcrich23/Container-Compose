@@ -46,8 +46,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         help: "Detaches from container logs. Note: If you do NOT detach, killing this process will NOT kill the container. To kill the container, run container-compose down")
     var detach: Bool = false
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String?
+    @OptionGroup
+    var composeFileOptions: ComposeFileOptions
+
+    private var composeFilename: String? {
+        composeFileOptions.composeFilename
+    }
 
     private static let supportedComposeFilenames = [
         "compose.yml",

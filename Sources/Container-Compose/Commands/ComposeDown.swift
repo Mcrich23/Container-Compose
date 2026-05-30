@@ -43,8 +43,12 @@ public struct ComposeDown: AsyncParsableCommand {
 
     private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String?
+    @OptionGroup
+    var composeFileOptions: ComposeFileOptions
+
+    private var composeFilename: String? {
+        composeFileOptions.composeFilename
+    }
 
     private static let supportedComposeFilenames = [
         "compose.yml",
