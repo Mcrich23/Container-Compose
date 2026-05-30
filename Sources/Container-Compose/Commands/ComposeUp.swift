@@ -46,8 +46,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         help: "Detaches from container logs. Note: If you do NOT detach, killing this process will NOT kill the container. To kill the container, run container-compose down")
     var detach: Bool = false
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String?
+    @OptionGroup
+    var composeFileOptions: ComposeFileOptions
 
     private static let supportedComposeFilenames = [
         "compose.yml",
@@ -61,7 +61,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private var composePath: String {
-        if let composeFilename {
+        if let composeFilename = composeFileOptions.composeFilename {
             return resolvedPath(for: composeFilename, relativeTo: cwdURL)
         }
 
@@ -524,7 +524,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 runCommandArgs.append(networkToConnect)
             }
             print(
-                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composeFilename)."
+                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composePath)."
             )
             print(
                 "Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level."

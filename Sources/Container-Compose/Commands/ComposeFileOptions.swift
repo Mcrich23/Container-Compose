@@ -14,28 +14,11 @@
 // limitations under the License.
 //===----------------------------------------------------------------------===//
 
-import Foundation
 import ArgumentParser
 
-public struct Main: AsyncParsableCommand {
-    private static let commandName: String = "container-compose"
-    private static let version: String = "0.12.0"
-    public static var versionString: String {
-        "\(commandName) version \(version)"
-    }
-    public static let configuration: CommandConfiguration = .init(
-        commandName: Self.commandName,
-        abstract: "A tool to use and manage Docker Compose files with Apple Container",
-        version: Self.versionString,
-        subcommands: [
-            ComposeUp.self,
-            ComposeDown.self,
-            ComposeBuild.self,
-            Version.self
-        ])
-    
-    @OptionGroup
-    var composeFileOptions: ComposeFileOptions
-
+public struct ComposeFileOptions: ParsableArguments, Sendable {
     public init() {}
+    
+    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
+    public var composeFilename: String?
 }
