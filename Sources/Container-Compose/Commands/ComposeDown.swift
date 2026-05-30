@@ -46,10 +46,6 @@ public struct ComposeDown: AsyncParsableCommand {
     @OptionGroup
     var composeFileOptions: ComposeFileOptions
 
-    private var composeFilename: String? {
-        composeFileOptions.composeFilename
-    }
-
     private static let supportedComposeFilenames = [
         "compose.yml",
         "compose.yaml",
@@ -62,7 +58,7 @@ public struct ComposeDown: AsyncParsableCommand {
     }
 
     private var composePath: String {
-        if let composeFilename {
+        if let composeFilename = composeFileOptions.composeFilename {
             return resolvedPath(for: composeFilename, relativeTo: cwdURL)
         }
 

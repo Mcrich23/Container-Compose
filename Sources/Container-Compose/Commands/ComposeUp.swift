@@ -49,10 +49,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     @OptionGroup
     var composeFileOptions: ComposeFileOptions
 
-    private var composeFilename: String? {
-        composeFileOptions.composeFilename
-    }
-
     private static let supportedComposeFilenames = [
         "compose.yml",
         "compose.yaml",
@@ -65,7 +61,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private var composePath: String {
-        if let composeFilename {
+        if let composeFilename = composeFileOptions.composeFilename {
             return resolvedPath(for: composeFilename, relativeTo: cwdURL)
         }
 
@@ -528,7 +524,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 runCommandArgs.append(networkToConnect)
             }
             print(
-                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composeFilename)."
+                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composeFileOptions.composeFilename)."
             )
             print(
                 "Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level."
