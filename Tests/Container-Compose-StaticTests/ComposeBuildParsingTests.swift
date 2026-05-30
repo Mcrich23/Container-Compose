@@ -163,6 +163,6 @@ struct ComposeBuildParsingTests {
     @Test("ComposeBuild command accepts -f flag for compose file")
     func composeBuildCommandAcceptsFileFlag() throws {
         let cmd = try ComposeBuild.parse(["-f", "my-compose.yaml"])
-        #expect(cmd.composeFilename == "my-compose.yaml")
+        #expect(cmd.composeFileOptions.composeFilename == "my-compose.yaml")
     }
 }

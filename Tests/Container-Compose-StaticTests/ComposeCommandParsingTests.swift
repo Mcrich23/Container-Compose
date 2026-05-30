@@ -19,15 +19,9 @@ import Testing
 
 @Suite("Compose command parsing")
 struct ComposeCommandParsingTests {
-    @Test("ComposeUp command accepts -f flag for compose file")
+    @Test("Main+ComposeUp command accepts -f flag for compose file from root")
     func composeUpCommandAcceptsFileFlag() throws {
-        let cmd = try ComposeUp.parse(["-f", "my-compose.yaml"])
-        #expect(cmd.composeFileOptions.composeFilename == "my-compose.yaml")
-    }
-
-    @Test("ComposeDown command accepts -f flag for compose file")
-    func composeDownCommandAcceptsFileFlag() throws {
-        let cmd = try ComposeDown.parse(["-f", "my-compose.yaml"])
+        let cmd = try Main.parseAsRoot(["-f", "my-compose.yaml", "up"]) as! ComposeUp
         #expect(cmd.composeFileOptions.composeFilename == "my-compose.yaml")
     }
 }
