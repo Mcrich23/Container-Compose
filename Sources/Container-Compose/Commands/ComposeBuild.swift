@@ -39,8 +39,8 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
     @Argument(help: "Services to build (builds all if omitted)")
     var services: [String] = []
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String?
+    @OptionGroup
+    var composeFileOptions: ComposeFileOptions
 
     @Flag(name: .long, help: "Do not use cache when building")
     var noCache: Bool = false
@@ -63,7 +63,7 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     private var composePath: String {
-        if let composeFilename {
+        if let composeFilename = composeFileOptions.composeFilename {
             return resolvedPath(for: composeFilename, relativeTo: cwdURL)
         }
         for filename in Self.supportedComposeFilenames {
