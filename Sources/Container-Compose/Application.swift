@@ -18,8 +18,25 @@ import Foundation
 import ArgumentParser
 
 public struct Main: AsyncParsableCommand {
-    private static let commandName: String = "container-compose"
+    /// The standalone executable name.
+    static let executableName: String = "container-compose"
+
+    /// The name `container` uses for this plugin: it execs
+    /// `.../container-plugins/compose/bin/compose`.
+    static let pluginName: String = "compose"
+
     private static let version: String = "1.3.0"
+
+    /// The name to show in help and errors: `container compose` when run as a
+    /// plugin (detected by an `argv[0]` basename of `compose`), otherwise the
+    /// executable name.
+    static func displayCommandName(forInvocation invocation: String?) -> String {
+        let invokedName = invocation.map { ($0 as NSString).lastPathComponent }
+        return invokedName == pluginName ? "container \(pluginName)" : executableName
+    }
+
+    private static let commandName: String = displayCommandName(forInvocation: CommandLine.arguments.first)
+
     public static var versionString: String {
         "\(commandName) version \(version)"
     }
