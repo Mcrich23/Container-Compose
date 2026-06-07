@@ -21,4 +21,7 @@ public struct ComposeFileOptions: ParsableArguments, Sendable {
     
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
     public var composeFilename: String?
+
+    @Option(name: [.customShort("p"), .customLong("project-name")], help: "Project name")
+    public var projectName: String?
 }

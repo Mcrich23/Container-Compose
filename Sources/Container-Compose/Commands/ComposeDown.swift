@@ -72,6 +72,11 @@ public struct ComposeDown: AsyncParsableCommand {
         return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
     }
 
+    private var envFilePath: String {
+        let envFile = process.envFile.first ?? ".env"
+        return resolvedPath(for: envFile, relativeTo: cwdURL)
+    }
+
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
 
@@ -89,17 +94,18 @@ public struct ComposeDown: AsyncParsableCommand {
         let dockerComposeString = String(data: yamlData, encoding: .utf8)!
         let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
 
+        // Load environment variables from .env file
+        let environmentVariables = loadEnvFile(path: envFilePath)
+
         // Determine project name for container naming
-        if let name = dockerCompose.name {
-            projectName = name
-            print("Info: Docker Compose project name parsed as: \(name)")
-            print(
-                "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
-            )
-        } else {
-            projectName = deriveProjectName(cwd: cwd)
-            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
-        }
+        let resolvedProjectName = resolveProjectName(
+            flagValue: composeFileOptions.projectName,
+            composeName: dockerCompose.name,
+            envVars: environmentVariables,
+            cwd: cwd
+        )
+        projectName = resolvedProjectName
+        print("Info: Docker Compose project name resolved as: \(resolvedProjectName)")
 
         var services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap({ serviceName, service in
             guard let service else { return nil }
