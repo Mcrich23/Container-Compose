@@ -179,6 +179,23 @@ func resolveBuildPaths(
     return (contextPath, dockerfilePath)
 }
 
+/// Merges a service's `environment:` values over the base environment,
+/// following Compose semantics: env-file values are literal, while
+/// service-level values are variable-interpolated (`${VAR}`, `${VAR:-default}`,
+/// resolved from the .env file and the process environment) and override the
+/// files.
+func mergeServiceEnvironment(
+    base: [String: String],
+    serviceEnvironment: [String: String]?,
+    envVars: [String: String]
+) -> [String: String] {
+    var combined = base
+    for (key, value) in serviceEnvironment ?? [:] {
+        combined[key] = resolveVariable(value, with: envVars)
+    }
+    return combined
+}
+
 /// Converts a Docker Compose `volumes:` entry into the `--volume` arguments for `container run`.
 /// Internal so tests can reach it via `@testable import ContainerComposeCore`.
 func composeVolumeToRunArgs(

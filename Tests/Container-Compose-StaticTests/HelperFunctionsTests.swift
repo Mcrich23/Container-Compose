@@ -97,6 +97,40 @@ struct HelperFunctionsTests {
         #expect(result == "myproj-web")
     }
 
+    @Test("Service environment value with variable default is interpolated")
+    func testServiceEnvDefaultInterpolated() throws {
+        // Regression: SERVICE_ID=${SERVICE_ID:-12345} reached
+        // the container as a literal string.
+        let result = mergeServiceEnvironment(
+            base: [:],
+            serviceEnvironment: ["SERVICE_ID": "${CC_TEST_SERVICE_ID_UNSET:-12345}"],
+            envVars: [:]
+        )
+        #expect(result["SERVICE_ID"] == "12345")
+    }
+
+    @Test("Service environment value resolved from env file")
+    func testServiceEnvFromEnvFile() throws {
+        let result = mergeServiceEnvironment(
+            base: ["DATABASE_HOST": "db"],
+            serviceEnvironment: ["DATABASE_HOST": "${DATABASE_HOST_X}", "EXTRA": "literal"],
+            envVars: ["DATABASE_HOST_X": "db-resolved"]
+        )
+        #expect(result["DATABASE_HOST"] == "db-resolved")
+        #expect(result["EXTRA"] == "literal")
+    }
+
+    @Test("Service environment overrides base env-file values")
+    func testServiceEnvOverridesBase() throws {
+        let result = mergeServiceEnvironment(
+            base: ["MODE": "from-file", "KEEP": "kept"],
+            serviceEnvironment: ["MODE": "from-service"],
+            envVars: [:]
+        )
+        #expect(result["MODE"] == "from-service")
+        #expect(result["KEEP"] == "kept")
+    }
+
     @Test("Resolve explicit relative paths against base URL")
     func testResolvedPathRelativeSegments() throws {
         let baseURL = URL(fileURLWithPath: "/tmp/project/compose/compose.yml").deletingLastPathComponent()
