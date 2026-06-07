@@ -68,6 +68,35 @@ struct HelperFunctionsTests {
         #expect(result.dockerfilePath == "/tmp/project/env/Dockerfile")
     }
 
+    @Test("Container name with variable default is interpolated")
+    func testContainerNameVariableInterpolated() throws {
+        // Regression: `container_name: ${WEB_CONTAINER:-web-dev}` was
+        // used literally, producing an invalid container name.
+        let result = resolveContainerName(
+            explicit: "${CC_TEST_CONTAINER_UNSET:-web-dev}", projectName: "myproj", serviceName: "web")
+        #expect(result == "web-dev")
+    }
+
+    @Test("Container name variable resolved from env file")
+    func testContainerNameVariableFromEnvFile() throws {
+        let result = resolveContainerName(
+            explicit: "${CC_TEST_CONTAINER_UNSET:-web-dev}", projectName: "myproj", serviceName: "web",
+            envVars: ["CC_TEST_CONTAINER_UNSET": "web-worktree"])
+        #expect(result == "web-worktree")
+    }
+
+    @Test("Literal explicit container name is used verbatim")
+    func testLiteralExplicitContainerName() throws {
+        let result = resolveContainerName(explicit: "my-container", projectName: "myproj", serviceName: "web")
+        #expect(result == "my-container")
+    }
+
+    @Test("Default container name is project-service")
+    func testDefaultContainerName() throws {
+        let result = resolveContainerName(explicit: nil, projectName: "myproj", serviceName: "web")
+        #expect(result == "myproj-web")
+    }
+
     @Test("Resolve explicit relative paths against base URL")
     func testResolvedPathRelativeSegments() throws {
         let baseURL = URL(fileURLWithPath: "/tmp/project/compose/compose.yml").deletingLastPathComponent()

@@ -110,6 +110,16 @@ public func deriveProjectName(cwd: String) -> String {
     return projectName
 }
 
+/// Resolves the container name for a service. An explicit `container_name`
+/// (with variable interpolation, e.g. `${NAME:-fallback}`) takes precedence;
+/// otherwise the default `<projectName>-<serviceName>` pattern is used.
+func resolveContainerName(explicit: String?, projectName: String, serviceName: String, envVars: [String: String] = [:]) -> String {
+    if let explicit {
+        return resolveVariable(explicit, with: envVars)
+    }
+    return "\(projectName)-\(serviceName)"
+}
+
 /// Converts Docker Compose port specification into a container run -p format.
 /// Handles various formats: "PORT", "HOST:PORT", "IP:HOST:PORT", and optional protocol.
 /// - Parameter portSpec: The port specification string from docker-compose.yml.
