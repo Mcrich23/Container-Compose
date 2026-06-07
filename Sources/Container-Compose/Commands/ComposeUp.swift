@@ -277,7 +277,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         let client = ContainerClient()
         let container = try await client.get(id: containerName)
-        let ip = container.networks.compactMap { $0.ipv4Gateway.description }.first
+        // Use the container's own address, not the network gateway — every
+        // container on a network shares the same gateway, so substituting the
+        // gateway broke service-name -> IP environment resolution.
+        let ip = container.networks.compactMap { $0.ipv4Address.address.description }.first
 
         return ip
     }
