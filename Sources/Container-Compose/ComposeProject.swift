@@ -102,10 +102,17 @@ public struct ComposeProjectOptions: ParsableArguments {
         return try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
     }
 
-    /// Project name used to namespace containers: the compose `name:` field if
-    /// present, otherwise the sanitized working-directory name.
+    /// Project name used to namespace containers, resolved with the same
+    /// precedence as docker compose: the `-p`/`--project-name` flag, then
+    /// `COMPOSE_PROJECT_NAME` (process environment over the .env file), then
+    /// the compose `name:` field (with `${VAR:-default}` interpolation), then
+    /// the sanitized working-directory name.
     public func projectName(for compose: DockerCompose) -> String {
-        compose.name ?? deriveProjectName(cwd: cwd)
+        resolveProjectName(
+            flagValue: composeFileOptions.projectName,
+            composeName: compose.name,
+            envVars: loadEnvFile(path: envFilePath),
+            cwd: cwd)
     }
 
     /// Resolves the services the command should act on, in dependency

@@ -29,6 +29,9 @@ public struct ComposeFileOptions: ParsableArguments, Sendable {
     )
     public var profile: [String] = []
 
+    @Option(name: [.customShort("p"), .customLong("project-name")], help: "Project name")
+    public var projectName: String?
+
     /// Active profiles from repeated `--profile` flags merged with the
     /// comma-separated `COMPOSE_PROFILES` environment variable (the Compose
     /// spec's documented equivalent, e.g. `COMPOSE_PROFILES=debug,frontend`).
