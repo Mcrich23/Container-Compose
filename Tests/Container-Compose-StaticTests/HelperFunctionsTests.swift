@@ -32,6 +32,105 @@ struct HelperFunctionsTests {
         #expect(projectName == "_devcontainers")
     }
 
+    @Test("Build context with variable default is interpolated and resolved")
+    func testBuildContextVariableInterpolated() throws {
+        // Regression: `build.context: ${REPOS_PATH:-..}/webapp` was used
+        // literally, producing "context dir does not exist .../${REPOS_PATH:-..}/webapp".
+        let result = resolveBuildPaths(
+            context: "${CC_TEST_REPOS_PATH_UNSET:-..}/webapp",
+            dockerfile: nil,
+            composeDirectory: "/tmp/project/env"
+        )
+        #expect(result.contextPath == "/tmp/project/webapp")
+        #expect(result.dockerfilePath == "/tmp/project/webapp/Dockerfile")
+    }
+
+    @Test("Build context variable resolved from env file")
+    func testBuildContextVariableFromEnvFile() throws {
+        let result = resolveBuildPaths(
+            context: "${CC_TEST_REPOS_PATH_UNSET:-..}/webapp",
+            dockerfile: "docker/Dockerfile.dev",
+            composeDirectory: "/tmp/project/env",
+            environmentVariables: ["CC_TEST_REPOS_PATH_UNSET": "/srv/repos"]
+        )
+        #expect(result.contextPath == "/srv/repos/webapp")
+        #expect(result.dockerfilePath == "/srv/repos/webapp/docker/Dockerfile.dev")
+    }
+
+    @Test("Literal build context stays relative to compose directory")
+    func testLiteralBuildContext() throws {
+        let result = resolveBuildPaths(
+            context: ".",
+            dockerfile: nil,
+            composeDirectory: "/tmp/project/env"
+        )
+        #expect(result.contextPath == "/tmp/project/env")
+        #expect(result.dockerfilePath == "/tmp/project/env/Dockerfile")
+    }
+
+    @Test("Container name with variable default is interpolated")
+    func testContainerNameVariableInterpolated() throws {
+        // Regression: `container_name: ${WEB_CONTAINER:-web-dev}` was
+        // used literally, producing an invalid container name.
+        let result = resolveContainerName(
+            explicit: "${CC_TEST_CONTAINER_UNSET:-web-dev}", projectName: "myproj", serviceName: "web")
+        #expect(result == "web-dev")
+    }
+
+    @Test("Container name variable resolved from env file")
+    func testContainerNameVariableFromEnvFile() throws {
+        let result = resolveContainerName(
+            explicit: "${CC_TEST_CONTAINER_UNSET:-web-dev}", projectName: "myproj", serviceName: "web",
+            envVars: ["CC_TEST_CONTAINER_UNSET": "web-worktree"])
+        #expect(result == "web-worktree")
+    }
+
+    @Test("Literal explicit container name is used verbatim")
+    func testLiteralExplicitContainerName() throws {
+        let result = resolveContainerName(explicit: "my-container", projectName: "myproj", serviceName: "web")
+        #expect(result == "my-container")
+    }
+
+    @Test("Default container name is project-service")
+    func testDefaultContainerName() throws {
+        let result = resolveContainerName(explicit: nil, projectName: "myproj", serviceName: "web")
+        #expect(result == "myproj-web")
+    }
+
+    @Test("Service environment value with variable default is interpolated")
+    func testServiceEnvDefaultInterpolated() throws {
+        // Regression: SERVICE_ID=${SERVICE_ID:-12345} reached
+        // the container as a literal string.
+        let result = mergeServiceEnvironment(
+            base: [:],
+            serviceEnvironment: ["SERVICE_ID": "${CC_TEST_SERVICE_ID_UNSET:-12345}"],
+            envVars: [:]
+        )
+        #expect(result["SERVICE_ID"] == "12345")
+    }
+
+    @Test("Service environment value resolved from env file")
+    func testServiceEnvFromEnvFile() throws {
+        let result = mergeServiceEnvironment(
+            base: ["DATABASE_HOST": "db"],
+            serviceEnvironment: ["DATABASE_HOST": "${DATABASE_HOST_X}", "EXTRA": "literal"],
+            envVars: ["DATABASE_HOST_X": "db-resolved"]
+        )
+        #expect(result["DATABASE_HOST"] == "db-resolved")
+        #expect(result["EXTRA"] == "literal")
+    }
+
+    @Test("Service environment overrides base env-file values")
+    func testServiceEnvOverridesBase() throws {
+        let result = mergeServiceEnvironment(
+            base: ["MODE": "from-file", "KEEP": "kept"],
+            serviceEnvironment: ["MODE": "from-service"],
+            envVars: [:]
+        )
+        #expect(result["MODE"] == "from-service")
+        #expect(result["KEEP"] == "kept")
+    }
+
     @Test("Resolve explicit relative paths against base URL")
     func testResolvedPathRelativeSegments() throws {
         let baseURL = URL(fileURLWithPath: "/tmp/project/compose/compose.yml").deletingLastPathComponent()
