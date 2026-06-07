@@ -110,6 +110,57 @@ public func deriveProjectName(cwd: String) -> String {
     return projectName
 }
 
+/// Splits a shell-style command string into arguments: whitespace separation,
+/// single/double quotes, and backslash escapes. No expansion is performed —
+/// this matches how Docker Compose parses string-form `command:` and
+/// `entrypoint:` (shellwords), e.g.
+/// `sh -c "npm install && npm run build"` -> ["sh", "-c", "npm install && npm run build"].
+func shellLex(_ input: String) -> [String] {
+    var args: [String] = []
+    var current = ""
+    var hasToken = false
+    var inSingleQuotes = false
+    var inDoubleQuotes = false
+    var escaped = false
+
+    for character in input {
+        if escaped {
+            current.append(character)
+            escaped = false
+            hasToken = true
+            continue
+        }
+        if character == "\\" && !inSingleQuotes {
+            escaped = true
+            continue
+        }
+        if character == "'" && !inDoubleQuotes {
+            inSingleQuotes.toggle()
+            hasToken = true
+            continue
+        }
+        if character == "\"" && !inSingleQuotes {
+            inDoubleQuotes.toggle()
+            hasToken = true
+            continue
+        }
+        if character.isWhitespace && !inSingleQuotes && !inDoubleQuotes {
+            if hasToken {
+                args.append(current)
+                current = ""
+                hasToken = false
+            }
+            continue
+        }
+        current.append(character)
+        hasToken = true
+    }
+    if hasToken {
+        args.append(current)
+    }
+    return args
+}
+
 /// Converts Docker Compose port specification into a container run -p format.
 /// Handles various formats: "PORT", "HOST:PORT", "IP:HOST:PORT", and optional protocol.
 /// - Parameter portSpec: The port specification string from docker-compose.yml.

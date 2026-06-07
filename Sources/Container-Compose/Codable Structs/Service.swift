@@ -196,10 +196,12 @@ public struct Service: Codable, Hashable {
         ports = try container.decodeIfPresent([String].self, forKey: .ports)
 
         // Decode 'command' which can be either a single string or an array of strings.
+        // Per Compose semantics the string form is shell-lexed into argv
+        // (e.g. `sh -c "npm install"` -> ["sh", "-c", "npm install"]), not passed as one argument.
         if let cmdArray = try? container.decodeIfPresent([String].self, forKey: .command) {
             command = cmdArray
         } else if let cmdString = try? container.decodeIfPresent(String.self, forKey: .command) {
-            command = [cmdString]
+            command = shellLex(cmdString)
         } else {
             command = nil
         }
@@ -222,10 +224,11 @@ public struct Service: Codable, Hashable {
         hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         
         // Decode 'entrypoint' which can be either a single string or an array of strings.
+        // The string form is shell-lexed into argv, matching Compose semantics.
         if let entrypointArray = try? container.decodeIfPresent([String].self, forKey: .entrypoint) {
             entrypoint = entrypointArray
         } else if let entrypointString = try? container.decodeIfPresent(String.self, forKey: .entrypoint) {
-            entrypoint = [entrypointString]
+            entrypoint = shellLex(entrypointString)
         } else {
             entrypoint = nil
         }
