@@ -152,6 +152,23 @@ public func composePortToRunArg(_ portSpec: String) -> String {
     }
 }
 
+/// Resolves a build's context directory and Dockerfile to absolute paths,
+/// interpolating variables (`${VAR}`, `${VAR:-default}`) in both. Per the
+/// Compose spec, `context` is relative to the compose file's directory and
+/// `dockerfile` is relative to the resolved context.
+func resolveBuildPaths(
+    context: String,
+    dockerfile: String?,
+    composeDirectory: String,
+    environmentVariables: [String: String] = [:]
+) -> (contextPath: String, dockerfilePath: String) {
+    let resolvedContext = resolveVariable(context, with: environmentVariables)
+    let contextPath = resolvedPath(for: resolvedContext, relativeTo: URL(fileURLWithPath: composeDirectory, isDirectory: true))
+    let resolvedDockerfile = resolveVariable(dockerfile ?? "Dockerfile", with: environmentVariables)
+    let dockerfilePath = resolvedPath(for: resolvedDockerfile, relativeTo: URL(fileURLWithPath: contextPath, isDirectory: true))
+    return (contextPath, dockerfilePath)
+}
+
 /// Converts a Docker Compose `volumes:` entry into the `--volume` arguments for `container run`.
 /// Internal so tests can reach it via `@testable import ContainerComposeCore`.
 func composeVolumeToRunArgs(

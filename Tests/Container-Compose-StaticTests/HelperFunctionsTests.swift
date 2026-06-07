@@ -32,6 +32,42 @@ struct HelperFunctionsTests {
         #expect(projectName == "_devcontainers")
     }
 
+    @Test("Build context with variable default is interpolated and resolved")
+    func testBuildContextVariableInterpolated() throws {
+        // Regression: `build.context: ${REPOS_PATH:-..}/webapp` was used
+        // literally, producing "context dir does not exist .../${REPOS_PATH:-..}/webapp".
+        let result = resolveBuildPaths(
+            context: "${CC_TEST_REPOS_PATH_UNSET:-..}/webapp",
+            dockerfile: nil,
+            composeDirectory: "/tmp/project/env"
+        )
+        #expect(result.contextPath == "/tmp/project/webapp")
+        #expect(result.dockerfilePath == "/tmp/project/webapp/Dockerfile")
+    }
+
+    @Test("Build context variable resolved from env file")
+    func testBuildContextVariableFromEnvFile() throws {
+        let result = resolveBuildPaths(
+            context: "${CC_TEST_REPOS_PATH_UNSET:-..}/webapp",
+            dockerfile: "docker/Dockerfile.dev",
+            composeDirectory: "/tmp/project/env",
+            environmentVariables: ["CC_TEST_REPOS_PATH_UNSET": "/srv/repos"]
+        )
+        #expect(result.contextPath == "/srv/repos/webapp")
+        #expect(result.dockerfilePath == "/srv/repos/webapp/docker/Dockerfile.dev")
+    }
+
+    @Test("Literal build context stays relative to compose directory")
+    func testLiteralBuildContext() throws {
+        let result = resolveBuildPaths(
+            context: ".",
+            dockerfile: nil,
+            composeDirectory: "/tmp/project/env"
+        )
+        #expect(result.contextPath == "/tmp/project/env")
+        #expect(result.dockerfilePath == "/tmp/project/env/Dockerfile")
+    }
+
     @Test("Resolve explicit relative paths against base URL")
     func testResolvedPathRelativeSegments() throws {
         let baseURL = URL(fileURLWithPath: "/tmp/project/compose/compose.yml").deletingLastPathComponent()
