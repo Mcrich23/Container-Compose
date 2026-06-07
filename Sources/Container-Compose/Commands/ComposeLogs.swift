@@ -31,15 +31,23 @@ public struct ComposeLogs: AsyncParsableCommand, @unchecked Sendable {
 
     public static let configuration: CommandConfiguration = .init(
         commandName: "logs",
-        abstract: "View output from containers"
+        abstract: "View output from containers",
+        discussion: """
+            Within this subcommand, -f means --follow (matching `docker compose \
+            logs -f`). To point at a specific compose file, use --file after the \
+            subcommand, or `container-compose -f <file> logs ...` before it.
+            """
     )
 
     @Argument(help: "Specify the services to show logs for. Defaults to all services.")
     var services: [String] = []
 
-    // Declared long-only because `-f` is owned tool-wide by `--file` (the shared
-    // `ComposeFileOptions`, which `logs` also uses for compose-file resolution).
-    @Flag(name: .customLong("follow"), help: "Follow log output")
+    // Declared long-only so it doesn't collide with `-f`/`--file` from the
+    // shared `ComposeFileOptions` (which `logs` needs for compose-file
+    // propagation). The argv normalization in ArgumentScoping.swift rewrites a
+    // `-f` typed *after* `logs` into `--follow`, so users still get the familiar
+    // `docker compose logs -f`.
+    @Flag(name: .customLong("follow"), help: "Follow log output (also: -f)")
     var follow: Bool = false
 
     @Option(name: .customLong("tail"), help: "Number of lines to show from the end of the logs for each container")
