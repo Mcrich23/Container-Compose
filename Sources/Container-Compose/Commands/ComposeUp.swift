@@ -23,12 +23,12 @@
 
 import ArgumentParser
 import ContainerCommands
-//import ContainerClient
 import ContainerAPIClient
 import ContainerizationExtras
 import Foundation
 @preconcurrency import Rainbow
 import Yams
+import ContainerNetworkServiceClient
 
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}

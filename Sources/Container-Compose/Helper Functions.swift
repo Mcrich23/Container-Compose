@@ -25,6 +25,7 @@ import Foundation
 import Yams
 import Rainbow
 import ContainerCommands
+import ContainerAPIClient
 
 public func resolvedPath(for path: String, relativeTo baseURL: URL) -> String {
     let expandedPath = NSString(string: path).expandingTildeInPath
@@ -231,4 +232,17 @@ public struct CommandResult {
 
 extension NamedColor: @retroactive Codable {
 
+}
+
+extension Flags.Logging {
+    /// Generates an array of flags that allow us to pass down Logging options
+    func passThroughCommands() -> [String] {
+        var flags: [String] = []
+        
+        if debug {
+            flags.append("--debug")
+        }
+        
+        return flags
+    }
 }
