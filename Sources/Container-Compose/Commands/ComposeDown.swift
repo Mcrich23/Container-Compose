@@ -41,7 +41,7 @@ public struct ComposeDown: AsyncParsableCommand {
     @OptionGroup
     var process: Flags.Process
 
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
+    private var cwd: String { composeFileOptions.effectiveCwd(processCwd: process.cwd) }
 
     @OptionGroup
     var composeFileOptions: ComposeFileOptions
