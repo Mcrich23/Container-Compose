@@ -390,7 +390,7 @@ struct ComposeUpTests {
 struct ContainerDependentTrait: TestScoping, TestTrait, SuiteTrait {
     func provideScope(for test: Test, testCase: Test.Case?, performing function: () async throws -> Void) async throws {
         // Start Server
-        try await Application.SystemStart.parse(["--enable-kernel-install"]).run()
+        try await Application.SystemStart.parse(["--enable-kernel-install"]).run(); #warning("This is crashing")
         
         // Run Test
         try await function()
