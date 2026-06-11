@@ -32,18 +32,22 @@ struct WaitForeverCpuTests {
     /// Regression for #27: `waitForever()` must suspend, not busy-loop.
     ///
     /// Method: take a `getrusage(RUSAGE_SELF)` snapshot, spawn a child Task
-    /// that calls `waitForever()`, sleep for 200ms wall-clock, take a second
+    /// that calls `waitForever()`, sleep for 500ms wall-clock, take a second
     /// snapshot, and compare user-CPU consumed.
     ///
     /// On the bug (`for await _ in AsyncStream<Void>(unfolding: {})`), the
-    /// child task pins one core, so user CPU consumed during the 200ms window
-    /// is around 200,000 µs (one full core). With the fix
+    /// child task pins one core, so user CPU consumed during the 500ms window
+    /// is around 500,000 µs (one full core). With the fix
     /// (`withUnsafeContinuation { _ in }`), the child task suspends and
     /// consumes essentially nothing.
     ///
-    /// Threshold of 50,000 µs gives ~4× headroom over a noisy CI baseline
-    /// (test-runner overhead, parallel tasks) while still reliably catching
-    /// a single core's worth of busy-loop work.
+    /// The measurement is process-wide, and swift-testing runs other suites
+    /// in parallel in the same process, so the baseline includes their CPU
+    /// (observed up to ~70,000 µs for the full static suite). That noise is
+    /// front-loaded — the rest of the suite finishes within the first
+    /// ~100ms — while a busy-loop scales with the window. The threshold of
+    /// half a core (250,000 µs over 500ms) therefore sits ~3× above suite
+    /// noise and ~2× below a pinned core.
     ///
     /// Side effect: this test leaks one suspended task per invocation
     /// (`waitForever` is `-> Never` and the suspended task can't be cancelled
@@ -61,12 +65,12 @@ struct WaitForeverCpuTests {
             await composeUp.waitForever()
         }
 
-        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+        try await Task.sleep(nanoseconds: 500_000_000)  // 500ms
 
         let after = userCpuMicroseconds()
         let consumed = after - before
 
-        #expect(consumed < 50_000,
-                "waitForever consumed \(consumed) µs of user CPU in 200ms — likely busy-looping (regression for #27)")
+        #expect(consumed < 250_000,
+                "waitForever consumed \(consumed) µs of user CPU in 500ms — likely busy-looping (regression for #27)")
     }
 }

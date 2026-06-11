@@ -216,6 +216,39 @@ func composeVolumeToRunArgs(
     return args
 }
 
+/// Converts the decoded `services:` mapping into a deterministically ordered
+/// array. Dictionary iteration order varies between runs, which previously
+/// made the topological sort (and therefore partial `up`/`down` selection and
+/// start order among independent services) nondeterministic. YAML file order
+/// is lost during decoding, so alphabetical order is used instead.
+func configuredServices(from services: [String: Service?]) -> [(serviceName: String, service: Service)] {
+    services
+        .compactMap({ serviceName, service in
+            guard let service else { return nil }
+            return (serviceName, service)
+        })
+        .sorted(by: { $0.serviceName < $1.serviceName })
+}
+
+/// Expands the user-requested service names to include their transitive
+/// `depends_on` closure, matching `docker compose up <service>` semantics.
+/// Names that don't match a configured service are ignored.
+func expandServiceSelection(
+    requested: [String],
+    services: [(serviceName: String, service: Service)]
+) -> Set<String> {
+    var selected = Set<String>()
+    var queue = requested
+    while let name = queue.popLast() {
+        guard !selected.contains(name) else { continue }
+        selected.insert(name)
+        if let service = services.first(where: { $0.serviceName == name })?.service {
+            queue.append(contentsOf: service.depends_on ?? [])
+        }
+    }
+    return selected
+}
+
 extension String: @retroactive Error {}
 
 /// A structure representing the result of a command-line process execution.
