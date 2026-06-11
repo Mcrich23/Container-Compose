@@ -33,7 +33,7 @@ struct ComposeUpTests {
     func testWordPressCompose() async throws {
         let yaml = DockerComposeYamlFiles.dockerComposeYaml1
         
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
         let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -96,7 +96,7 @@ struct ComposeUpTests {
 //        func testThreeTierWebAppWithNetworks() async throws {
 //            let yaml = DockerComposeYamlFiles.dockerComposeYaml2
 //    
-//            let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+//            let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
 //            try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
 //            try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
 //            let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -175,7 +175,7 @@ struct ComposeUpTests {
     //    func parseComposeWithHealthchecksAndRestart() async throws {
     //        let yaml = DockerComposeYamlFiles.dockerComposeYaml6
     //
-    //        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+    //        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
     //        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
     //        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
     //        let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -195,7 +195,7 @@ struct ComposeUpTests {
     func TestComplexDependencyChain() async throws {
         let yaml = DockerComposeYamlFiles.dockerComposeYaml8
         
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
         let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -260,7 +260,7 @@ struct ComposeUpTests {
                                     memory: "512MB"
                 """
         
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
         let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
