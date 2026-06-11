@@ -94,12 +94,12 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
         let environmentVariables = loadEnvFile(path: envFilePath)
 
-        let projectName: String
-        if let name = dockerCompose.name {
-            projectName = name
-        } else {
-            projectName = deriveProjectName(cwd: cwd)
-        }
+        let projectName = resolveProjectName(
+            flagValue: composeFileOptions.projectName,
+            composeName: dockerCompose.name,
+            envVars: environmentVariables,
+            cwd: cwd
+        )
 
         var servicesToBuild: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { name, service in
             guard let service, service.build != nil else { return nil }

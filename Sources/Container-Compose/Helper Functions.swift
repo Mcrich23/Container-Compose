@@ -111,6 +111,38 @@ public func deriveProjectName(cwd: String) -> String {
     return projectName
 }
 
+/// Resolves the project name using the same precedence as Docker Compose:
+/// 1. The `-p`/`--project-name` flag, 2. the `COMPOSE_PROJECT_NAME` environment variable
+/// (process environment takes precedence over the .env file), 3. the top-level `name` field
+/// from the compose file (with variable interpolation), 4. the working directory name.
+///
+/// - Parameters:
+///   - flagValue: The value of the `-p`/`--project-name` flag, if provided.
+///   - composeName: The top-level `name` field from the compose file, if present.
+///   - envVars: Environment variables loaded from the .env file.
+///   - cwd: The current working directory path, used as the fallback.
+///   - processEnv: The process environment (injectable for testing).
+/// - Returns: The resolved project name.
+public func resolveProjectName(
+    flagValue: String?,
+    composeName: String?,
+    envVars: [String: String],
+    cwd: String,
+    processEnv: [String: String] = ProcessInfo.processInfo.environment
+) -> String {
+    if let flagValue, !flagValue.isEmpty {
+        return flagValue
+    }
+    let combinedEnv = processEnv.merging(envVars) { (current, _) in current }
+    if let envName = combinedEnv["COMPOSE_PROJECT_NAME"], !envName.isEmpty {
+        return envName
+    }
+    if let composeName {
+        return resolveVariable(composeName, with: envVars)
+    }
+    return deriveProjectName(cwd: cwd)
+}
+
 /// Converts Docker Compose port specification into a container run -p format.
 /// Handles various formats: "PORT", "HOST:PORT", "IP:HOST:PORT", and optional protocol.
 /// - Parameter portSpec: The port specification string from docker-compose.yml.
