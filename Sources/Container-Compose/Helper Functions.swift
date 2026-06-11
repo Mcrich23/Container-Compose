@@ -153,6 +153,33 @@ public func composePortToRunArg(_ portSpec: String) -> String {
     }
 }
 
+/// Returns `true` when a volume source refers to a named volume rather than a
+/// host path (bind mount). Shared by the args builder and the volume pre-scan
+/// in `ComposeUp` so the classification can never drift between call sites.
+func isNamedVolumeSource(_ source: String) -> Bool {
+    !(source.contains("/") || source.starts(with: ".") || source.starts(with: ".."))
+}
+
+/// Resolves the actual native volume name for a top-level compose volume entry,
+/// following Docker Compose naming rules:
+/// - `external`: use the external name (or the key verbatim); never created by this tool.
+/// - explicit top-level `name:`: used verbatim.
+/// - otherwise: `<projectName>_<key>`.
+/// - Parameters:
+///   - key: The volume key from the top-level `volumes:` mapping (or a service-level reference).
+///   - config: The top-level volume configuration, if declared.
+///   - projectName: The resolved compose project name.
+/// - Returns: The native volume name and whether the volume is external (pre-existing).
+func resolveNamedVolume(key: String, config: Volume?, projectName: String) -> (name: String, isExternal: Bool) {
+    if let external = config?.external, external.isExternal {
+        return (external.name ?? key, true)
+    }
+    if let explicitName = config?.name {
+        return (explicitName, false)
+    }
+    return ("\(projectName)_\(key)", false)
+}
+
 /// Converts a Docker Compose `volumes:` entry into the `--volume` arguments for `container run`.
 /// Internal so tests can reach it via `@testable import ContainerComposeCore`.
 func composeVolumeToRunArgs(
@@ -160,7 +187,7 @@ func composeVolumeToRunArgs(
     cwd: String,
     fileManager: FileManager = .default,
     environmentVariables: [String: String] = [:],
-    projectName: String?
+    namedVolumeNames: [String: String] = [:]
 ) throws -> [String] {
     let resolvedVolume = resolveVariable(volume, with: environmentVariables)
     var args: [String] = []
@@ -175,42 +202,34 @@ func composeVolumeToRunArgs(
     let destination = components[1]
     let mode = components.count == 3 ? components[2] : nil
 
-    func bindMountArg(source: String) -> String {
+    func mountArg(source: String) -> String {
         if let mode { return "\(source):\(destination):\(mode)" }
         return "\(source):\(destination)"
     }
 
-    if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
+    if !isNamedVolumeSource(source) {
         let fullHostPath = resolvedPath(for: source, relativeTo: URL(fileURLWithPath: cwd, isDirectory: true))
 
         if fileManager.fileExists(atPath: fullHostPath) {
             args.append("-v")
-            args.append(bindMountArg(source: fullHostPath))
+            args.append(mountArg(source: fullHostPath))
         } else {
             do {
                 try fileManager.createDirectory(atPath: fullHostPath, withIntermediateDirectories: true, attributes: nil)
                 print("Info: Created missing host directory for volume: \(fullHostPath)")
                 args.append("-v")
-                args.append(bindMountArg(source: fullHostPath))
+                args.append(mountArg(source: fullHostPath))
             } catch {
                 print("Error: Could not create host directory '\(fullHostPath)' for volume '\(resolvedVolume)': \(error.localizedDescription). Skipping this volume.")
             }
         }
     } else {
-        guard let projectName else { return [] }
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
-        let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
-        let destinationPath = destinationUrl.path(percentEncoded: false)
-
-        print(
-            "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
-        )
-        try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
-
+        // Named volume reference. Map the compose key to the native volume
+        // name; the caller is responsible for creating the volume and seeding
+        // the mapping. Fall back to the verbatim source if unmapped.
+        let nativeName = namedVolumeNames[source] ?? source
         args.append("-v")
-        let modeStr = mode.map { ":\($0)" } ?? ""
-        args.append("\(volumePath):\(destinationPath)\(modeStr)")
+        args.append(mountArg(source: nativeName))
     }
 
     return args

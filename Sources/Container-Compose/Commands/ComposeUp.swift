@@ -100,6 +100,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
     private var environmentVariables: [String: String] = [:]
+    private var namedVolumeNames: [String: String] = [:]  // compose volume key -> native volume name
     private var containerIps: [String: String] = [:]
     private var containerConsoleColors: [String: NamedColor] = [:]
 
@@ -169,15 +170,37 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Process top-level volumes
-        // This creates named volumes defined in the docker-compose.yml
+        // This creates native named volumes defined in the docker-compose.yml
+        print("\n--- Processing Volumes ---")
+        let existingVolumes = Set((try? await ClientVolume.list())?.map(\.name) ?? [])
         if let volumes = dockerCompose.volumes {
-            print("\n--- Processing Volumes ---")
-            for (volumeName, volumeConfig) in volumes {
-                guard let volumeConfig else { continue }
-                await createVolumeHardLink(name: volumeName, config: volumeConfig)
+            for (volumeKey, volumeConfig) in volumes {
+                let (nativeName, isExternal) = resolveNamedVolume(key: volumeKey, config: volumeConfig, projectName: projectName ?? "")
+                namedVolumeNames[volumeKey] = nativeName
+                if isExternal {
+                    print("Info: Volume '\(volumeKey)' is declared as external. Assuming '\(nativeName)' already exists; it will not be created.")
+                    continue
+                }
+                try await createNamedVolume(key: volumeKey, name: nativeName, config: volumeConfig, existing: existingVolumes)
             }
-            print("--- Volumes Processed ---\n")
         }
+
+        // Create named volumes referenced by services but not declared top-level.
+        // Docker Compose errors in this case; this tool has historically been
+        // tolerant, so create them on demand instead.
+        for (_, service) in services {
+            for volume in service.volumes ?? [] {
+                let resolvedVolume = resolveVariable(volume, with: environmentVariables)
+                guard let source = resolvedVolume.split(separator: ":", maxSplits: 2).map(String.init).first,
+                    isNamedVolumeSource(source), namedVolumeNames[source] == nil
+                else { continue }
+                let (nativeName, _) = resolveNamedVolume(key: source, config: nil, projectName: projectName ?? "")
+                print("Info: Volume '\(source)' is referenced by a service but not declared top-level. Creating '\(nativeName)'.")
+                namedVolumeNames[source] = nativeName
+                try await createNamedVolume(key: source, name: nativeName, config: nil, existing: existingVolumes)
+            }
+        }
+        print("--- Volumes Processed ---\n")
 
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
@@ -323,17 +346,28 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
-    private func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
-        guard let projectName else { return }
-        let actualVolumeName = volumeConfig.name ?? volumeName  // Use explicit name or key as name
-
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(actualVolumeName)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
-
-        print(
-            "Warning: Volume source '\(actualVolumeName)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
-        )
-        try? fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+    private func createNamedVolume(key: String, name: String, config: Volume?, existing: Set<String>) async throws {
+        guard !existing.contains(name) else {
+            print("Volume '\(key)' (\(name)) already exists")
+            return
+        }
+        print("Creating volume: \(key) (Actual name: \(name))")
+        do {
+            _ = try await ClientVolume.create(
+                name: name,
+                driver: config?.driver ?? "local",
+                driverOpts: config?.driver_opts ?? [:],
+                labels: config?.labels ?? [:]
+            )
+            print("Volume '\(key)' created")
+        } catch {
+            // Tolerate races with the pre-check: an already-existing volume is success.
+            if (try? await ClientVolume.inspect(name)) != nil {
+                print("Volume '\(key)' (\(name)) already exists")
+                return
+            }
+            throw error
+        }
     }
 
     private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
@@ -739,7 +773,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func configVolume(_ volume: String) async throws -> [String] {
-        try composeVolumeToRunArgs(volume, cwd: cwd, fileManager: fileManager, environmentVariables: environmentVariables, projectName: projectName)
+        try composeVolumeToRunArgs(volume, cwd: cwd, fileManager: fileManager, environmentVariables: environmentVariables, namedVolumeNames: namedVolumeNames)
     }
 }
 
