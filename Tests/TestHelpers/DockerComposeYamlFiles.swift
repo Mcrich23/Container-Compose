@@ -237,7 +237,7 @@ public struct DockerComposeYamlFiles {
             image: python:3.12-alpine
             depends_on:
               - db
-            command: python -m http.server 8000
+            command: ["python", "-m", "http.server", "8000"]
             environment:
               DATABASE_URL: postgres://postgres:postgres@db:5432/appdb
 
@@ -277,7 +277,7 @@ public struct DockerComposeYamlFiles {
     /// - Returns: A TemporaryProject containing the URL and project name.
     public static func copyYamlToTemporaryLocation(yaml: String) throws -> TemporaryProject {
         let tempLocation = URL.temporaryDirectory.appending(
-            path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+            path: "\(makeContainerName())/docker-compose.yaml")
         let tempBase = tempLocation.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: tempBase, withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)

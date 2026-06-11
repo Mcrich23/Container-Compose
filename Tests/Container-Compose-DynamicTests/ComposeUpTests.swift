@@ -33,7 +33,7 @@ struct ComposeUpTests {
     func testWordPressCompose() async throws {
         let yaml = DockerComposeYamlFiles.dockerComposeYaml1
         
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
         let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -64,7 +64,7 @@ struct ComposeUpTests {
         
         // Check Environment
         let wpEnv = parseEnvToDict(wordpressContainer.configuration.initProcess.environment)
-        #expect(wpEnv["WORDPRESS_DB_HOST"] == dbContainer.networks.first!.ipv4Gateway.description)
+        #expect(wpEnv["WORDPRESS_DB_HOST"] == dbContainer.networks.compactMap { $0.ipv4Address.address.description }.first)
         #expect(wpEnv["WORDPRESS_DB_USER"] == "wordpress")
         #expect(wpEnv["WORDPRESS_DB_PASSWORD"] == "wordpress")
         #expect(wpEnv["WORDPRESS_DB_NAME"] == "wordpress")
@@ -96,7 +96,7 @@ struct ComposeUpTests {
 //        func testThreeTierWebAppWithNetworks() async throws {
 //            let yaml = DockerComposeYamlFiles.dockerComposeYaml2
 //    
-//            let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+//            let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
 //            try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
 //            try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
 //            let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -175,7 +175,7 @@ struct ComposeUpTests {
     //    func parseComposeWithHealthchecksAndRestart() async throws {
     //        let yaml = DockerComposeYamlFiles.dockerComposeYaml6
     //
-    //        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+    //        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
     //        try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
     //        try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
     //        let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -195,7 +195,7 @@ struct ComposeUpTests {
     func TestComplexDependencyChain() async throws {
         let yaml = DockerComposeYamlFiles.dockerComposeYaml8
         
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
         let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -224,7 +224,8 @@ struct ComposeUpTests {
         #expect(appContainer.configuration.image.reference == "docker.io/library/python:3.12-alpine")
         let appEnv = parseEnvToDict(appContainer.configuration.initProcess.environment)
         #expect(appEnv["DATABASE_URL"] == "postgres://postgres:postgres@db:5432/appdb")
-        #expect(appContainer.configuration.initProcess.executable == "python -m http.server 8000")
+        #expect(appContainer.configuration.initProcess.executable == "python")
+        #expect(appContainer.configuration.initProcess.arguments == ["-m", "http.server", "8000"])
         #expect(appContainer.configuration.platform.architecture == "arm64")
         #expect(appContainer.configuration.platform.os == "linux")
         
@@ -260,7 +261,7 @@ struct ComposeUpTests {
                                     memory: "512MB"
                 """
         
-        let tempLocation = URL.temporaryDirectory.appending(path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+        let tempLocation = URL.temporaryDirectory.appending(path: "\(makeContainerName())/docker-compose.yaml")
         try? FileManager.default.createDirectory(at: tempLocation.deletingLastPathComponent(), withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)
         let folderName = tempLocation.deletingLastPathComponent().lastPathComponent
@@ -389,7 +390,7 @@ struct ComposeUpTests {
 struct ContainerDependentTrait: TestScoping, TestTrait, SuiteTrait {
     func provideScope(for test: Test, testCase: Test.Case?, performing function: () async throws -> Void) async throws {
         // Start Server
-        try await Application.SystemStart.parse(["--enable-kernel-install"]).run()
+        try await Application.SystemStart.parse(["--enable-kernel-install"]).run(); #warning("This is crashing")
         
         // Run Test
         try await function()
