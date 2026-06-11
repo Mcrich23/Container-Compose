@@ -224,7 +224,8 @@ struct ComposeUpTests {
         #expect(appContainer.configuration.image.reference == "docker.io/library/python:3.12-alpine")
         let appEnv = parseEnvToDict(appContainer.configuration.initProcess.environment)
         #expect(appEnv["DATABASE_URL"] == "postgres://postgres:postgres@db:5432/appdb")
-        #expect(appContainer.configuration.initProcess.executable == "python -m http.server 8000")
+        #expect(appContainer.configuration.initProcess.executable == "python")
+        #expect(appContainer.configuration.initProcess.arguments == ["-m", "http.server", "8000"])
         #expect(appContainer.configuration.platform.architecture == "arm64")
         #expect(appContainer.configuration.platform.os == "linux")
         

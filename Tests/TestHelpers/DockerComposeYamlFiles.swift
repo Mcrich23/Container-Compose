@@ -237,7 +237,7 @@ public struct DockerComposeYamlFiles {
             image: python:3.12-alpine
             depends_on:
               - db
-            command: python -m http.server 8000
+            command: ["python", "-m", "http.server", "8000"]
             environment:
               DATABASE_URL: postgres://postgres:postgres@db:5432/appdb
 
