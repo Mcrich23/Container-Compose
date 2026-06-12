@@ -535,11 +535,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("Note: Service '\(serviceName)' is not explicitly connected to any networks. It will likely use the default bridge network.")
         }
 
-        // Add hostname
+        // The 'hostname' field is not supported by `container run` (no --hostname
+        // flag); passing it would make the whole run command fail to parse.
         if let hostname = service.hostname {
-            let resolvedHostname = resolveVariable(hostname, with: environmentVariables)
-            runCommandArgs.append("--hostname")
-            runCommandArgs.append(resolvedHostname)
+            print(
+                "Note: Service '\(serviceName)' sets 'hostname: \(hostname)', but the 'container' tool does not support setting a hostname. The field is ignored."
+            )
         }
 
         // Add working directory
