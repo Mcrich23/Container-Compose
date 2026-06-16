@@ -24,4 +24,46 @@ struct ComposeCommandParsingTests {
         let cmd = try Main.parseAsRoot(["-f", "my-compose.yaml", "up"]) as! ComposeUp
         #expect(cmd.composeFileOptions.composeFilename == "my-compose.yaml")
     }
+
+    @Test("Main+ComposeUp command accepts --env-file flag from root")
+    func composeUpCommandAcceptsEnvFileFlag() throws {
+        let cmd = try Main.parseAsRoot(["--env-file", "custom.env", "up"]) as! ComposeUp
+        #expect(cmd.composeFileOptions.envFile == "custom.env")
+    }
+
+    @Test("Main+ComposeUp command accepts --env-file flag on subcommand")
+    func composeUpCommandAcceptsEnvFileFlagOnSubcommand() throws {
+        let cmd = try Main.parseAsRoot(["up", "--env-file", "custom.env"]) as! ComposeUp
+        #expect(cmd.composeFileOptions.envFile == "custom.env")
+    }
+
+    @Test("Main+ComposeUp command accepts -w flag for workdir")
+    func composeUpCommandAcceptsWorkdirFlag() throws {
+        let cmd = try Main.parseAsRoot(["-w", "/some/path", "up"]) as! ComposeUp
+        #expect(cmd.composeFileOptions.workdir == "/some/path")
+    }
+
+    @Test("Main+ComposeDown command accepts --env-file flag")
+    func composeDownCommandAcceptsEnvFileFlag() throws {
+        let cmd = try Main.parseAsRoot(["--env-file", "prod.env", "down"]) as! ComposeDown
+        #expect(cmd.composeFileOptions.envFile == "prod.env")
+    }
+
+    @Test("Main+ComposeBuild command accepts --env-file flag")
+    func composeBuildCommandAcceptsEnvFileFlag() throws {
+        let cmd = try Main.parseAsRoot(["--env-file", "build.env", "build"]) as! ComposeBuild
+        #expect(cmd.composeFileOptions.envFile == "build.env")
+    }
+
+    @Test("envFile is nil when not specified")
+    func envFileDefaultsToNil() throws {
+        let cmd = try Main.parseAsRoot(["up"]) as! ComposeUp
+        #expect(cmd.composeFileOptions.envFile == nil)
+    }
+
+    @Test("workdir is nil when not specified")
+    func workdirDefaultsToNil() throws {
+        let cmd = try Main.parseAsRoot(["up"]) as! ComposeUp
+        #expect(cmd.composeFileOptions.workdir == nil)
+    }
 }

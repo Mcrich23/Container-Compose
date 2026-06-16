@@ -18,7 +18,19 @@ import ArgumentParser
 
 public struct ComposeFileOptions: ParsableArguments, Sendable {
     public init() {}
+
+    public init(composeFilename: String? = nil, envFile: String? = nil, workdir: String? = nil) {
+        self.composeFilename = composeFilename
+        self.envFile = envFile
+        self.workdir = workdir
+    }
     
     @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
     public var composeFilename: String?
+
+    @Option(name: .long, help: "Specify an alternate environment file")
+    public var envFile: String?
+
+    @Option(name: [.customShort("w"), .customLong("workdir")], help: "Specify an alternate working directory (default: the current directory)")
+    public var workdir: String?
 }

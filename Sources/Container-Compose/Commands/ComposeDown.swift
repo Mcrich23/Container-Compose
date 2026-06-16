@@ -22,7 +22,6 @@
 //
 
 import ArgumentParser
-import ContainerCommands
 import ContainerAPIClient
 import Foundation
 import Yams
@@ -39,12 +38,9 @@ public struct ComposeDown: AsyncParsableCommand {
     var services: [String] = []
 
     @OptionGroup
-    var process: Flags.Process
-
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
-
-    @OptionGroup
     var composeFileOptions: ComposeFileOptions
+
+    private var cwd: String { composeFileOptions.workdir ?? FileManager.default.currentDirectoryPath }
 
     private static let supportedComposeFilenames = [
         "compose.yml",
