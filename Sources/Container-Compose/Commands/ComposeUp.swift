@@ -449,6 +449,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         runCommandArgs.append("--name")
         runCommandArgs.append(containerName)
 
+        // Stamp Docker-Compose-compatible project/service labels so external tools (GUIs,
+        // dashboards) can group a stack's containers reliably by label, instead of guessing
+        // from the `<project>-<service>` name prefix (which mis-groups unrelated containers
+        // that merely share a prefix).
+        runCommandArgs.append(contentsOf: ["--label", "com.docker.compose.project=\(projectName)"])
+        runCommandArgs.append(contentsOf: ["--label", "com.docker.compose.service=\(serviceName)"])
+
         // REMOVED: Restart policy is not supported by `container run`
         // if let restart = service.restart {
         //     runCommandArgs.append("--restart")
