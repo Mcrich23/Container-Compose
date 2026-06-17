@@ -242,7 +242,7 @@ struct DockerComposeParsingTests {
         #expect(compose.services["app"]??.command?.first == "sh")
     }
     
-    @Test("Parse compose with command as string")
+    @Test("Parse compose with command as string is shell-lexed")
     func parseComposeWithCommandString() throws {
         let yaml = """
         version: '3.8'
@@ -251,12 +251,31 @@ struct DockerComposeParsingTests {
             image: alpine:latest
             command: "echo hello"
         """
-        
+
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services["app"]??.command?.count == 1)
-        #expect(compose.services["app"]??.command?.first == "echo hello")
+
+        #expect(compose.services["app"]??.command == ["echo", "hello"])
+    }
+
+    @Test("Parse compose with quoted string command preserves quoted argument")
+    func parseComposeWithQuotedStringCommand() throws {
+        // Regression: the whole string was passed as a single argument,
+        // producing 'Cannot find module .../sh -c "npm install && npm run build:watch"'.
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: node:18-alpine
+            command: sh -c "npm install && npm run build:watch"
+            entrypoint: /bin/sh -c
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.command == ["sh", "-c", "npm install && npm run build:watch"])
+        #expect(compose.services["app"]??.entrypoint == ["/bin/sh", "-c"])
     }
     
     @Test("Parse compose with restart policy")

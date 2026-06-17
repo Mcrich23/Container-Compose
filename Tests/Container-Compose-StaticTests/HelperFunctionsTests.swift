@@ -98,6 +98,36 @@ struct HelperFunctionsTests {
         #expect(result == "0.0.0.0:3000:3000")
     }
 
+    @Test("Shell lex - plain words")
+    func testShellLexPlainWords() throws {
+        #expect(shellLex("echo hello world") == ["echo", "hello", "world"])
+    }
+
+    @Test("Shell lex - double-quoted argument kept as one token")
+    func testShellLexDoubleQuotes() throws {
+        #expect(shellLex("sh -c \"npm install && npm run build:watch\"") == ["sh", "-c", "npm install && npm run build:watch"])
+    }
+
+    @Test("Shell lex - single-quoted argument kept as one token")
+    func testShellLexSingleQuotes() throws {
+        #expect(shellLex("sh -c 'echo \"nested\" done'") == ["sh", "-c", "echo \"nested\" done"])
+    }
+
+    @Test("Shell lex - escaped space joins token")
+    func testShellLexEscapedSpace() throws {
+        #expect(shellLex("cat my\\ file.txt") == ["cat", "my file.txt"])
+    }
+
+    @Test("Shell lex - empty quoted string produces empty token")
+    func testShellLexEmptyQuotes() throws {
+        #expect(shellLex("env VAR= \"\"") == ["env", "VAR=", ""])
+    }
+
+    @Test("Shell lex - collapses repeated whitespace")
+    func testShellLexWhitespaceRuns() throws {
+        #expect(shellLex("  npm   run    dev  ") == ["npm", "run", "dev"])
+    }
+
 }
 
 /// Trait that creates a unique temporary directory before a test runs and removes it after.
