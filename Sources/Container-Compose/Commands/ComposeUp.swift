@@ -261,32 +261,60 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return ip
     }
 
-    /// Repeatedly checks `container list -a` until the given container is listed as `running`.
+    /// Thread-safe timestamp of the most recent output from a service's
+    /// `container run` subprocess. Written from the streaming `Task` and read by
+    /// the readiness wait to tell "slow but progressing" apart from "stuck".
+    private final class ActivityClock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _lastActivity = Date()
+        func touch() {
+            lock.lock(); _lastActivity = Date(); lock.unlock()
+        }
+        var lastActivity: Date {
+            lock.lock(); defer { lock.unlock() }
+            return _lastActivity
+        }
+    }
+
+    /// Repeatedly polls until the named container reports `running`.
+    ///
+    /// The container is launched by a `container run` subprocess that may first
+    /// download images — notably the one-time ~64 MB init image — and that pull
+    /// happens *inside* this wait window. A fixed wall-clock timeout therefore
+    /// aborted mid-download on slow connections (`up -d` failing with
+    /// "Timed out waiting for container ... to be running").
+    ///
+    /// Instead we use an *idle* timeout: the run subprocess streams pull/startup
+    /// progress into `activity`, so we only give up after `idleTimeout` seconds
+    /// with no output *and* the container still not running — i.e. genuinely
+    /// stuck, not merely slow. Mirrors `docker compose up`, which shows pull
+    /// progress and doesn't bail during an active download.
     /// - Parameters:
-    ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
-    ///   - timeout: Max seconds to wait before failing.
+    ///   - serviceName: Compose service name; the container is `<project>-<service>`.
+    ///   - activity: Tracks the last time the run subprocess produced output.
+    ///   - idleTimeout: Max seconds of no output (while not running) before failing.
     ///   - interval: How often to poll (in seconds).
-    /// - Returns: `true` if the container reached "running" state within the timeout.
-    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
+    private func waitUntilServiceIsRunning(_ serviceName: String, activity: ActivityClock, idleTimeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
         guard let projectName else { return }
         let containerName = "\(projectName)-\(serviceName)"
-
-        let deadline = Date().addingTimeInterval(timeout)
         let client = ContainerClient()
 
-        while Date() < deadline {
+        while true {
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             let container = try? await client.get(id: containerName)
             if container?.status == .running {
                 return
             }
+            // An active pull keeps refreshing `activity`, pushing the deadline
+            // out, so slow downloads never trip this — only genuine silence does.
+            if Date().timeIntervalSince(activity.lastActivity) > idleTimeout {
+                throw NSError(
+                    domain: "ContainerWait", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                    ])
+            }
         }
-
-        throw NSError(
-            domain: "ContainerWait", code: 1,
-            userInfo: [
-                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
-            ])
     }
 
     private func stopOldStuff(_ services: [String], remove: Bool) async throws {
@@ -625,9 +653,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         self.containerConsoleColors[serviceName] = serviceColor
 
-        Task { [self, serviceColor] in
+        // Tracks output from the run subprocess so the readiness wait below can
+        // tell an in-progress image pull from a stuck container.
+        let activity = ActivityClock()
+
+        Task { [self, serviceColor, activity] in
             @Sendable
             func handleOutput(_ output: String) {
+                activity.touch()
                 print("\(serviceName): \(output)".applyingColor(serviceColor))
             }
 
@@ -638,7 +671,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         do {
-            try await waitUntilServiceIsRunning(serviceName)
+            try await waitUntilServiceIsRunning(serviceName, activity: activity)
             try await updateEnvironmentWithServiceIP(serviceName)
         } catch {
             print(error)
