@@ -375,6 +375,37 @@ struct ComposeUpTests {
         try? await stopInstance(location: upProject.base)
     }
 
+    @Test("up with explicit container_name starts the right container")
+    func testUpWithExplicitContainerName() async throws {
+        let explicitName = "container-compose-test-\(makeContainerName())"
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml9(containerName: explicitName)
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        var composeUp = try ComposeUp.parse([
+            "-d", "--cwd", project.base.path(percentEncoded: false),
+        ])
+        try await composeUp.run()
+
+        let client = ContainerClient()
+        let container = try? await client.get(id: explicitName)
+        #expect(
+            container != nil,
+            "Expected container \(explicitName) to exist after up, but get returned nil"
+        )
+        #expect(
+            container?.status == .running,
+            "Expected container \(explicitName) to be running, got \(container?.status ?? .unknown)"
+        )
+
+        let resolvedIP = container?.networks.compactMap { $0.ipv4Address.address.description }.first
+        #expect(
+            resolvedIP != nil,
+            "Expected getIPForRunningService to resolve an IP for \(explicitName); got nil. A swallowed wait timeout would also produce a running container with no networks."
+        )
+
+        try? await stopInstance(location: project.base)
+    }
+
     enum Errors: Error {
         case containerNotFound
     }

@@ -303,4 +303,10 @@ public struct Service: Codable, Hashable {
 
         return sorted
     }
+
+    /// Returns the container name, preferring an explicit `container_name` over the default pattern.
+    public func containerName(projectName: String, serviceName: String) -> String {
+        if let explicit = container_name { return explicit }
+        return "\(projectName)-\(serviceName)"
+    }
 }

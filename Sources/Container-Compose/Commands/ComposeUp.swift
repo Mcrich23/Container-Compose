@@ -156,7 +156,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Stop Services
-        try await stopOldStuff(services.map({ $0.serviceName }), remove: true)
+        try await stopOldStuff(services, remove: true)
 
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
@@ -246,10 +246,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return (entrypointFlag, positional)
     }
 
-    private func getIPForRunningService(_ serviceName: String) async throws -> String? {
+    private func getIPForRunningService(_ service: Service, serviceName: String) async throws -> String? {
         guard let projectName else { return nil }
 
-        let containerName = "\(projectName)-\(serviceName)"
+        let containerName = service.containerName(projectName: projectName, serviceName: serviceName)
 
         let client = ContainerClient()
         let container = try await client.get(id: containerName)
@@ -263,13 +263,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     /// Repeatedly checks `container list -a` until the given container is listed as `running`.
     /// - Parameters:
-    ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
+    ///   - service: The Service definition (needed to read `container_name`).
+    ///   - serviceName: The service key in `docker-compose.yml`.
     ///   - timeout: Max seconds to wait before failing.
     ///   - interval: How often to poll (in seconds).
     /// - Returns: `true` if the container reached "running" state within the timeout.
-    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
+    private func waitUntilServiceIsRunning(_ service: Service, serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
         guard let projectName else { return }
-        let containerName = "\(projectName)-\(serviceName)"
+        let containerName = service.containerName(projectName: projectName, serviceName: serviceName)
 
         let deadline = Date().addingTimeInterval(timeout)
         let client = ContainerClient()
@@ -289,14 +290,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             ])
     }
 
-    private func stopOldStuff(_ services: [String], remove: Bool) async throws {
+    private func stopOldStuff(_ services: [(serviceName: String, service: Service)], remove: Bool) async throws {
         guard let projectName else { return }
-        let containers = services.map { "\(projectName)-\($0)" }
 
-        for container in containers {
-            print("Stopping container: \(container)")
+        for (serviceName, service) in services {
+            let containerName = service.containerName(projectName: projectName, serviceName: serviceName)
+            print("Stopping container: \(containerName)")
             let client = ContainerClient()
-            guard let container = try? await client.get(id: container) else { continue }
+            guard let container = try? await client.get(id: containerName) else { continue }
 
             do {
                 try await client.stop(id: container.id)
@@ -315,8 +316,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     // MARK: Compose Top Level Functions
 
-    private mutating func updateEnvironmentWithServiceIP(_ serviceName: String) async throws {
-        let ip = try await getIPForRunningService(serviceName)
+    private mutating func updateEnvironmentWithServiceIP(_ service: Service, serviceName: String) async throws {
+        let ip = try await getIPForRunningService(service, serviceName: serviceName)
         self.containerIps[serviceName] = ip
         for (key, value) in environmentVariables.map({ ($0, $1) }) where value == serviceName {
             self.environmentVariables[key] = ip ?? value
@@ -438,13 +439,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Determine container name
-        let containerName: String
-        if let explicitContainerName = service.container_name {
-            containerName = explicitContainerName
+        let containerName = service.containerName(projectName: projectName, serviceName: serviceName)
+        if service.container_name != nil {
             print("Info: Using explicit container_name: \(containerName)")
-        } else {
-            // Default container name based on project and service name
-            containerName = "\(projectName)-\(serviceName)"
         }
         runCommandArgs.append("--name")
         runCommandArgs.append(containerName)
@@ -638,8 +635,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         do {
-            try await waitUntilServiceIsRunning(serviceName)
-            try await updateEnvironmentWithServiceIP(serviceName)
+            try await waitUntilServiceIsRunning(service, serviceName: serviceName)
+            try await updateEnvironmentWithServiceIP(service, serviceName: serviceName)
         } catch {
             print(error)
         }
