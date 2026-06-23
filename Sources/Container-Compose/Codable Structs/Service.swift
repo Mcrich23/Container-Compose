@@ -65,6 +65,12 @@ public struct Service: Codable, Hashable {
     /// Explicit name for the container instance
     public let container_name: String?
 
+    /// User-defined labels applied to the container (e.g. `{ "foo": "bar" }`).
+    /// Passed through as `--label key=value`; the `com.docker.compose.project` and
+    /// `com.docker.compose.service` labels are additionally stamped by `ComposeUp`
+    /// and take precedence over any user value for those keys.
+    public let labels: [String: String]?
+
     /// List of networks the service will connect to
     public let networks: [String]?
 
@@ -104,7 +110,7 @@ public struct Service: Codable, Hashable {
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
-             container_name, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform
+             container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform
     }
     
     /// Public memberwise initializer for testing
@@ -122,6 +128,7 @@ public struct Service: Codable, Hashable {
         depends_on: [String]? = nil,
         user: String? = nil,
         container_name: String? = nil,
+        labels: [String: String]? = nil,
         networks: [String]? = nil,
         hostname: String? = nil,
         entrypoint: [String]? = nil,
@@ -148,6 +155,7 @@ public struct Service: Codable, Hashable {
         self.depends_on = depends_on
         self.user = user
         self.container_name = container_name
+        self.labels = labels
         self.networks = networks
         self.hostname = hostname
         self.entrypoint = entrypoint
@@ -218,6 +226,7 @@ public struct Service: Codable, Hashable {
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
         container_name = try container.decodeIfPresent(String.self, forKey: .container_name)
+        labels = try container.decodeIfPresent([String: String].self, forKey: .labels)
         networks = try container.decodeIfPresent([String].self, forKey: .networks)
         hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         
