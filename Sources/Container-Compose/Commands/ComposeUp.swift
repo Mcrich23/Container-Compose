@@ -261,21 +261,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return ip
     }
 
-    /// Thread-safe timestamp of the most recent output from a service's
-    /// `container run` subprocess. Written from the streaming `Task` and read by
-    /// the readiness wait to tell "slow but progressing" apart from "stuck".
-    private final class ActivityClock: @unchecked Sendable {
-        private let lock = NSLock()
-        private var _lastActivity = Date()
-        func touch() {
-            lock.lock(); _lastActivity = Date(); lock.unlock()
-        }
-        var lastActivity: Date {
-            lock.lock(); defer { lock.unlock() }
-            return _lastActivity
-        }
-    }
-
     /// Repeatedly polls until the named container reports `running`.
     ///
     /// The container is launched by a `container run` subprocess that may first
@@ -289,15 +274,23 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// with no output *and* the container still not running — i.e. genuinely
     /// stuck, not merely slow. Mirrors `docker compose up`, which shows pull
     /// progress and doesn't bail during an active download.
+    ///
+    /// On top of the idle timeout we keep an absolute `maxWait` backstop: a
+    /// container that keeps dribbling output every few seconds without ever
+    /// reaching `running` would otherwise refresh `activity` forever and hang
+    /// `up -d` indefinitely. The backstop bounds that pathological case while
+    /// still leaving plenty of room for a genuinely slow (but progressing) pull.
     /// - Parameters:
     ///   - serviceName: Compose service name; the container is `<project>-<service>`.
     ///   - activity: Tracks the last time the run subprocess produced output.
     ///   - idleTimeout: Max seconds of no output (while not running) before failing.
+    ///   - maxWait: Absolute ceiling on the wait, regardless of ongoing output.
     ///   - interval: How often to poll (in seconds).
-    private func waitUntilServiceIsRunning(_ serviceName: String, activity: ActivityClock, idleTimeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
+    private func waitUntilServiceIsRunning(_ serviceName: String, activity: ActivityClock, idleTimeout: TimeInterval = 30, maxWait: TimeInterval = 300, interval: TimeInterval = 0.5) async throws {
         guard let projectName else { return }
         let containerName = "\(projectName)-\(serviceName)"
         let client = ContainerClient()
+        let start = Date()
 
         while true {
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
@@ -305,13 +298,24 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             if container?.status == .running {
                 return
             }
-            // An active pull keeps refreshing `activity`, pushing the deadline
-            // out, so slow downloads never trip this — only genuine silence does.
-            if Date().timeIntervalSince(activity.lastActivity) > idleTimeout {
+            let now = Date()
+            // An active pull keeps refreshing `activity`, pushing the idle
+            // deadline out, so slow downloads never trip this — only genuine
+            // silence does.
+            if now.timeIntervalSince(activity.lastActivity) > idleTimeout {
                 throw NSError(
                     domain: "ContainerWait", code: 1,
                     userInfo: [
                         NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                    ])
+            }
+            // Absolute backstop: even with continuous output, never wait past
+            // `maxWait` for the container to come up.
+            if now.timeIntervalSince(start) > maxWait {
+                throw NSError(
+                    domain: "ContainerWait", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running (exceeded \(Int(maxWait))s)."
                     ])
             }
         }
@@ -657,7 +661,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // tell an in-progress image pull from a stuck container.
         let activity = ActivityClock()
 
-        Task { [self, serviceColor, activity] in
+        let runTask = Task { [self, serviceColor, activity] in
             @Sendable
             func handleOutput(_ output: String) {
                 activity.touch()
@@ -674,6 +678,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             try await waitUntilServiceIsRunning(serviceName, activity: activity)
             try await updateEnvironmentWithServiceIP(serviceName)
         } catch {
+            // The wait gave up (idle/backstop timeout) but the `container run`
+            // subprocess is still streaming in the background. Tear it down so
+            // it doesn't leak past the failed wait: cancel the streaming task
+            // and stop the container, which also lets the subprocess exit.
+            runTask.cancel()
+            try? await stopOldStuff([serviceName], remove: false)
             print(error)
         }
     }
