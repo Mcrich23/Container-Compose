@@ -276,10 +276,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         environmentVariables: [String: String],
         supportsAliases: Bool = supportsNetworkAliases()
     ) -> (arg: String, warning: String?) {
-        let resolvedAliases = aliases.map { resolveVariable($0, with: environmentVariables) }
-        guard !resolvedAliases.isEmpty else {
-            return (network, nil)
-        }
+        let resolvedAliases = ([serviceName] + aliases.map { resolveVariable($0, with: environmentVariables) })
+            .reduce(into: [String]()) { result, alias in
+                guard !alias.isEmpty, !result.contains(alias) else { return }
+                result.append(alias)
+            }
 
         if supportsAliases {
             let aliasProperties = resolvedAliases.map { "alias=\($0)" }.joined(separator: ",")
