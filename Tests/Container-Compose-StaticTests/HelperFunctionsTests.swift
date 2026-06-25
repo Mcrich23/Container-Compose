@@ -220,4 +220,27 @@ struct ComposeVolumeTests {
         #expect(result == [])
     }
 
+    @Test("Named volume is forwarded using native container volume syntax")
+    func testNamedVolumeUsesNativeVolumeSyntax() throws {
+        let result = try composeVolumeToRunArgs(
+            "data:/var/lib/postgresql/data",
+            cwd: "/tmp",
+            projectName: "test"
+        )
+        #expect(result == ["-v", "data:/var/lib/postgresql/data"])
+    }
+
+    @Test("Named volume uses explicit top-level volume name")
+    func testNamedVolumeUsesExplicitTopLevelName() throws {
+        let result = try composeVolumeToRunArgs(
+            "db-data:/var/lib/postgresql/data:ro",
+            cwd: "/tmp",
+            projectName: "test",
+            volumeDefinitions: [
+                "db-data": Volume(name: "prod-db-data")
+            ]
+        )
+        #expect(result == ["-v", "prod-db-data:/var/lib/postgresql/data:ro"])
+    }
+
 }

@@ -29,6 +29,11 @@ import Foundation
 @preconcurrency import Rainbow
 import Yams
 
+private enum ServiceStartState: Codable, Equatable {
+    case running
+    case completed
+}
+
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
 
@@ -101,6 +106,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private var projectName: String?
     private var environmentVariables: [String: String] = [:]
     private var containerIps: [String: String] = [:]
+    private var serviceStartStates: [String: ServiceStartState] = [:]
+    private var serviceHealth: [String: Bool] = [:]
     private var containerConsoleColors: [String: NamedColor] = [:]
 
     private static let availableContainerConsoleColors: Set<NamedColor> = [
@@ -174,7 +181,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\n--- Processing Volumes ---")
             for (volumeName, volumeConfig) in volumes {
                 guard let volumeConfig else { continue }
-                await createVolumeHardLink(name: volumeName, config: volumeConfig)
+                try await createVolume(name: volumeName, config: volumeConfig)
             }
             print("--- Volumes Processed ---\n")
         }
@@ -246,6 +253,22 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return (entrypointFlag, positional)
     }
 
+    static func hostnameRunArgs(
+        hostname: String?,
+        serviceName: String,
+        environmentVariables: [String: String]
+    ) -> (args: [String], warning: String?) {
+        guard let hostname else {
+            return ([], nil)
+        }
+
+        let resolvedHostname = resolveVariable(hostname, with: environmentVariables)
+        return (
+            [],
+            "Warning: Service '\(serviceName)' defines hostname '\(resolvedHostname)', but Apple Container does not currently expose a container run hostname flag."
+        )
+    }
+
     private func getIPForRunningService(_ serviceName: String) async throws -> String? {
         guard let projectName else { return nil }
 
@@ -261,14 +284,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return ip
     }
 
-    /// Repeatedly checks `container list -a` until the given container is listed as `running`.
+    /// Repeatedly checks `container list -a` until the given container is listed as `running` or `stopped`.
     /// - Parameters:
     ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
     ///   - timeout: Max seconds to wait before failing.
     ///   - interval: How often to poll (in seconds).
-    /// - Returns: `true` if the container reached "running" state within the timeout.
-    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
-        guard let projectName else { return }
+    private func waitUntilServiceStarted(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws -> ServiceStartState {
+        guard let projectName else { throw ComposeError.invalidProjectName }
         let containerName = "\(projectName)-\(serviceName)"
 
         let deadline = Date().addingTimeInterval(timeout)
@@ -278,14 +300,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             let container = try? await client.get(id: containerName)
             if container?.status == .running {
-                return
+                return .running
+            }
+            if container?.status == .stopped {
+                return .completed
             }
         }
 
         throw NSError(
             domain: "ContainerWait", code: 1,
             userInfo: [
-                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to start."
             ])
     }
 
@@ -323,17 +348,28 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
-    private func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
-        guard let projectName else { return }
-        let actualVolumeName = volumeConfig.name ?? volumeName  // Use explicit name or key as name
+    private func createVolume(name volumeName: String, config volumeConfig: Volume) async throws {
+        let actualVolumeName = volumeConfig.name ?? volumeConfig.external?.name ?? volumeName
 
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(actualVolumeName)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
+        if volumeConfig.external?.isExternal == true {
+            print("Info: Volume '\(volumeName)' is declared as external.")
+            print("This tool assumes external volume '\(actualVolumeName)' already exists and will not attempt to create it.")
+            return
+        }
 
-        print(
-            "Warning: Volume source '\(actualVolumeName)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
+        if (try? await ClientVolume.inspect(actualVolumeName)) != nil {
+            print("Volume '\(actualVolumeName)' already exists")
+            return
+        }
+
+        print("Creating volume: \(volumeName) (Actual name: \(actualVolumeName))")
+        _ = try await ClientVolume.create(
+            name: actualVolumeName,
+            driver: volumeConfig.driver ?? "local",
+            driverOpts: volumeConfig.driver_opts ?? [:],
+            labels: volumeConfig.labels ?? [:]
         )
-        try? fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+        print("Volume '\(actualVolumeName)' created")
     }
 
     private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
@@ -343,7 +379,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("Info: Network '\(networkName)' is declared as external.")
             print("This tool assumes external network '\(externalNetwork.name ?? actualNetworkName)' already exists and will not attempt to create it.")
         } else {
-            var networkCreateArgs: [String] = ["network", "create"]
+            let networkCreateArgs: [String] = ["network", "create"]
 
             #warning("Docker Compose Network Options Not Supported")
             // Add driver and driver options
@@ -400,6 +436,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     // MARK: Compose Service Level Functions
     private mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
         guard let projectName else { throw ComposeError.invalidProjectName }
+
+        try waitForDependencyConditions(serviceName: serviceName, service: service)
 
         var imageToRun: String
         
@@ -477,7 +515,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Add volume mounts
         if let volumes = service.volumes {
             for volume in volumes {
-                let args = try await configVolume(volume)
+                let args = try await configVolume(volume, from: dockerCompose)
                 runCommandArgs.append(contentsOf: args)
             }
         }
@@ -537,6 +575,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
                 runCommandArgs.append("--network")
                 runCommandArgs.append(networkToConnect)
+
+                if let aliases = service.networkConfigurations?[network]?.aliases, !aliases.isEmpty {
+                    print(
+                        "Warning: Service '\(serviceName)' defines network aliases for '\(network)' (\(aliases.joined(separator: ", "))), but Apple Container does not currently expose a container run alias flag."
+                    )
+                }
             }
             print(
                 "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composePath)."
@@ -548,12 +592,16 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("Note: Service '\(serviceName)' is not explicitly connected to any networks. It will likely use the default bridge network.")
         }
 
-        // Add hostname
-        if let hostname = service.hostname {
-            let resolvedHostname = resolveVariable(hostname, with: environmentVariables)
-            runCommandArgs.append("--hostname")
-            runCommandArgs.append(resolvedHostname)
+        // Apple Container 1.0.0 does not expose a `container run` hostname flag.
+        let hostnameTranslation = Self.hostnameRunArgs(
+            hostname: service.hostname,
+            serviceName: serviceName,
+            environmentVariables: environmentVariables
+        )
+        if let warning = hostnameTranslation.warning {
+            print(warning)
         }
+        runCommandArgs.append(contentsOf: hostnameTranslation.args)
 
         // Add working directory
         if let workingDir = service.working_dir {
@@ -636,26 +684,120 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        self.containerConsoleColors[serviceName] = serviceColor
+        let selectedColor = serviceColor
+        self.containerConsoleColors[serviceName] = selectedColor
 
-        Task { [self, serviceColor] in
-            @Sendable
-            func handleOutput(_ output: String) {
-                print("\(serviceName): \(output)".applyingColor(serviceColor))
-            }
+        @Sendable
+        func handleOutput(_ output: String) {
+            print("\(serviceName): \(output)".applyingColor(selectedColor))
+        }
 
+        if detach {
             print("\nStarting service: \(serviceName)")
             print("Starting \(serviceName)")
             print("----------------------------------------\n")
-            let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
+            let exitCode = try await streamCommand(
+                "container",
+                args: ["run"] + runCommandArgs,
+                onStdout: handleOutput,
+                onStderr: handleOutput
+            )
+            guard exitCode == 0 else {
+                throw ComposeError.containerRunFailed(serviceName, exitCode)
+            }
+        } else {
+            Task { [self, selectedColor] in
+                @Sendable
+                func handleOutput(_ output: String) {
+                    print("\(serviceName): \(output)".applyingColor(selectedColor))
+                }
+
+                print("\nStarting service: \(serviceName)")
+                print("Starting \(serviceName)")
+                print("----------------------------------------\n")
+                let exitCode = try await streamCommand(
+                    "container",
+                    args: ["run"] + runCommandArgs,
+                    onStdout: handleOutput,
+                    onStderr: handleOutput
+                )
+                if exitCode != 0 {
+                    fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
+                }
+            }
         }
 
-        do {
-            try await waitUntilServiceIsRunning(serviceName)
+        let startState = try await waitUntilServiceStarted(serviceName)
+        serviceStartStates[serviceName] = startState
+
+        switch startState {
+        case .running:
             try await updateEnvironmentWithServiceIP(serviceName)
-        } catch {
-            print(error)
+            if let healthcheck = service.healthcheck, !healthcheck.isDisabled {
+                try await waitUntilServiceIsHealthy(serviceName: serviceName, healthcheck: healthcheck)
+                serviceHealth[serviceName] = true
+            }
+        case .completed:
+            if let healthcheck = service.healthcheck, !healthcheck.isDisabled {
+                throw ComposeError.healthcheckUnavailable(serviceName)
+            }
         }
+    }
+
+    private func waitForDependencyConditions(serviceName: String, service: Service) throws {
+        for dependencyName in service.depends_on ?? [] {
+            let dependency = service.dependencyConditions?[dependencyName] ?? ServiceDependency()
+            switch dependency.effectiveCondition {
+            case ServiceDependency.serviceStarted:
+                guard serviceStartStates[dependencyName] != nil else {
+                    throw ComposeError.dependencyNotStarted(serviceName, dependencyName)
+                }
+            case ServiceDependency.serviceHealthy:
+                guard serviceHealth[dependencyName] == true else {
+                    throw ComposeError.dependencyNotHealthy(serviceName, dependencyName)
+                }
+            case ServiceDependency.serviceCompletedSuccessfully:
+                guard serviceStartStates[dependencyName] == .completed else {
+                    throw ComposeError.dependencyNotCompleted(serviceName, dependencyName)
+                }
+            default:
+                throw ComposeError.unsupportedDependencyCondition(serviceName, dependencyName, dependency.effectiveCondition)
+            }
+        }
+    }
+
+    private func waitUntilServiceIsHealthy(serviceName: String, healthcheck: Healthcheck) async throws {
+        guard let projectName else { throw ComposeError.invalidProjectName }
+        guard let execArguments = healthcheck.execArguments else {
+            return
+        }
+
+        let containerName = "\(projectName)-\(serviceName)"
+        let retries = max(healthcheck.retries ?? 3, 1)
+        let interval = Healthcheck.parseDuration(healthcheck.interval, default: 30)
+        let startPeriod = Healthcheck.parseDuration(healthcheck.start_period, default: 0)
+
+        if startPeriod > 0 {
+            try await Task.sleep(nanoseconds: UInt64(startPeriod * 1_000_000_000))
+        }
+
+        for attempt in 1...retries {
+            let exitCode = try await streamCommand(
+                "container",
+                args: ["exec", containerName] + execArguments,
+                onStdout: { _ in },
+                onStderr: { _ in }
+            )
+            if exitCode == 0 {
+                return
+            }
+
+            if attempt < retries {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            }
+        }
+
+        throw ComposeError.healthcheckFailed(serviceName)
     }
 
     private func pullImage(_ imageName: String, platform: String?) async throws {
@@ -751,8 +893,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return imageToRun
     }
 
-    private func configVolume(_ volume: String) async throws -> [String] {
-        try composeVolumeToRunArgs(volume, cwd: cwd, fileManager: fileManager, environmentVariables: environmentVariables, projectName: projectName)
+    private func configVolume(_ volume: String, from dockerCompose: DockerCompose) async throws -> [String] {
+        try composeVolumeToRunArgs(
+            volume,
+            cwd: cwd,
+            fileManager: fileManager,
+            environmentVariables: environmentVariables,
+            projectName: projectName,
+            volumeDefinitions: dockerCompose.volumes
+        )
     }
 }
 

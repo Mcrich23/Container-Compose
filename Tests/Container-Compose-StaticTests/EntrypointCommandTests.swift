@@ -107,4 +107,16 @@ struct EntrypointCommandTests {
         #expect(r.entrypointFlag == "/bin/sh")
         #expect(r.positional == [])
     }
+
+    @Test("hostname does not emit unsupported container run flag")
+    func hostnameDoesNotEmitUnsupportedRunFlag() {
+        let r = ComposeUp.hostnameRunArgs(
+            hostname: "${HOSTNAME_VALUE}",
+            serviceName: "web",
+            environmentVariables: ["HOSTNAME_VALUE": "custom-host"]
+        )
+
+        #expect(r.args.isEmpty)
+        #expect(r.warning == "Warning: Service 'web' defines hostname 'custom-host', but Apple Container does not currently expose a container run hostname flag.")
+    }
 }

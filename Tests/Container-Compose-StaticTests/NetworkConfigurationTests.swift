@@ -65,6 +65,31 @@ struct NetworkConfigurationTests {
         #expect(compose.services["app"]??.networks?.contains("frontend") == true)
         #expect(compose.services["app"]??.networks?.contains("backend") == true)
     }
+
+    @Test("Parse service network object form with aliases")
+    func parseServiceNetworkObjectFormWithAliases() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          web:
+            image: nginx:latest
+            networks:
+              frontend:
+                aliases:
+                  - web.local
+              backend:
+        networks:
+          frontend:
+          backend:
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["web"]??.networks == ["backend", "frontend"])
+        #expect(compose.services["web"]??.networkConfigurations?["frontend"]?.aliases == ["web.local"])
+        #expect(compose.services["web"]??.networkConfigurations?["backend"] != nil)
+    }
     
     @Test("Parse network with driver")
     func parseNetworkWithDriver() throws {
@@ -187,4 +212,3 @@ struct NetworkConfigurationTests {
         #expect(compose.services["web"] != nil)
     }
 }
-

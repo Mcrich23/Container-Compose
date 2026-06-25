@@ -21,6 +21,7 @@
 //  Created by Morris Richman on 6/17/25.
 //
 
+import Foundation
 
 /// Healthcheck configuration for a service.
 public struct Healthcheck: Codable, Hashable {
@@ -65,5 +66,64 @@ public struct Healthcheck: Codable, Hashable {
         self.interval = try container.decodeIfPresent(String.self, forKey: .interval)
         self.retries = try container.decodeIfPresent(Int.self, forKey: .retries)
         self.timeout = try container.decodeIfPresent(String.self, forKey: .timeout)
+    }
+
+    public var isDisabled: Bool {
+        test?.first?.uppercased() == "NONE"
+    }
+
+    public var execArguments: [String]? {
+        guard let test, !test.isEmpty, !isDisabled else {
+            return nil
+        }
+
+        switch test[0].uppercased() {
+        case "CMD":
+            let command = Array(test.dropFirst())
+            return command.isEmpty ? nil : command
+        case "CMD-SHELL":
+            let command = test.dropFirst().joined(separator: " ")
+            return command.isEmpty ? nil : ["sh", "-c", command]
+        default:
+            return test
+        }
+    }
+
+    public static func parseDuration(_ value: String?, default defaultValue: TimeInterval) -> TimeInterval {
+        guard let value, !value.isEmpty else {
+            return defaultValue
+        }
+
+        if let seconds = TimeInterval(value) {
+            return seconds
+        }
+
+        let units: [String: TimeInterval] = [
+            "ns": 0.000000001,
+            "us": 0.000001,
+            "µs": 0.000001,
+            "ms": 0.001,
+            "s": 1,
+            "m": 60,
+            "h": 3600,
+        ]
+        let pattern = #"([0-9]+(?:\.[0-9]+)?)(ns|us|µs|ms|s|m|h)"#
+        let regex = try! NSRegularExpression(pattern: pattern)
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        let matches = regex.matches(in: value, range: range)
+        guard !matches.isEmpty else {
+            return defaultValue
+        }
+
+        return matches.reduce(0) { total, match in
+            guard
+                let amountRange = Range(match.range(at: 1), in: value),
+                let unitRange = Range(match.range(at: 2), in: value),
+                let amount = TimeInterval(value[amountRange])
+            else {
+                return total
+            }
+            return total + amount * (units[String(value[unitRange])] ?? 0)
+        }
     }
 }

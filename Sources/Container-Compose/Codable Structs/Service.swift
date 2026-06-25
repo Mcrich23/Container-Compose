@@ -59,6 +59,9 @@ public struct Service: Codable, Hashable {
     /// Services this service depends on (for startup order)
     public let depends_on: [String]?
 
+    /// Service dependency options keyed by dependency service name.
+    public let dependencyConditions: [String: ServiceDependency]?
+
     /// User or UID to run the container as
     public let user: String?
 
@@ -73,6 +76,9 @@ public struct Service: Codable, Hashable {
 
     /// List of networks the service will connect to
     public let networks: [String]?
+
+    /// Service network options keyed by network name.
+    public let networkConfigurations: [String: ServiceNetwork]?
 
     /// Container hostname
     public let hostname: String?
@@ -126,10 +132,12 @@ public struct Service: Codable, Hashable {
         ports: [String]? = nil,
         command: [String]? = nil,
         depends_on: [String]? = nil,
+        dependencyConditions: [String: ServiceDependency]? = nil,
         user: String? = nil,
         container_name: String? = nil,
         labels: [String: String]? = nil,
         networks: [String]? = nil,
+        networkConfigurations: [String: ServiceNetwork]? = nil,
         hostname: String? = nil,
         entrypoint: [String]? = nil,
         privileged: Bool? = nil,
@@ -153,10 +161,12 @@ public struct Service: Codable, Hashable {
         self.ports = ports
         self.command = command
         self.depends_on = depends_on
+        self.dependencyConditions = dependencyConditions
         self.user = user
         self.container_name = container_name
         self.labels = labels
         self.networks = networks
+        self.networkConfigurations = networkConfigurations
         self.hostname = hostname
         self.entrypoint = entrypoint
         self.privileged = privileged
@@ -222,20 +232,33 @@ public struct Service: Codable, Hashable {
         
         if let dependsOnString = try? container.decodeIfPresent(String.self, forKey: .depends_on) {
             depends_on = [dependsOnString]
+            dependencyConditions = [dependsOnString: ServiceDependency()]
         } else if let dependsOnArray = try? container.decodeIfPresent([String].self, forKey: .depends_on) {
             depends_on = dependsOnArray
-        } else if let dependsOnMap = try? container.decodeIfPresent([String: [String: String]].self, forKey: .depends_on) {
-            // Map form: depends_on: { db: { condition: service_healthy } }
-            // Preserve dependency order; conditions are not applicable to Apple Container.
-            depends_on = dependsOnMap.keys.sorted()
+            dependencyConditions = Dictionary(uniqueKeysWithValues: dependsOnArray.map { ($0, ServiceDependency()) })
+        } else if let dependsOnMap = try? container.decodeIfPresent([String: ServiceDependency?].self, forKey: .depends_on) {
+            let normalized = dependsOnMap.mapValues { $0 ?? ServiceDependency() }
+            depends_on = normalized.keys.sorted()
+            dependencyConditions = normalized
         } else {
             depends_on = nil
+            dependencyConditions = nil
         }
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
         container_name = try container.decodeIfPresent(String.self, forKey: .container_name)
         labels = try container.decodeIfPresent([String: String].self, forKey: .labels)
-        networks = try container.decodeIfPresent([String].self, forKey: .networks)
+        if let networkArray = try? container.decodeIfPresent([String].self, forKey: .networks) {
+            networks = networkArray
+            networkConfigurations = Dictionary(uniqueKeysWithValues: networkArray.map { ($0, ServiceNetwork()) })
+        } else if let networkMap = try? container.decodeIfPresent([String: ServiceNetwork?].self, forKey: .networks) {
+            let normalized = networkMap.mapValues { $0 ?? ServiceNetwork() }
+            networks = normalized.keys.sorted()
+            networkConfigurations = normalized
+        } else {
+            networks = nil
+            networkConfigurations = nil
+        }
         hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         
         // Decode 'entrypoint' which can be either a single string or an array of strings.

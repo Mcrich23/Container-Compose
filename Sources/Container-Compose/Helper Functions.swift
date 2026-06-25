@@ -160,7 +160,8 @@ func composeVolumeToRunArgs(
     cwd: String,
     fileManager: FileManager = .default,
     environmentVariables: [String: String] = [:],
-    projectName: String?
+    projectName: String?,
+    volumeDefinitions: [String: Volume?]? = nil
 ) throws -> [String] {
     let resolvedVolume = resolveVariable(volume, with: environmentVariables)
     var args: [String] = []
@@ -197,20 +198,11 @@ func composeVolumeToRunArgs(
             }
         }
     } else {
-        guard let projectName else { return [] }
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
-        let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
-        let destinationPath = destinationUrl.path(percentEncoded: false)
-
-        print(
-            "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
-        )
-        try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+        let volumeDefinition = volumeDefinitions?[source] ?? nil
+        let actualVolumeName = volumeDefinition?.name ?? volumeDefinition?.external?.name ?? source
 
         args.append("-v")
-        let modeStr = mode.map { ":\($0)" } ?? ""
-        args.append("\(volumePath):\(destinationPath)\(modeStr)")
+        args.append(bindMountArg(source: actualVolumeName))
     }
 
     return args
