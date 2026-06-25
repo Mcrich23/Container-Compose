@@ -119,4 +119,32 @@ struct EntrypointCommandTests {
         #expect(r.args.isEmpty)
         #expect(r.warning == "Warning: Service 'web' defines hostname 'custom-host', but Apple Container does not currently expose a container run hostname flag.")
     }
+
+    @Test("network aliases emit Apple alias properties when supported")
+    func networkAliasesEmitWhenSupported() {
+        let r = ComposeUp.networkRunArg(
+            network: "backend",
+            aliases: ["${SERVICE_ALIAS}", "database"],
+            serviceName: "web",
+            environmentVariables: ["SERVICE_ALIAS": "db"],
+            supportsAliases: true
+        )
+
+        #expect(r.arg == "backend,alias=db,alias=database")
+        #expect(r.warning == nil)
+    }
+
+    @Test("network aliases warn when Apple alias properties are unsupported")
+    func networkAliasesWarnWhenUnsupported() {
+        let r = ComposeUp.networkRunArg(
+            network: "backend",
+            aliases: ["${SERVICE_ALIAS}", "database"],
+            serviceName: "web",
+            environmentVariables: ["SERVICE_ALIAS": "db"],
+            supportsAliases: false
+        )
+
+        #expect(r.arg == "backend")
+        #expect(r.warning == "Warning: Service 'web' defines network aliases for 'backend' (db, database), but the linked Apple Container command parser does not expose a container run alias property.")
+    }
 }

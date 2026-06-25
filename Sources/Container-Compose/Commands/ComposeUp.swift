@@ -269,6 +269,36 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         )
     }
 
+    static func networkRunArg(
+        network: String,
+        aliases: [String],
+        serviceName: String,
+        environmentVariables: [String: String],
+        supportsAliases: Bool = supportsNetworkAliases()
+    ) -> (arg: String, warning: String?) {
+        let resolvedAliases = aliases.map { resolveVariable($0, with: environmentVariables) }
+        guard !resolvedAliases.isEmpty else {
+            return (network, nil)
+        }
+
+        if supportsAliases {
+            let aliasProperties = resolvedAliases.map { "alias=\($0)" }.joined(separator: ",")
+            return ("\(network),\(aliasProperties)", nil)
+        }
+
+        return (
+            network,
+            "Warning: Service '\(serviceName)' defines network aliases for '\(network)' (\(resolvedAliases.joined(separator: ", "))), but the linked Apple Container command parser does not expose a container run alias property."
+        )
+    }
+
+    private static func supportsNetworkAliases() -> Bool {
+        (try? Application.ContainerRun.parse([
+            "--network", "container-compose-probe,alias=container-compose-probe",
+            "alpine:latest",
+        ])) != nil
+    }
+
     private func getIPForRunningService(_ serviceName: String) async throws -> String? {
         guard let projectName else { return nil }
 
@@ -574,12 +604,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 // Use the explicit network name from top-level definition if available, otherwise resolved name
                 let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
                 runCommandArgs.append("--network")
-                runCommandArgs.append(networkToConnect)
-
-                if let aliases = service.networkConfigurations?[network]?.aliases, !aliases.isEmpty {
-                    print(
-                        "Warning: Service '\(serviceName)' defines network aliases for '\(network)' (\(aliases.joined(separator: ", "))), but Apple Container does not currently expose a container run alias flag."
-                    )
+                let networkTranslation = Self.networkRunArg(
+                    network: networkToConnect,
+                    aliases: service.networkConfigurations?[network]?.aliases ?? [],
+                    serviceName: serviceName,
+                    environmentVariables: environmentVariables
+                )
+                runCommandArgs.append(networkTranslation.arg)
+                if let warning = networkTranslation.warning {
+                    print(warning)
                 }
             }
             print(
