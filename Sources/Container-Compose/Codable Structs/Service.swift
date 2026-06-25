@@ -192,7 +192,15 @@ public struct Service: Codable, Hashable {
             environment = nil
         }
 
-        env_file = try container.decodeIfPresent([String].self, forKey: .env_file)
+        // Decode 'env_file' which can be either a single string or an array of strings.
+        if let envFileArray = try? container.decodeIfPresent([String].self, forKey: .env_file) {
+            env_file = envFileArray
+        } else if let envFileString = try? container.decodeIfPresent(String.self, forKey: .env_file) {
+            env_file = [envFileString]
+        } else {
+            env_file = nil
+        }
+
         ports = try container.decodeIfPresent([String].self, forKey: .ports)
 
         // Decode 'command' which can be either a single string or an array of strings.

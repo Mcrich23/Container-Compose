@@ -141,6 +141,29 @@ struct DockerComposeParsingTests {
         #expect(compose.services["app"]??.environment?["DEBUG"] == "true")
     }
     
+    @Test("Parse compose with env_file")
+    func parseComposeWithEnvFile() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          web:
+            image: nginx:latest
+            env_file: web.env
+          db:
+            image: postgres:14
+            env_file:
+              - db.env
+        """
+        
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        
+        #expect(compose.services["web"]??.env_file?.count == 1)
+        #expect(compose.services["web"]??.env_file?.contains("web.env") == true)
+        #expect(compose.services["db"]??.env_file?.count == 1)
+        #expect(compose.services["db"]??.env_file?.contains("db.env") == true)
+    }
+    
     @Test("Parse compose with ports")
     func parseComposeWithPorts() throws {
         let yaml = """
