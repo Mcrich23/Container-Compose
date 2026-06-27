@@ -375,6 +375,43 @@ struct ComposeUpTests {
         try? await stopInstance(location: upProject.base)
     }
 
+    @Test("up stamps compose project/service labels and passes user labels through")
+    func testUpStampsComposeLabels() async throws {
+        let explicitName = "container-compose-test-\(makeContainerName())"
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml10(containerName: explicitName)
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        var composeUp = try ComposeUp.parse([
+            "-d", "--cwd", project.base.path(percentEncoded: false),
+        ])
+        try await composeUp.run()
+
+        let container = try await ContainerClient().get(id: explicitName)
+        let labels = container.configuration.labels
+
+        // Compose labels are stamped with the resolved project/service name.
+        #expect(
+            labels["com.docker.compose.project"] == project.name,
+            "Expected com.docker.compose.project='\(project.name)', got '\(labels["com.docker.compose.project"] ?? "nil")'"
+        )
+        #expect(
+            labels["com.docker.compose.service"] == "web",
+            "Expected com.docker.compose.service='web', got '\(labels["com.docker.compose.service"] ?? "nil")'"
+        )
+        // User-defined labels pass through to the container.
+        #expect(
+            labels["app"] == "container-compose-tests",
+            "Expected user label app='container-compose-tests', got '\(labels["app"] ?? "nil")'"
+        )
+        // The stamped compose label wins over a user value for the same key.
+        #expect(
+            labels["com.docker.compose.service"] != "should-be-overridden",
+            "com.docker.compose.service should be overridden by the stamped value"
+        )
+
+        try? await stopInstance(location: project.base)
+    }
+
     enum Errors: Error {
         case containerNotFound
     }

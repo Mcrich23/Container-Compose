@@ -259,6 +259,22 @@ public struct DockerComposeYamlFiles {
             """
     }
 
+    /// A single service with an explicit `container_name` plus user-defined `labels`,
+    /// one of which (`com.docker.compose.service`) collides with a stamped label so the
+    /// precedence behaviour can be exercised.
+    public static func dockerComposeYaml10(containerName: String) -> String {
+        return """
+            version: '3.8'
+            services:
+              web:
+                image: nginx:alpine
+                container_name: \(containerName)
+                labels:
+                  app: container-compose-tests
+                  com.docker.compose.service: should-be-overridden
+            """
+    }
+
     /// Represents a temporary Docker Compose project copied to a temporary location for testing.
     public struct TemporaryProject {
         /// The URL of the temporary docker-compose.yaml file.
