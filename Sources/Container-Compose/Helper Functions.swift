@@ -198,19 +198,28 @@ func composeVolumeToRunArgs(
         }
     } else {
         guard let projectName else { return [] }
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
-        let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
-        let destinationPath = destinationUrl.path(percentEncoded: false)
 
-        print(
-            "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
-        )
-        try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+        // Named volume. As of `container` 1.0.0 these are supported natively
+        // (`container volume`) and are auto-created on first `run`, so we map a
+        // Compose named volume straight to a `container` named volume.
+        //
+        // We deliberately do NOT fall back to bind-mounting a host directory:
+        //   1. Bind mounts use virtiofs, whose mount the guest cannot `chown`.
+        //      Images whose entrypoint chowns its data dir (postgres, redis, …)
+        //      then die with "chown: Operation not permitted". Native volumes are
+        //      block devices the guest owns, so chown works.
+        //   2. The previous host-dir mapping stripped the destination to its parent
+        //      (`destination.deletingLastPathComponent()`), so `redisdata:/data`
+        //      mounted over `/` and shadowed the image's root filesystem (hiding its
+        //      entrypoint). See issue #96.
+        //
+        // The volume is namespaced as `<project>_<source>`, mirroring Docker
+        // Compose, so stacks don't collide on shared volume names.
+        let volumeName = "\(projectName)_\(source)"
 
         args.append("-v")
         let modeStr = mode.map { ":\($0)" } ?? ""
-        args.append("\(volumePath):\(destinationPath)\(modeStr)")
+        args.append("\(volumeName):\(destination)\(modeStr)")
     }
 
     return args

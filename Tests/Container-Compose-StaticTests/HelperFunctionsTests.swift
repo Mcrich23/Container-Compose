@@ -220,4 +220,39 @@ struct ComposeVolumeTests {
         #expect(result == [])
     }
 
+    // MARK: Named volumes (issue #96)
+
+    @Test("Named volume maps to a native, project-namespaced container volume")
+    func testNamedVolumeMapsToNativeVolume() throws {
+        let result = try composeVolumeToRunArgs("redisdata:/data", cwd: "/tmp", projectName: "proj")
+        // `<project>_<source>` native volume mounted at the declared destination.
+        #expect(result == ["-v", "proj_redisdata:/data"])
+    }
+
+    @Test("Named volume mounts at its declared destination, not the parent")
+    func testNamedVolumeMountsAtDestinationNotParent() throws {
+        // Regression for #96: a single-segment destination must NOT collapse to
+        // `/` (which mounted the volume over the image root and hid its entrypoint).
+        let result = try composeVolumeToRunArgs("redisdata:/data", cwd: "/tmp", projectName: "proj")
+        let mount = result.last ?? ""
+        #expect(!mount.hasSuffix(":/"))
+        #expect(mount.hasSuffix(":/data"))
+    }
+
+    @Test("Named volume preserves nested destination and mode")
+    func testNamedVolumeNestedDestinationWithMode() throws {
+        let result = try composeVolumeToRunArgs(
+            "pgdata:/var/lib/postgresql/data:ro",
+            cwd: "/tmp",
+            projectName: "proj"
+        )
+        #expect(result == ["-v", "proj_pgdata:/var/lib/postgresql/data:ro"])
+    }
+
+    @Test("Named volume without a project name is skipped")
+    func testNamedVolumeWithoutProjectNameSkipped() throws {
+        let result = try composeVolumeToRunArgs("redisdata:/data", cwd: "/tmp", projectName: nil)
+        #expect(result == [])
+    }
+
 }
