@@ -786,9 +786,9 @@ extension ComposeUp {
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            process.environment = ProcessInfo.processInfo.environment.merging([
-                "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            ]) { _, new in new }
+            var childEnvironment = ProcessInfo.processInfo.environment
+            childEnvironment["PATH"] = mergedExecutablePath(existing: childEnvironment["PATH"])
+            process.environment = childEnvironment
 
             let stdoutHandle = stdoutPipe.fileHandleForReading
             let stderrHandle = stderrPipe.fileHandleForReading

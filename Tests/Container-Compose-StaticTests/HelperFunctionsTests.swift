@@ -98,6 +98,34 @@ struct HelperFunctionsTests {
         #expect(result == "0.0.0.0:3000:3000")
     }
 
+    @Test("Merged PATH keeps user order and contains all fallback dirs without duplicates")
+    func testMergedPathKeepsOrderNoDuplicates() throws {
+        let existing = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let result = mergedExecutablePath(existing: existing)
+        #expect(result == existing)
+        for dir in standardExecutablePathFallback {
+            #expect(result.split(separator: ":").filter { $0 == dir }.count == 1)
+        }
+    }
+
+    @Test("Merged PATH preserves a custom user directory")
+    func testMergedPathPreservesCustomDir() throws {
+        let result = mergedExecutablePath(existing: "/run/current-system/sw/bin:/usr/bin")
+        let entries = result.split(separator: ":").map(String.init)
+        #expect(entries.first == "/run/current-system/sw/bin")
+        #expect(entries.contains("/run/current-system/sw/bin"))
+        for dir in standardExecutablePathFallback {
+            #expect(entries.contains(dir))
+        }
+    }
+
+    @Test("Merged PATH falls back to the standard dirs when PATH is empty or unset")
+    func testMergedPathEmptyFallsBack() throws {
+        let expected = standardExecutablePathFallback.joined(separator: ":")
+        #expect(mergedExecutablePath(existing: nil) == expected)
+        #expect(mergedExecutablePath(existing: "") == expected)
+    }
+
 }
 
 /// Trait that creates a unique temporary directory before a test runs and removes it after.
