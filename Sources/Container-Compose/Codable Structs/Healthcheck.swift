@@ -25,6 +25,17 @@ import Foundation
 
 /// Healthcheck configuration for a service.
 public struct Healthcheck: Codable, Hashable {
+    private static let durationUnits: [String: TimeInterval] = [
+        "ns": 0.000000001,
+        "us": 0.000001,
+        "µs": 0.000001,
+        "ms": 0.001,
+        "s": 1,
+        "m": 60,
+        "h": 3600,
+    ]
+    private static let durationRegex = try! NSRegularExpression(pattern: #"([0-9]+(?:\.[0-9]+)?)(ns|us|µs|ms|s|m|h)"#)
+
     /// Command to run to check health
     public let test: [String]?
     /// Grace period for the container to start
@@ -98,19 +109,8 @@ public struct Healthcheck: Codable, Hashable {
             return seconds
         }
 
-        let units: [String: TimeInterval] = [
-            "ns": 0.000000001,
-            "us": 0.000001,
-            "µs": 0.000001,
-            "ms": 0.001,
-            "s": 1,
-            "m": 60,
-            "h": 3600,
-        ]
-        let pattern = #"([0-9]+(?:\.[0-9]+)?)(ns|us|µs|ms|s|m|h)"#
-        let regex = try! NSRegularExpression(pattern: pattern)
         let range = NSRange(value.startIndex..<value.endIndex, in: value)
-        let matches = regex.matches(in: value, range: range)
+        let matches = Self.durationRegex.matches(in: value, range: range)
         guard !matches.isEmpty else {
             return defaultValue
         }
@@ -123,7 +123,7 @@ public struct Healthcheck: Codable, Hashable {
             else {
                 return total
             }
-            return total + amount * (units[String(value[unitRange])] ?? 0)
+            return total + amount * (Self.durationUnits[String(value[unitRange])] ?? 0)
         }
     }
 }

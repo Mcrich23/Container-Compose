@@ -220,14 +220,14 @@ struct ComposeVolumeTests {
         #expect(result == [])
     }
 
-    @Test("Named volume is forwarded using native container volume syntax")
+    @Test("Named volume is forwarded using project-scoped native container volume syntax")
     func testNamedVolumeUsesNativeVolumeSyntax() throws {
         let result = try composeVolumeToRunArgs(
             "data:/var/lib/postgresql/data",
             cwd: "/tmp",
             projectName: "test"
         )
-        #expect(result == ["-v", "data:/var/lib/postgresql/data"])
+        #expect(result == ["-v", "test_data:/var/lib/postgresql/data"])
     }
 
     @Test("Named volume uses explicit top-level volume name")
@@ -241,6 +241,32 @@ struct ComposeVolumeTests {
             ]
         )
         #expect(result == ["-v", "prod-db-data:/var/lib/postgresql/data:ro"])
+    }
+
+    @Test("External named volume without explicit name keeps source name")
+    func testNamedVolumeKeepsExternalSourceName() throws {
+        let result = try composeVolumeToRunArgs(
+            "db-data:/var/lib/postgresql/data",
+            cwd: "/tmp",
+            projectName: "test",
+            volumeDefinitions: [
+                "db-data": Volume(external: ExternalVolume(isExternal: true, name: nil))
+            ]
+        )
+        #expect(result == ["-v", "db-data:/var/lib/postgresql/data"])
+    }
+
+    @Test("External named volume uses explicit external name")
+    func testNamedVolumeUsesExplicitExternalName() throws {
+        let result = try composeVolumeToRunArgs(
+            "db-data:/var/lib/postgresql/data",
+            cwd: "/tmp",
+            projectName: "test",
+            volumeDefinitions: [
+                "db-data": Volume(external: ExternalVolume(isExternal: true, name: "shared-db-data"))
+            ]
+        )
+        #expect(result == ["-v", "shared-db-data:/var/lib/postgresql/data"])
     }
 
 }

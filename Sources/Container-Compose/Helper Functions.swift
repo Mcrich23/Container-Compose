@@ -199,13 +199,37 @@ func composeVolumeToRunArgs(
         }
     } else {
         let volumeDefinition = volumeDefinitions?[source] ?? nil
-        let actualVolumeName = volumeDefinition?.name ?? volumeDefinition?.external?.name ?? source
+        let actualVolumeName = composeNamedVolumeName(
+            source: source,
+            projectName: projectName,
+            volumeDefinition: volumeDefinition
+        )
 
         args.append("-v")
         args.append(bindMountArg(source: actualVolumeName))
     }
 
     return args
+}
+
+func composeNamedVolumeName(
+    source: String,
+    projectName: String?,
+    volumeDefinition: Volume?
+) -> String {
+    if let explicitName = volumeDefinition?.name {
+        return explicitName
+    }
+
+    if volumeDefinition?.external?.isExternal == true {
+        return volumeDefinition?.external?.name ?? source
+    }
+
+    guard let projectName, !projectName.isEmpty else {
+        return source
+    }
+
+    return "\(projectName)_\(source)"
 }
 
 extension String: @retroactive Error {}

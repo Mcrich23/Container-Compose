@@ -24,6 +24,7 @@
 import ArgumentParser
 import ContainerCommands
 import ContainerAPIClient
+import ContainerXPC
 import ContainerizationExtras
 import Foundation
 @preconcurrency import Rainbow
@@ -36,6 +37,8 @@ private enum ServiceStartState: Codable, Equatable {
 
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
+
+    private static let networkAliasesSupported = supportsNetworkAliases()
 
     public static let configuration: CommandConfiguration = .init(
         commandName: "up",
@@ -141,7 +144,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             projectName = name
             print("Info: Docker Compose project name parsed as: \(name)")
             print(
-                "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
+                "Note: The 'name' field affects generated container names and default named-volume names. Full project-level isolation for other resources is not implemented by this tool."
             )
         } else {
             projectName = deriveProjectName(cwd: cwd)
@@ -156,11 +159,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         services = try Service.topoSortConfiguredServices(services)
 
         // Filter for specified services
-        if !self.services.isEmpty {
-            services = services.filter({ serviceName, service in
-                self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
-            })
-        }
+        services = Self.servicesSelectedForUp(services, requestedServices: self.services)
 
         // Stop Services
         try await stopOldStuff(services.map({ $0.serviceName }), remove: true)
@@ -274,7 +273,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         aliases: [String],
         serviceName: String,
         environmentVariables: [String: String],
-        supportsAliases: Bool = supportsNetworkAliases()
+        supportsAliases: Bool = networkAliasesSupported
     ) -> (arg: String, warning: String?) {
         let resolvedAliases = ([serviceName] + aliases.map { resolveVariable($0, with: environmentVariables) })
             .reduce(into: [String]()) { result, alias in
@@ -298,6 +297,40 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             "--network", "container-compose-probe,alias=container-compose-probe",
             "alpine:latest",
         ])) != nil
+    }
+
+    static func servicesSelectedForUp(
+        _ services: [(serviceName: String, service: Service)],
+        requestedServices: [String]
+    ) -> [(serviceName: String, service: Service)] {
+        guard !requestedServices.isEmpty else {
+            return services
+        }
+
+        let servicesByName = Dictionary(uniqueKeysWithValues: services.map { ($0.serviceName, $0.service) })
+        var selected = Set<String>()
+
+        func include(_ serviceName: String) {
+            guard let service = servicesByName[serviceName], selected.insert(serviceName).inserted else {
+                return
+            }
+
+            for dependency in service.depends_on ?? [] {
+                include(dependency)
+            }
+        }
+
+        for serviceName in requestedServices {
+            include(serviceName)
+        }
+
+        return services.filter { selected.contains($0.serviceName) }
+    }
+
+    static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
+        guard exitCode == 0 else {
+            throw ComposeError.containerRunFailed(serviceName, exitCode)
+        }
     }
 
     private func getIPForRunningService(_ serviceName: String) async throws -> String? {
@@ -334,6 +367,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 return .running
             }
             if container?.status == .stopped {
+                let exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                try Self.validateStoppedServiceExitCode(exitCode, serviceName: serviceName)
                 return .completed
             }
         }
@@ -343,6 +378,16 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             userInfo: [
                 NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to start."
             ])
+    }
+
+    private static func waitForInitExitCode(containerName: String) async throws -> Int32 {
+        let request = XPCMessage(route: .containerWait)
+        request.set(key: .id, value: containerName)
+        request.set(key: .processIdentifier, value: containerName)
+
+        let client = XPCClient(service: "com.apple.container.apiserver")
+        let response = try await client.send(request, responseTimeout: .seconds(10))
+        return Int32(response.int64(key: .exitCode))
     }
 
     private func stopOldStuff(_ services: [String], remove: Bool) async throws {
@@ -380,7 +425,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func createVolume(name volumeName: String, config volumeConfig: Volume) async throws {
-        let actualVolumeName = volumeConfig.name ?? volumeConfig.external?.name ?? volumeName
+        let actualVolumeName = composeNamedVolumeName(
+            source: volumeName,
+            projectName: projectName,
+            volumeDefinition: volumeConfig
+        )
 
         if volumeConfig.external?.isExternal == true {
             print("Info: Volume '\(volumeName)' is declared as external.")

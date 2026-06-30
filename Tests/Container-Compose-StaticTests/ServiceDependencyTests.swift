@@ -67,6 +67,32 @@ struct ServiceDependencyTests {
         #expect(sorted[1].serviceName == "app")
         #expect(sorted[2].serviceName == "web")
     }
+
+    @Test("Selecting service keeps transitive dependency closure")
+    func selectingServiceKeepsTransitiveDependencyClosure() throws {
+        let worker = Service(image: "worker", depends_on: ["api"])
+        let api = Service(image: "api", depends_on: ["db"])
+        let db = Service(image: "postgres", depends_on: nil)
+        let cache = Service(image: "redis", depends_on: nil)
+
+        let services: [(String, Service)] = [
+            ("worker", worker),
+            ("api", api),
+            ("db", db),
+            ("cache", cache),
+        ]
+        let sorted = try Service.topoSortConfiguredServices(services)
+        let selected = ComposeUp.servicesSelectedForUp(sorted, requestedServices: ["worker"])
+
+        #expect(selected.map(\.serviceName) == ["db", "api", "worker"])
+    }
+
+    @Test("Stopped service non-zero exit code fails startup")
+    func stoppedServiceNonZeroExitCodeFailsStartup() throws {
+        #expect(throws: ComposeError.self) {
+            try ComposeUp.validateStoppedServiceExitCode(17, serviceName: "db")
+        }
+    }
     
     @Test("No dependencies - services should maintain order")
     func noDependencies() throws {
@@ -132,4 +158,3 @@ struct ServiceDependencyTests {
         #expect(sorted.count == 1)
     }
 }
-
