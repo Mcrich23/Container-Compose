@@ -200,11 +200,31 @@ public struct Service: Codable, Hashable {
             environment = nil
         }
 
-        // Decode 'env_file' which can be either a single string or an array of strings.
-        if let envFileArray = try? container.decodeIfPresent([String].self, forKey: .env_file) {
-            env_file = envFileArray
-        } else if let envFileString = try? container.decodeIfPresent(String.self, forKey: .env_file) {
-            env_file = [envFileString]
+        // `env_file` accepts three forms per the Compose spec:
+        //   env_file: path.env               → single string
+        //   env_file: [path1.env, path2.env] → array of strings
+        //   env_file:                         → array of {path:, required:?} dicts (Compose 2.x extended form)
+        //     - path: optional.env
+        //       required: false
+        // Arrays may also mix plain strings and dict entries.
+        // Missing optional files (required: false) are loaded silently as empty — loadEnvFile
+        // already suppresses read errors, which is the correct behaviour for optional files.
+        struct EnvFileEntry: Decodable {
+            let path: String
+            init(from decoder: Decoder) throws {
+                if let s = try? decoder.singleValueContainer().decode(String.self) {
+                    path = s
+                } else {
+                    enum Keys: String, CodingKey { case path }
+                    let c = try decoder.container(keyedBy: Keys.self)
+                    path = try c.decode(String.self, forKey: .path)
+                }
+            }
+        }
+        if let entries = try? container.decodeIfPresent([EnvFileEntry].self, forKey: .env_file) {
+            env_file = entries.map(\.path)
+        } else if let single = try? container.decodeIfPresent(String.self, forKey: .env_file) {
+            env_file = [single]
         } else {
             env_file = nil
         }
