@@ -730,6 +730,22 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append(resolvedHostname)
         }
 
+        // Add extra_hosts entries via --add-host.
+        // The special token `host-gateway` is resolved to the host machine's gateway
+        // IP (the IP containers use to reach the host) via `route -n get default`.
+        if let extraHosts = service.extra_hosts, !extraHosts.isEmpty {
+            let needsGateway = extraHosts.contains { $0.hasSuffix(":host-gateway") }
+            let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP() : ""
+            for entry in extraHosts {
+                let resolved = resolveVariable(entry, with: environmentVariables)
+                let parts = resolved.split(separator: ":", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { continue }
+                let hostname = parts[0]
+                let ip = parts[1] == "host-gateway" ? hostGatewayIP : parts[1]
+                runCommandArgs.append(contentsOf: ["--add-host", "\(hostname):\(ip)"])
+            }
+        }
+
         // Add working directory
         if let workingDir = service.working_dir {
             let resolvedWorkingDir = resolveVariable(workingDir, with: environmentVariables)
@@ -747,11 +763,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("--read-only")
         }
 
-        // Add resource limits
+        // Add resource limits.
+        // `mem_limit` is the top-level shorthand; `deploy.resources.limits.memory` is
+        // the structured form. Both map to `container run --memory`. `mem_limit` takes
+        // precedence when both are set, matching Docker Compose CLI behaviour.
         if let cpus = service.deploy?.resources?.limits?.cpus {
             runCommandArgs.append(contentsOf: ["--cpus", cpus])
         }
-        if let memory = service.deploy?.resources?.limits?.memory {
+        let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
+        if let memory = effectiveMemoryLimit {
             runCommandArgs.append(contentsOf: ["--memory", memory])
         }
 
@@ -939,6 +959,35 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     private func configVolume(_ volume: String) async throws -> [String] {
         try composeVolumeToRunArgs(volume, cwd: cwd, fileManager: fileManager, environmentVariables: environmentVariables, projectName: projectName)
+    }
+}
+
+// MARK: Host gateway resolution
+extension ComposeUp {
+    /// Resolves the `host-gateway` token to the host machine's default gateway IP.
+    /// Used to translate `extra_hosts: ["hostname:host-gateway"]` into a concrete
+    /// `--add-host` argument that Apple's `container run` accepts.
+    ///
+    /// Runs `route -n get default` and parses the `gateway:` line. Falls back to
+    /// `"host-gateway"` (passed through unmodified) if resolution fails, which will
+    /// cause `container run` to emit a useful error rather than silently misbehaving.
+    static func resolveHostGatewayIP() -> String {
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["route", "-n", "get", "default"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do { try process.run() } catch { return "host-gateway" }
+        process.waitUntilExit()
+        let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("gateway:") {
+                return trimmed.dropFirst("gateway:".count).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return "host-gateway"
     }
 }
 
