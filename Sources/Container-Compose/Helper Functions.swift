@@ -33,6 +33,41 @@ public func resolvedPath(for path: String, relativeTo baseURL: URL) -> String {
 }
 
 
+/// The standard executable directories appended as a fallback when building the
+/// PATH for spawned `container` processes.
+public let standardExecutablePathFallback = [
+    "/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+]
+
+/// Builds the PATH used for spawned child processes by preserving the user's
+/// inherited PATH and appending any standard fallback directories that are not
+/// already present. This keeps `container` binaries installed outside the
+/// standard locations (e.g. Nix at `/run/current-system/sw/bin`) reachable while
+/// still guaranteeing the common Homebrew/system directories are available.
+/// - Parameters:
+///   - existing: The inherited PATH value (typically `$PATH`), or `nil` if unset.
+///   - fallback: The standard directories to ensure are present.
+/// - Returns: A `:`-separated PATH string preserving the user's order, followed
+///   by any missing fallback directories.
+public func mergedExecutablePath(
+    existing: String?,
+    fallback: [String] = standardExecutablePathFallback
+) -> String {
+    let existingEntries = (existing ?? "")
+        .split(separator: ":", omittingEmptySubsequences: true)
+        .map(String.init)
+
+    var seen = Set(existingEntries)
+    var merged = existingEntries
+
+    for dir in fallback where !seen.contains(dir) {
+        merged.append(dir)
+        seen.insert(dir)
+    }
+
+    return merged.joined(separator: ":")
+}
+
 /// Loads environment variables from a .env file.
 /// - Parameter path: The full path to the .env file.
 /// - Returns: A dictionary of key-value pairs representing environment variables.
