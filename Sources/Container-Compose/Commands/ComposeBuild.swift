@@ -51,7 +51,7 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
     @OptionGroup
     var logging: Flags.Logging
 
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
+    private var cwd: String { composeFileOptions.effectiveCwd(processCwd: process.cwd) }
 
     private var cwdURL: URL { URL(fileURLWithPath: cwd) }
 
