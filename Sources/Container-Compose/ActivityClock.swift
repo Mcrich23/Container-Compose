@@ -15,27 +15,32 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
-import ArgumentParser
 
-public struct Main: AsyncParsableCommand {
-    private static let commandName: String = "container-compose"
-    private static let version: String = "1.0.0"
-    public static var versionString: String {
-        "\(commandName) version \(version)"
+/// Thread-safe timestamp of the most recent output from a service's
+/// `container run` subprocess. Written from the streaming `Task` and read by
+/// the readiness wait to tell "slow but progressing" apart from "stuck".
+///
+/// The clock is injectable so the idle-window logic can be exercised in tests
+/// without leaning on real wall-clock time.
+final class ActivityClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let now: @Sendable () -> Date
+    private var _lastActivity: Date
+
+    init(now: @escaping @Sendable () -> Date = { Date() }) {
+        self.now = now
+        self._lastActivity = now()
     }
-    public static let configuration: CommandConfiguration = .init(
-        commandName: Self.commandName,
-        abstract: "A tool to use and manage Docker Compose files with Apple Container",
-        version: Self.versionString,
-        subcommands: [
-            ComposeUp.self,
-            ComposeDown.self,
-            ComposeBuild.self,
-            Version.self
-        ])
-    
-    @OptionGroup
-    var composeFileOptions: ComposeFileOptions
 
-    public init() {}
+    func touch() {
+        lock.lock()
+        _lastActivity = now()
+        lock.unlock()
+    }
+
+    var lastActivity: Date {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastActivity
+    }
 }

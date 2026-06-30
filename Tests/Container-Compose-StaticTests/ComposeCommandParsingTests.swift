@@ -14,28 +14,14 @@
 // limitations under the License.
 //===----------------------------------------------------------------------===//
 
-import Foundation
-import ArgumentParser
+import Testing
+@testable import ContainerComposeCore
 
-public struct Main: AsyncParsableCommand {
-    private static let commandName: String = "container-compose"
-    private static let version: String = "1.0.0"
-    public static var versionString: String {
-        "\(commandName) version \(version)"
+@Suite("Compose command parsing")
+struct ComposeCommandParsingTests {
+    @Test("Main+ComposeUp command accepts -f flag for compose file from root")
+    func composeUpCommandAcceptsFileFlag() throws {
+        let cmd = try Main.parseAsRoot(["-f", "my-compose.yaml", "up"]) as! ComposeUp
+        #expect(cmd.composeFileOptions.composeFilename == "my-compose.yaml")
     }
-    public static let configuration: CommandConfiguration = .init(
-        commandName: Self.commandName,
-        abstract: "A tool to use and manage Docker Compose files with Apple Container",
-        version: Self.versionString,
-        subcommands: [
-            ComposeUp.self,
-            ComposeDown.self,
-            ComposeBuild.self,
-            Version.self
-        ])
-    
-    @OptionGroup
-    var composeFileOptions: ComposeFileOptions
-
-    public init() {}
 }

@@ -237,7 +237,7 @@ public struct DockerComposeYamlFiles {
             image: python:3.12-alpine
             depends_on:
               - db
-            command: python -m http.server 8000
+            command: ["python", "-m", "http.server", "8000"]
             environment:
               DATABASE_URL: postgres://postgres:postgres@db:5432/appdb
 
@@ -259,6 +259,22 @@ public struct DockerComposeYamlFiles {
             """
     }
 
+    /// A single service with an explicit `container_name` plus user-defined `labels`,
+    /// one of which (`com.docker.compose.service`) collides with a stamped label so the
+    /// precedence behaviour can be exercised.
+    public static func dockerComposeYaml10(containerName: String) -> String {
+        return """
+            version: '3.8'
+            services:
+              web:
+                image: nginx:alpine
+                container_name: \(containerName)
+                labels:
+                  app: container-compose-tests
+                  com.docker.compose.service: should-be-overridden
+            """
+    }
+
     /// Represents a temporary Docker Compose project copied to a temporary location for testing.
     public struct TemporaryProject {
         /// The URL of the temporary docker-compose.yaml file.
@@ -277,7 +293,7 @@ public struct DockerComposeYamlFiles {
     /// - Returns: A TemporaryProject containing the URL and project name.
     public static func copyYamlToTemporaryLocation(yaml: String) throws -> TemporaryProject {
         let tempLocation = URL.temporaryDirectory.appending(
-            path: "Container-Compose_Tests_\(UUID().uuidString)/docker-compose.yaml")
+            path: "\(makeContainerName())/docker-compose.yaml")
         let tempBase = tempLocation.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: tempBase, withIntermediateDirectories: true)
         try yaml.write(to: tempLocation, atomically: false, encoding: .utf8)

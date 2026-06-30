@@ -19,7 +19,7 @@ import Foundation
 import Darwin
 @testable import ContainerComposeCore
 
-@Suite("waitForever CPU usage")
+@Suite("waitForever CPU usage", .serialized)
 struct WaitForeverCpuTests {
 
     /// Returns user-mode CPU time consumed by this process, in microseconds.

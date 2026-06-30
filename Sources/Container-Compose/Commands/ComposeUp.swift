@@ -23,7 +23,6 @@
 
 import ArgumentParser
 import ContainerCommands
-//import ContainerClient
 import ContainerAPIClient
 import ContainerizationExtras
 import Foundation
@@ -46,8 +45,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         help: "Detaches from container logs. Note: If you do NOT detach, killing this process will NOT kill the container. To kill the container, run container-compose down")
     var detach: Bool = false
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    var composeFilename: String?
+    @OptionGroup
+    var composeFileOptions: ComposeFileOptions
 
     private static let supportedComposeFilenames = [
         "compose.yml",
@@ -61,7 +60,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private var composePath: String {
-        if let composeFilename {
+        if let composeFilename = composeFileOptions.composeFilename {
             return resolvedPath(for: composeFilename, relativeTo: cwdURL)
         }
 
@@ -350,36 +349,71 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         let client = ContainerClient()
         let container = try await client.get(id: name)
+        // Use the container's own address, not the network gateway — every
+        // container on a network shares the same gateway, so substituting the
+        // gateway broke service-name -> IP environment resolution.
         let ip = container.networks.compactMap { $0.ipv4Address.address.description }.first
 
         return ip
     }
 
-    /// Repeatedly checks `container list -a` until the given container is listed as `running`.
+    /// Repeatedly polls until the named container reports `running`.
+    ///
+    /// The container is launched by a `container run` subprocess that may first
+    /// download images — notably the one-time ~64 MB init image — and that pull
+    /// happens *inside* this wait window. A fixed wall-clock timeout therefore
+    /// aborted mid-download on slow connections (`up -d` failing with
+    /// "Timed out waiting for container ... to be running").
+    ///
+    /// Instead we use an *idle* timeout: the run subprocess streams pull/startup
+    /// progress into `activity`, so we only give up after `idleTimeout` seconds
+    /// with no output *and* the container still not running — i.e. genuinely
+    /// stuck, not merely slow. Mirrors `docker compose up`, which shows pull
+    /// progress and doesn't bail during an active download.
+    ///
+    /// On top of the idle timeout we keep an absolute `maxWait` backstop: a
+    /// container that keeps dribbling output every few seconds without ever
+    /// reaching `running` would otherwise refresh `activity` forever and hang
+    /// `up -d` indefinitely. The backstop bounds that pathological case while
+    /// still leaving plenty of room for a genuinely slow (but progressing) pull.
     /// - Parameters:
-    ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
-    ///   - timeout: Max seconds to wait before failing.
+    ///   - serviceName: Compose service name; the container is `<project>-<service>`.
+    ///   - activity: Tracks the last time the run subprocess produced output.
+    ///   - idleTimeout: Max seconds of no output (while not running) before failing.
+    ///   - maxWait: Absolute ceiling on the wait, regardless of ongoing output.
     ///   - interval: How often to poll (in seconds).
-    /// - Returns: `true` if the container reached "running" state within the timeout.
-    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
+    private func waitUntilServiceIsRunning(_ serviceName: String, activity: ActivityClock, idleTimeout: TimeInterval = 30, maxWait: TimeInterval = 300, interval: TimeInterval = 0.5) async throws {
         let containerName = containerName(for: serviceName)
-
-        let deadline = Date().addingTimeInterval(timeout)
         let client = ContainerClient()
+        let start = Date()
 
-        while Date() < deadline {
+        while true {
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             let container = try? await client.get(id: containerName)
             if container?.status == .running {
                 return
             }
+            let now = Date()
+            // An active pull keeps refreshing `activity`, pushing the idle
+            // deadline out, so slow downloads never trip this — only genuine
+            // silence does.
+            if now.timeIntervalSince(activity.lastActivity) > idleTimeout {
+                throw NSError(
+                    domain: "ContainerWait", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                    ])
+            }
+            // Absolute backstop: even with continuous output, never wait past
+            // `maxWait` for the container to come up.
+            if now.timeIntervalSince(start) > maxWait {
+                throw NSError(
+                    domain: "ContainerWait", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running (exceeded \(Int(maxWait))s)."
+                    ])
+            }
         }
-
-        throw NSError(
-            domain: "ContainerWait", code: 1,
-            userInfo: [
-                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
-            ])
     }
 
     /// Stops (and optionally removes) containers matching the given names.
@@ -590,6 +624,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append(contentsOf: ["--dns-domain", dnsDomain])
         }
 
+        // Apply any user-defined labels, then stamp Docker-Compose-compatible project/service
+        // labels so external tools (GUIs, dashboards) can group a stack's containers reliably
+        // by label instead of guessing from the `<project>-<service>` name prefix (which
+        // mis-groups unrelated containers that merely share a prefix). The compose labels are
+        // set last so they take precedence over a user value for the same key; keys are sorted
+        // for a deterministic `container run` argv.
+        var labels = service.labels ?? [:]
+        labels["com.docker.compose.project"] = projectName
+        labels["com.docker.compose.service"] = serviceName
+        for key in labels.keys.sorted() {
+            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(labels[key] ?? "")"])
+        }
+
         // REMOVED: Restart policy is not supported by `container run`
         // if let restart = service.restart {
         //     runCommandArgs.append("--restart")
@@ -667,7 +714,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 runCommandArgs.append(networkToConnect)
             }
             print(
-                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composeFilename)."
+                "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composePath)."
             )
             print(
                 "Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level."
@@ -766,9 +813,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         self.containerConsoleColors[serviceName] = serviceColor
 
-        Task { [self, serviceColor] in
+        // Tracks output from the run subprocess so the readiness wait below can
+        // tell an in-progress image pull from a stuck container.
+        let activity = ActivityClock()
+
+        let runTask = Task { [self, serviceColor, activity] in
             @Sendable
             func handleOutput(_ output: String) {
+                activity.touch()
                 print("\(serviceName): \(output)".applyingColor(serviceColor))
             }
 
@@ -779,9 +831,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         do {
-            try await waitUntilServiceIsRunning(serviceName)
+            try await waitUntilServiceIsRunning(serviceName, activity: activity)
             try await updateEnvironmentWithServiceIP(serviceName)
         } catch {
+            // The wait gave up (idle/backstop timeout) but the `container run`
+            // subprocess is still streaming in the background. Tear it down so
+            // it doesn't leak past the failed wait: cancel the streaming task
+            // and stop the container, which also lets the subprocess exit.
+            runTask.cancel()
+            try? await stopExistingContainers([containerName], remove: false)
             print(error)
         }
     }
@@ -914,9 +972,9 @@ extension ComposeUp {
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            process.environment = ProcessInfo.processInfo.environment.merging([
-                "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            ]) { _, new in new }
+            var childEnvironment = ProcessInfo.processInfo.environment
+            childEnvironment["PATH"] = mergedExecutablePath(existing: childEnvironment["PATH"])
+            process.environment = childEnvironment
 
             let stdoutHandle = stdoutPipe.fileHandleForReading
             let stderrHandle = stderrPipe.fileHandleForReading
