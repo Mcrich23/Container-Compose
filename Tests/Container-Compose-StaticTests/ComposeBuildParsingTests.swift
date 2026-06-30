@@ -166,3 +166,25 @@ struct ComposeBuildParsingTests {
         #expect(cmd.composeFileOptions.composeFilename == "my-compose.yaml")
     }
 }
+
+@Suite("Compose Down Parsing Tests")
+struct ComposeDownParsingTests {
+
+    @Test("ComposeDown command parses -v flag")
+    func composeDownCommandParsesShortVolumesFlag() throws {
+        let cmd = try ComposeDown.parse(["-v"])
+        #expect(cmd.volumes == true)
+    }
+
+    @Test("ComposeDown command parses --volumes flag")
+    func composeDownCommandParsesLongVolumesFlag() throws {
+        let cmd = try ComposeDown.parse(["--volumes"])
+        #expect(cmd.volumes == true)
+    }
+
+    @Test("ComposeDown command defaults volumes to false")
+    func composeDownCommandDefaultsVolumesToFalse() throws {
+        let cmd = try ComposeDown.parse([])
+        #expect(cmd.volumes == false)
+    }
+}

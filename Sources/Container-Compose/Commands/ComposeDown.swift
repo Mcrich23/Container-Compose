@@ -38,6 +38,9 @@ public struct ComposeDown: AsyncParsableCommand {
     @Argument(help: "Specify the services to stop")
     var services: [String] = []
 
+    @Flag(name: [.customShort("v"), .customLong("volumes")], help: "Remove named volumes declared in the compose file")
+    var volumes: Bool = false
+
     @OptionGroup
     var process: Flags.Process
 
@@ -114,7 +117,56 @@ public struct ComposeDown: AsyncParsableCommand {
             })
         }
 
-        try await stopOldStuff(services, remove: false)
+        // Removing a volume fails while a container still references it, so
+        // when -v is passed the containers are removed too (matching docker
+        // compose down, which always removes containers).
+        try await stopOldStuff(services, remove: volumes)
+
+        if volumes {
+            try await removeNamedVolumes(from: dockerCompose, services: services)
+        }
+    }
+
+    private func removeNamedVolumes(from dockerCompose: DockerCompose, services: [(serviceName: String, service: Service)]) async throws {
+        guard let projectName else { return }
+
+        var handledKeys: Set<String> = []
+        for (volumeKey, volumeConfig) in dockerCompose.volumes ?? [:] {
+            handledKeys.insert(volumeKey)
+            let (nativeName, isExternal) = resolveNamedVolume(key: volumeKey, config: volumeConfig, projectName: projectName)
+            if isExternal {
+                print("Info: Volume '\(volumeKey)' is external and will not be removed.")
+                continue
+            }
+            await removeNamedVolume(key: volumeKey, name: nativeName)
+        }
+
+        // Also remove named volumes that `up` created on demand for service
+        // references not declared top-level.
+        for (_, service) in services {
+            for volume in service.volumes ?? [] {
+                guard let source = volume.split(separator: ":", maxSplits: 2).map(String.init).first,
+                    isNamedVolumeSource(source), !handledKeys.contains(source)
+                else { continue }
+                handledKeys.insert(source)
+                let (nativeName, _) = resolveNamedVolume(key: source, config: nil, projectName: projectName)
+                await removeNamedVolume(key: source, name: nativeName)
+            }
+        }
+    }
+
+    private func removeNamedVolume(key: String, name: String) async {
+        print("Removing volume: \(key) (\(name))")
+        do {
+            try await ClientVolume.delete(name: name)
+            print("Successfully removed volume: \(name)")
+        } catch {
+            guard (try? await ClientVolume.inspect(name)) == nil else {
+                print("Error Removing Volume '\(name)': \(error)")
+                return
+            }
+            print("Warning: Volume '\(name)' not found, skipping.")
+        }
     }
 
     private func stopOldStuff(_ services: [(serviceName: String, service: Service)], remove: Bool) async throws {

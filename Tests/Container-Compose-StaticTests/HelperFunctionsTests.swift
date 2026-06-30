@@ -163,8 +163,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(hostFile.path):/app/config.yaml:ro",
-            cwd: tmp.path,
-            projectName: "test"
+            cwd: tmp.path
         )
         #expect(result == ["-v", "\(hostFile.path):/app/config.yaml:ro"])
     }
@@ -177,8 +176,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh",
-            cwd: tmp.path,
-            projectName: "test"
+            cwd: tmp.path
         )
         #expect(result == ["-v", "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh"])
     }
@@ -191,8 +189,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(dataDir.path):/app/data",
-            cwd: tmp.path,
-            projectName: "test"
+            cwd: tmp.path
         )
         #expect(result == ["-v", "\(dataDir.path):/app/data"])
     }
@@ -205,8 +202,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(dataDir.path):/app/data:ro",
-            cwd: tmp.path,
-            projectName: "test"
+            cwd: tmp.path
         )
         #expect(result == ["-v", "\(dataDir.path):/app/data:ro"])
     }
@@ -219,8 +215,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "./config.yaml:/app/config.yaml:ro",
-            cwd: tmp.path,
-            projectName: "test"
+            cwd: tmp.path
         )
         #expect(result == ["-v", "\(hostFile.path):/app/config.yaml:ro"])
     }
@@ -233,8 +228,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(newDir.path):/app/data",
-            cwd: tmp.path,
-            projectName: "test"
+            cwd: tmp.path
         )
         #expect(result == ["-v", "\(newDir.path):/app/data"])
         var isDir: ObjCBool = false
@@ -244,8 +238,90 @@ struct ComposeVolumeTests {
 
     @Test("Invalid volume format returns empty array")
     func testInvalidFormatReturnsEmpty() throws {
-        let result = try composeVolumeToRunArgs("nodestination", cwd: "/tmp", projectName: "test")
+        let result = try composeVolumeToRunArgs("nodestination", cwd: "/tmp")
         #expect(result == [])
+    }
+
+    @Test("Named volume is mapped to its native volume name", .tempDir)
+    func testNamedVolumeMappedToNativeName() throws {
+        let tmp = TempDirTrait.current
+        let result = try composeVolumeToRunArgs(
+            "db_data:/var/lib/mysql",
+            cwd: tmp.path,
+            namedVolumeNames: ["db_data": "myproj_db_data"]
+        )
+        // Destination must be verbatim — not its parent directory.
+        #expect(result == ["-v", "myproj_db_data:/var/lib/mysql"])
+        // The named-volume branch must not touch the filesystem.
+        let contents = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
+        #expect(contents.isEmpty)
+    }
+
+    @Test("Named volume preserves mode suffix")
+    func testNamedVolumePreservesMode() throws {
+        let result = try composeVolumeToRunArgs(
+            "db_data:/var/lib/mysql:ro",
+            cwd: "/tmp",
+            namedVolumeNames: ["db_data": "myproj_db_data"]
+        )
+        #expect(result == ["-v", "myproj_db_data:/var/lib/mysql:ro"])
+    }
+
+    @Test("Unmapped named volume falls back to verbatim source")
+    func testUnmappedNamedVolumeFallsBackVerbatim() throws {
+        let result = try composeVolumeToRunArgs("cache:/data", cwd: "/tmp")
+        #expect(result == ["-v", "cache:/data"])
+    }
+
+}
+
+@Suite("Named Volume Resolution Tests")
+struct NamedVolumeResolutionTests {
+
+    @Test("Key without config resolves to project-prefixed name")
+    func testKeyOnly() {
+        let result = resolveNamedVolume(key: "db_data", config: nil, projectName: "myproj")
+        #expect(result.name == "myproj_db_data")
+        #expect(result.isExternal == false)
+    }
+
+    @Test("Key with empty config resolves to project-prefixed name")
+    func testEmptyConfig() {
+        let result = resolveNamedVolume(key: "db_data", config: Volume(), projectName: "myproj")
+        #expect(result.name == "myproj_db_data")
+        #expect(result.isExternal == false)
+    }
+
+    @Test("Explicit top-level name is used verbatim")
+    func testExplicitName() {
+        let result = resolveNamedVolume(key: "db_data", config: Volume(name: "custom-volume"), projectName: "myproj")
+        #expect(result.name == "custom-volume")
+        #expect(result.isExternal == false)
+    }
+
+    @Test("External volume uses key verbatim and is never created")
+    func testExternalBool() {
+        let config = Volume(external: ExternalVolume(isExternal: true, name: nil))
+        let result = resolveNamedVolume(key: "shared_data", config: config, projectName: "myproj")
+        #expect(result.name == "shared_data")
+        #expect(result.isExternal == true)
+    }
+
+    @Test("External volume with explicit name uses that name")
+    func testExternalWithName() {
+        let config = Volume(external: ExternalVolume(isExternal: true, name: "shared"))
+        let result = resolveNamedVolume(key: "shared_data", config: config, projectName: "myproj")
+        #expect(result.name == "shared")
+        #expect(result.isExternal == true)
+    }
+
+    @Test("Named volume source classification")
+    func testIsNamedVolumeSource() {
+        #expect(isNamedVolumeSource("db_data"))
+        #expect(!isNamedVolumeSource("./data"))
+        #expect(!isNamedVolumeSource("../data"))
+        #expect(!isNamedVolumeSource("/abs/path"))
+        #expect(!isNamedVolumeSource("a/b"))
     }
 
 }
