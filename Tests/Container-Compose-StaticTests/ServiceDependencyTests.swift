@@ -124,12 +124,93 @@ struct ServiceDependencyTests {
     @Test("Service depends on non-existent service - should not crash")
     func dependsOnNonExistentService() throws {
         let web = Service(image: "nginx", depends_on: ["nonexistent"])
-        
+
         let services: [(String, Service)] = [("web", web)]
         let sorted = try Service.topoSortConfiguredServices(services)
-        
+
         // Should complete without crashing
         #expect(sorted.count == 1)
+    }
+}
+
+@Suite("Service Selection Tests")
+struct ServiceSelectionTests {
+
+    @Test("Selection is independent of service declaration order")
+    func selectionIsOrderIndependent() {
+        // Regression: the old dependedBy-based filter only recorded a depender
+        // when the dependency was first visited *through* it, so `up app`
+        // included or dropped db depending on Dictionary iteration order.
+        let app = Service(image: "myapp", depends_on: ["db", "vue"])
+        let db = Service(image: "postgres", depends_on: nil)
+        let vue = Service(image: "node", depends_on: nil)
+
+        let orderA: [(String, Service)] = [("app", app), ("db", db), ("vue", vue)]
+        let orderB: [(String, Service)] = [("db", db), ("vue", vue), ("app", app)]
+
+        let selectedA = expandServiceSelection(requested: ["app"], services: orderA)
+        let selectedB = expandServiceSelection(requested: ["app"], services: orderB)
+
+        #expect(selectedA == ["app", "db", "vue"])
+        #expect(selectedA == selectedB)
+    }
+
+    @Test("Selection includes transitive dependencies")
+    func selectionIsTransitive() {
+        let web = Service(image: "nginx", depends_on: ["app"])
+        let app = Service(image: "myapp", depends_on: ["db"])
+        let db = Service(image: "postgres", depends_on: nil)
+
+        let services: [(String, Service)] = [("db", db), ("app", app), ("web", web)]
+        let selected = expandServiceSelection(requested: ["web"], services: services)
+
+        #expect(selected == ["web", "app", "db"])
+    }
+
+    @Test("Selection excludes services outside the requested closure")
+    func selectionExcludesUnrelatedServices() {
+        let web = Service(image: "nginx", depends_on: ["db"])
+        let api = Service(image: "api", depends_on: ["db"])
+        let db = Service(image: "postgres", depends_on: nil)
+
+        let services: [(String, Service)] = [("web", web), ("api", api), ("db", db)]
+        let selected = expandServiceSelection(requested: ["web"], services: services)
+
+        #expect(selected == ["web", "db"])
+    }
+
+    @Test("Unknown requested or dependency names do not crash")
+    func selectionToleratesUnknownNames() {
+        let web = Service(image: "nginx", depends_on: ["nonexistent"])
+
+        let services: [(String, Service)] = [("web", web)]
+        let selected = expandServiceSelection(requested: ["web", "ghost"], services: services)
+
+        #expect(selected.contains("web"))
+        #expect(!selected.contains("api"))
+    }
+
+    @Test("Empty request selects nothing")
+    func emptyRequestSelectsNothing() {
+        let web = Service(image: "nginx", depends_on: nil)
+
+        let selected = expandServiceSelection(requested: [], services: [("web", web)])
+
+        #expect(selected.isEmpty)
+    }
+
+    @Test("configuredServices drops nils and sorts by name")
+    func configuredServicesIsDeterministic() {
+        let mapping: [String: Service?] = [
+            "web": Service(image: "nginx"),
+            "db": Service(image: "postgres"),
+            "broken": nil,
+            "app": Service(image: "myapp"),
+        ]
+
+        let services = configuredServices(from: mapping)
+
+        #expect(services.map(\.serviceName) == ["app", "db", "web"])
     }
 }
 

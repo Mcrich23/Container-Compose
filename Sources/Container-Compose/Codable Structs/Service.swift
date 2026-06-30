@@ -103,10 +103,7 @@ public struct Service: Codable, Hashable {
 
     /// Allocate a pseudo-TTY (-t flag for `container run`)
     public let tty: Bool?
-    
-    /// Other services that depend on this service
-    public var dependedBy: [String] = []
-    
+
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
@@ -139,8 +136,7 @@ public struct Service: Codable, Hashable {
         configs: [ServiceConfig]? = nil,
         secrets: [ServiceSecret]? = nil,
         stdin_open: Bool? = nil,
-        tty: Bool? = nil,
-        dependedBy: [String] = []
+        tty: Bool? = nil
     ) {
         self.image = image
         self.build = build
@@ -167,7 +163,6 @@ public struct Service: Codable, Hashable {
         self.secrets = secrets
         self.stdin_open = stdin_open
         self.tty = tty
-        self.dependedBy = dependedBy
     }
 
     /// Custom initializer to handle decoding and basic validation.
@@ -290,12 +285,9 @@ public struct Service: Codable, Hashable {
         var visiting = Set<String>()
         var sorted: [(String, Service)] = []
 
-        func visit(_ name: String, from service: String? = nil) throws {
-            guard var serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
-            if let service {
-                serviceTuple.service.dependedBy.append(service)
-            }
-            
+        func visit(_ name: String) throws {
+            guard let serviceTuple = services.first(where: { $0.serviceName == name }) else { return }
+
             if visiting.contains(name) {
                 throw NSError(domain: "ComposeError", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
@@ -305,7 +297,7 @@ public struct Service: Codable, Hashable {
 
             visiting.insert(name)
             for depName in serviceTuple.service.depends_on ?? [] {
-                try visit(depName, from: name)
+                try visit(depName)
             }
             visiting.remove(name)
             visited.insert(name)
