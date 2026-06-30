@@ -230,6 +230,26 @@ struct ComposeVolumeTests {
         #expect(result == ["-v", "test_data:/var/lib/postgresql/data"])
     }
 
+    @Test("Named volume mounts at its declared single-segment destination")
+    func testNamedVolumeMountsAtDeclaredSingleSegmentDestination() throws {
+        let result = try composeVolumeToRunArgs(
+            "redisdata:/data",
+            cwd: "/tmp",
+            projectName: "proj"
+        )
+        #expect(result == ["-v", "proj_redisdata:/data"])
+    }
+
+    @Test("Named volume preserves nested destination and mode")
+    func testNamedVolumePreservesNestedDestinationAndMode() throws {
+        let result = try composeVolumeToRunArgs(
+            "pgdata:/var/lib/postgresql/data:ro",
+            cwd: "/tmp",
+            projectName: "proj"
+        )
+        #expect(result == ["-v", "proj_pgdata:/var/lib/postgresql/data:ro"])
+    }
+
     @Test("Named volume uses explicit top-level volume name")
     func testNamedVolumeUsesExplicitTopLevelName() throws {
         let result = try composeVolumeToRunArgs(
