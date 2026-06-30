@@ -146,6 +146,16 @@ public func deriveProjectName(cwd: String) -> String {
     return projectName
 }
 
+/// Resolves the container name for a service. An explicit `container_name`
+/// (with variable interpolation, e.g. `${NAME:-fallback}`) takes precedence;
+/// otherwise the default `<projectName>-<serviceName>` pattern is used.
+func resolveContainerName(explicit: String?, projectName: String, serviceName: String, envVars: [String: String] = [:]) -> String {
+    if let explicit {
+        return resolveVariable(explicit, with: envVars)
+    }
+    return "\(projectName)-\(serviceName)"
+}
+
 /// Converts Docker Compose port specification into a container run -p format.
 /// Handles various formats: "PORT", "HOST:PORT", "IP:HOST:PORT", and optional protocol.
 /// - Parameter portSpec: The port specification string from docker-compose.yml.
@@ -186,6 +196,40 @@ public func composePortToRunArg(_ portSpec: String) -> String {
     default:
         return portSpec
     }
+}
+
+/// Resolves a build's context directory and Dockerfile to absolute paths,
+/// interpolating variables (`${VAR}`, `${VAR:-default}`) in both. Per the
+/// Compose spec, `context` is relative to the compose file's directory and
+/// `dockerfile` is relative to the resolved context.
+func resolveBuildPaths(
+    context: String,
+    dockerfile: String?,
+    composeDirectory: String,
+    environmentVariables: [String: String] = [:]
+) -> (contextPath: String, dockerfilePath: String) {
+    let resolvedContext = resolveVariable(context, with: environmentVariables)
+    let contextPath = resolvedPath(for: resolvedContext, relativeTo: URL(fileURLWithPath: composeDirectory, isDirectory: true))
+    let resolvedDockerfile = resolveVariable(dockerfile ?? "Dockerfile", with: environmentVariables)
+    let dockerfilePath = resolvedPath(for: resolvedDockerfile, relativeTo: URL(fileURLWithPath: contextPath, isDirectory: true))
+    return (contextPath, dockerfilePath)
+}
+
+/// Merges a service's `environment:` values over the base environment,
+/// following Compose semantics: env-file values are literal, while
+/// service-level values are variable-interpolated (`${VAR}`, `${VAR:-default}`,
+/// resolved from the .env file and the process environment) and override the
+/// files.
+func mergeServiceEnvironment(
+    base: [String: String],
+    serviceEnvironment: [String: String]?,
+    envVars: [String: String]
+) -> [String: String] {
+    var combined = base
+    for (key, value) in serviceEnvironment ?? [:] {
+        combined[key] = resolveVariable(value, with: envVars)
+    }
+    return combined
 }
 
 /// Converts a Docker Compose `volumes:` entry into the `--volume` arguments for `container run`.
