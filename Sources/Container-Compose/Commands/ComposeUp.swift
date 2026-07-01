@@ -35,6 +35,26 @@ private enum ServiceStartState: Codable, Equatable {
     case completed
 }
 
+// `containerWait` must be registered while the runtime client is still alive;
+// once a fast one-shot reaches `.stopped`, the server can no longer recover it.
+private actor ServiceExitCodeRegistry {
+    static let shared = ServiceExitCodeRegistry()
+
+    private var tasks: [String: Task<Int32, Error>] = [:]
+
+    func set(_ task: Task<Int32, Error>, for containerName: String) {
+        tasks[containerName] = task
+    }
+
+    func task(for containerName: String) -> Task<Int32, Error>? {
+        tasks[containerName]
+    }
+
+    func remove(for containerName: String) {
+        tasks[containerName] = nil
+    }
+}
+
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
 
@@ -481,7 +501,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 return .running
             }
             if container?.status == .stopped {
-                let exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                let exitCode: Int32
+                if let exitCodeTask = await ServiceExitCodeRegistry.shared.task(for: containerName) {
+                    exitCode = try await exitCodeTask.value
+                    await ServiceExitCodeRegistry.shared.remove(for: containerName)
+                } else {
+                    exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                }
                 try Self.validateStoppedServiceExitCode(exitCode, serviceName: serviceName)
                 return .completed
             }
@@ -976,6 +1002,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             guard exitCode == 0 else {
                 throw ComposeError.containerRunFailed(serviceName, exitCode)
             }
+            let detachedContainerName = containerName
+            await ServiceExitCodeRegistry.shared.set(Task {
+                try await Self.waitForInitExitCode(containerName: detachedContainerName)
+            }, for: detachedContainerName)
         } else {
             Task { [self, selectedColor, activity] in
                 @Sendable
