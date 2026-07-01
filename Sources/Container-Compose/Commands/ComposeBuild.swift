@@ -108,6 +108,20 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
 
         if !services.isEmpty {
             servicesToBuild = servicesToBuild.filter { services.contains($0.serviceName) }
+        } else {
+            // Match `up`'s default selection exactly: profile-eligible services plus
+            // their dependencies (which bypass the profile gate). Without this, a
+            // profile-gated service that's only pulled in as a dependency of an
+            // eligible service would start via `up` but never get built here.
+            let allServices: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { name, service in
+                guard let service else { return nil }
+                return (name, service)
+            }
+            let selectedNames = Set(
+                Service.selectServices(from: allServices, requestedServices: [], activeProfiles: composeFileOptions.activeProfiles)
+                    .map(\.serviceName)
+            )
+            servicesToBuild = servicesToBuild.filter { selectedNames.contains($0.serviceName) }
         }
 
         if servicesToBuild.isEmpty {

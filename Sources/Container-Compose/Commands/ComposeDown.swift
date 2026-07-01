@@ -107,11 +107,26 @@ public struct ComposeDown: AsyncParsableCommand {
         })
         services = try Service.topoSortConfiguredServices(services)
 
-        // Filter for specified services
+        // Filter for specified services and active Compose profiles
         if !self.services.isEmpty {
             services = services.filter({ serviceName, service in
                 self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
             })
+        } else {
+            // Match `up`'s default selection: profile-eligible services plus their
+            // dependencies (which bypass the profile gate). Anything excluded here
+            // was left running by a previous `up --profile ...` that isn't repeated
+            // on this `down` — warn instead of silently leaving it running.
+            let selected = Service.selectServices(from: services, requestedServices: [], activeProfiles: composeFileOptions.activeProfiles)
+            let selectedNames = Set(selected.map(\.serviceName))
+            let skipped = services.map(\.serviceName).filter { !selectedNames.contains($0) }
+            if !skipped.isEmpty {
+                print(
+                    "Note: not stopping '\(skipped.sorted().joined(separator: "', '"))' — gated by an inactive Compose profile. "
+                        + "Pass --profile <name> (or name the service explicitly) to also stop them."
+                )
+            }
+            services = selected
         }
 
         try await stopOldStuff(services, remove: false)

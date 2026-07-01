@@ -82,7 +82,7 @@ struct ServiceDependencyTests {
             ("cache", cache),
         ]
         let sorted = try Service.topoSortConfiguredServices(services)
-        let selected = ComposeUp.servicesSelectedForUp(sorted, requestedServices: ["worker"])
+        let selected = Service.selectServices(from: sorted, requestedServices: ["worker"])
 
         #expect(selected.map(\.serviceName) == ["db", "api", "worker"])
     }
