@@ -730,19 +730,42 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append(resolvedHostname)
         }
 
-        // Add extra_hosts entries via --add-host.
-        // The special token `host-gateway` is resolved to the host machine's gateway
-        // IP (the IP containers use to reach the host) via `route -n get default`.
+        // Add extra_hosts entries. `container run` (verified against container CLI
+        // 1.0.0) has no --add-host flag at all — passing one fails immediately with
+        // "Error: Unknown option '--add-host'" — so entries are written to a hosts
+        // file and bind-mounted over /etc/hosts instead.
+        //
+        // The special token `host-gateway` is resolved via `container network
+        // inspect`, which reports the vmnet bridge gateway the container actually
+        // uses to reach the host. `route -n get default` (the previous approach)
+        // instead returns the Mac's LAN default-route gateway, which is a different
+        // address whenever the machine's default route isn't the vmnet bridge (e.g.
+        // any normal Wi-Fi/Ethernet setup) — so containers would gain an entry
+        // pointing at the router, not the host.
         if let extraHosts = service.extra_hosts, !extraHosts.isEmpty {
-            let needsGateway = extraHosts.contains { $0.hasSuffix(":host-gateway") }
-            let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP() : ""
-            for entry in extraHosts {
-                let resolved = resolveVariable(entry, with: environmentVariables)
+            // Resolve variables first: needsGateway must inspect the resolved value,
+            // otherwise an entry fully wrapped in a variable (e.g. "${HOST_ENTRY}"
+            // expanding to "foo:host-gateway") is missed and hostGatewayIP is left
+            // empty, silently producing "--add-host foo:" (now "foo:" in /etc/hosts).
+            let resolvedEntries = extraHosts.map { resolveVariable($0, with: environmentVariables) }
+            let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
+            let resolvedNetworkName = service.networks?.first.map { resolveVariable($0, with: environmentVariables) } ?? "default"
+            let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
+
+            var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
+            for resolved in resolvedEntries {
                 let parts = resolved.split(separator: ":", maxSplits: 1).map(String.init)
                 guard parts.count == 2 else { continue }
                 let hostname = parts[0]
                 let ip = parts[1] == "host-gateway" ? hostGatewayIP : parts[1]
-                runCommandArgs.append(contentsOf: ["--add-host", "\(hostname):\(ip)"])
+                hostsFileLines.append("\(ip) \(hostname)")
+            }
+            let hostsFilePath = NSTemporaryDirectory() + "container-compose-\(projectName)-\(serviceName)-hosts"
+            do {
+                try (hostsFileLines.joined(separator: "\n") + "\n").write(toFile: hostsFilePath, atomically: true, encoding: .utf8)
+                runCommandArgs.append(contentsOf: ["-v", "\(hostsFilePath):/etc/hosts"])
+            } catch {
+                print("Warning: could not write hosts file for service '\(serviceName)' extra_hosts at \(hostsFilePath): \(error.localizedDescription)")
             }
         }
 
@@ -964,14 +987,30 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
 // MARK: Host gateway resolution
 extension ComposeUp {
-    /// Resolves the `host-gateway` token to the host machine's default gateway IP.
-    /// Used to translate `extra_hosts: ["hostname:host-gateway"]` into a concrete
-    /// `--add-host` argument that Apple's `container run` accepts.
+    /// Resolves the `host-gateway` token to the IP containers actually use to reach
+    /// the host, for translating `extra_hosts: ["hostname:host-gateway"]` into a
+    /// concrete `/etc/hosts` entry (see the extra_hosts handling in `configService`).
     ///
-    /// Runs `route -n get default` and parses the `gateway:` line. Falls back to
-    /// `"host-gateway"` (passed through unmodified) if resolution fails, which will
-    /// cause `container run` to emit a useful error rather than silently misbehaving.
-    static func resolveHostGatewayIP() -> String {
+    /// Queries `container network inspect <networkName>` for `status.ipv4Gateway` —
+    /// the vmnet bridge gateway Apple's `container` runtime routes container→host
+    /// traffic through. This is deliberately *not* `route -n get default`: that
+    /// reports the Mac's LAN default-route gateway (the router), which is a
+    /// different, unreachable-from-the-container address on any machine whose
+    /// default route isn't the vmnet bridge itself — i.e. almost always.
+    ///
+    /// Falls back to parsing `route -n get default` (the previous, unreliable
+    /// approach) only if the network can't be inspected, with a warning — better
+    /// than nothing, but callers should treat it as a guess.
+    static func resolveHostGatewayIP(networkName: String = "default") -> String {
+        if let gateway = inspectNetworkGateway(networkName) {
+            return gateway
+        }
+
+        print(
+            "Warning: could not determine network '\(networkName)' gateway via 'container network inspect'; "
+                + "falling back to the host's LAN default-route gateway, which may not be reachable from the container."
+        )
+
         let process = Process()
         process.launchPath = "/usr/bin/env"
         process.arguments = ["route", "-n", "get", "default"]
@@ -980,6 +1019,7 @@ extension ComposeUp {
         process.standardError = Pipe()
         do { try process.run() } catch { return "host-gateway" }
         process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return "host-gateway" }
         let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         for line in output.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -988,6 +1028,30 @@ extension ComposeUp {
             }
         }
         return "host-gateway"
+    }
+
+    /// Runs `container network inspect <networkName>` and extracts `status.ipv4Gateway`.
+    /// Returns `nil` on any failure (missing binary, non-zero exit, unexpected JSON shape).
+    private static func inspectNetworkGateway(_ networkName: String) -> String? {
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["container", "network", "inspect", networkName]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do { try process.run() } catch { return nil }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        guard
+            let networks = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+            let status = networks.first?["status"] as? [String: Any],
+            let gateway = status["ipv4Gateway"] as? String,
+            !gateway.isEmpty
+        else {
+            return nil
+        }
+        return gateway
     }
 }
 
