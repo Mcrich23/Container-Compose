@@ -195,7 +195,8 @@ func composeVolumeToRunArgs(
     cwd: String,
     fileManager: FileManager = .default,
     environmentVariables: [String: String] = [:],
-    projectName: String?
+    projectName: String?,
+    volumeDefinitions: [String: Volume?]? = nil
 ) throws -> [String] {
     let resolvedVolume = resolveVariable(volume, with: environmentVariables)
     var args: [String] = []
@@ -232,23 +233,38 @@ func composeVolumeToRunArgs(
             }
         }
     } else {
-        guard let projectName else { return [] }
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(source)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
-        let destinationUrl = URL(fileURLWithPath: destination).deletingLastPathComponent()
-        let destinationPath = destinationUrl.path(percentEncoded: false)
-
-        print(
-            "Warning: Volume source '\(source)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
+        let volumeDefinition = volumeDefinitions?[source] ?? nil
+        let actualVolumeName = composeNamedVolumeName(
+            source: source,
+            projectName: projectName,
+            volumeDefinition: volumeDefinition
         )
-        try fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
 
         args.append("-v")
-        let modeStr = mode.map { ":\($0)" } ?? ""
-        args.append("\(volumePath):\(destinationPath)\(modeStr)")
+        args.append(bindMountArg(source: actualVolumeName))
     }
 
     return args
+}
+
+func composeNamedVolumeName(
+    source: String,
+    projectName: String?,
+    volumeDefinition: Volume?
+) -> String {
+    if let explicitName = volumeDefinition?.name {
+        return explicitName
+    }
+
+    if volumeDefinition?.external?.isExternal == true {
+        return volumeDefinition?.external?.name ?? source
+    }
+
+    guard let projectName, !projectName.isEmpty else {
+        return source
+    }
+
+    return "\(projectName)_\(source)"
 }
 
 extension String: @retroactive Error {}

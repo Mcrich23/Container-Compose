@@ -107,4 +107,72 @@ struct EntrypointCommandTests {
         #expect(r.entrypointFlag == "/bin/sh")
         #expect(r.positional == [])
     }
+
+    @Test("hostname does not emit unsupported container run flag")
+    func hostnameDoesNotEmitUnsupportedRunFlag() {
+        let r = ComposeUp.hostnameRunArgs(
+            hostname: "${HOSTNAME_VALUE}",
+            serviceName: "web",
+            environmentVariables: ["HOSTNAME_VALUE": "custom-host"]
+        )
+
+        #expect(r.args.isEmpty)
+        #expect(r.warning == "Warning: Service 'web' defines hostname 'custom-host', but Apple Container does not currently expose a container run hostname flag.")
+    }
+
+    @Test("network aliases emit service name and Apple alias properties when supported")
+    func networkAliasesEmitWhenSupported() {
+        let r = ComposeUp.networkRunArg(
+            network: "backend",
+            aliases: ["${SERVICE_ALIAS}", "database"],
+            serviceName: "web",
+            environmentVariables: ["SERVICE_ALIAS": "db"],
+            supportsAliases: true
+        )
+
+        #expect(r.arg == "backend,alias=web,alias=db,alias=database")
+        #expect(r.warning == nil)
+    }
+
+    @Test("network aliases emit service name when no explicit aliases are configured")
+    func networkAliasesEmitServiceNameByDefault() {
+        let r = ComposeUp.networkRunArg(
+            network: "backend",
+            aliases: [],
+            serviceName: "web",
+            environmentVariables: [:],
+            supportsAliases: true
+        )
+
+        #expect(r.arg == "backend,alias=web")
+        #expect(r.warning == nil)
+    }
+
+    @Test("network aliases do not duplicate explicit service name alias")
+    func networkAliasesDoNotDuplicateServiceName() {
+        let r = ComposeUp.networkRunArg(
+            network: "backend",
+            aliases: ["web", "database"],
+            serviceName: "web",
+            environmentVariables: [:],
+            supportsAliases: true
+        )
+
+        #expect(r.arg == "backend,alias=web,alias=database")
+        #expect(r.warning == nil)
+    }
+
+    @Test("network aliases warn when Apple alias properties are unsupported")
+    func networkAliasesWarnWhenUnsupported() {
+        let r = ComposeUp.networkRunArg(
+            network: "backend",
+            aliases: ["${SERVICE_ALIAS}", "database"],
+            serviceName: "web",
+            environmentVariables: ["SERVICE_ALIAS": "db"],
+            supportsAliases: false
+        )
+
+        #expect(r.arg == "backend")
+        #expect(r.warning == "Warning: Service 'web' defines network aliases for 'backend' (web, db, database), but the linked Apple Container command parser does not expose a container run alias property.")
+    }
 }

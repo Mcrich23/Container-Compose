@@ -227,6 +227,8 @@ struct DockerComposeParsingTests {
         #expect(compose.services["web"]??.depends_on?.contains("db") == true)
         #expect(compose.services["web"]??.depends_on?.contains("cache") == true)
         #expect(compose.services["web"]??.depends_on?.count == 2)
+        #expect(compose.services["web"]??.dependencyConditions?["db"]?.condition == "service_healthy")
+        #expect(compose.services["web"]??.dependencyConditions?["cache"]?.condition == "service_started")
     }
 
     @Test("Parse compose with build context")
