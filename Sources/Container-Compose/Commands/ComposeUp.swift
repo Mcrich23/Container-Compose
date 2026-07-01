@@ -103,7 +103,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private var envFilePath: String {
-        let envFile = process.envFile.first ?? ".env"
+        let envFile = composeFileOptions.envFile ?? ".env"
         return resolvedPath(for: envFile, relativeTo: cwdURL)
     }
 
@@ -118,12 +118,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var noCache: Bool = false
 
     @OptionGroup
-    var process: Flags.Process
-
-    @OptionGroup
     var logging: Flags.Logging
 
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
+    private var cwd: String { composeFileOptions.workdir ?? FileManager.default.currentDirectoryPath }
 
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
