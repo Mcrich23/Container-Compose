@@ -895,6 +895,66 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
         runCommandArgs.append(contentsOf: hostnameTranslation.args)
 
+        // Add extra_hosts entries. `container run` (verified against container CLI
+        // 1.0.0) has no --add-host flag at all — passing one fails immediately with
+        // "Error: Unknown option '--add-host'" — so entries are written to a hosts
+        // file and bind-mounted over /etc/hosts instead.
+        //
+        // The special token `host-gateway` is resolved via `container network
+        // inspect`, which reports the vmnet bridge gateway the container actually
+        // uses to reach the host. `route -n get default` (the previous approach)
+        // instead returns the Mac's LAN default-route gateway, which is a different
+        // address whenever the machine's default route isn't the vmnet bridge (e.g.
+        // any normal Wi-Fi/Ethernet setup) — so containers would gain an entry
+        // pointing at the router, not the host.
+        if let extraHosts = service.extra_hosts, !extraHosts.isEmpty {
+            print(
+                "Note: service '\(serviceName)' sets extra_hosts. Since 'container run' has no --add-host "
+                    + "flag, /etc/hosts is generated from scratch and bind-mounted in, which replaces the "
+                    + "daemon's own generated file wholesale (Docker's --add-host appends instead). The "
+                    + "container's own hostname is re-added below so self-resolution keeps working, but any "
+                    + "other daemon-managed entries are not preserved."
+            )
+
+            // Resolve variables first: needsGateway must inspect the resolved value,
+            // otherwise an entry fully wrapped in a variable (e.g. "${HOST_ENTRY}"
+            // expanding to "foo:host-gateway") is missed and hostGatewayIP is left
+            // empty, silently producing "--add-host foo:" (now "foo:" in /etc/hosts).
+            let resolvedEntries = extraHosts.map { resolveVariable($0, with: environmentVariables) }
+            let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
+            let resolvedNetworkName = service.networks?.first.map { resolveVariable($0, with: environmentVariables) } ?? "default"
+            let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
+
+            var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
+            var seenHostnames: Set<String> = ["localhost"]
+            for resolved in resolvedEntries {
+                let parts = resolved.split(separator: ":", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { continue }
+                let hostname = parts[0]
+                let ip = parts[1] == "host-gateway" ? hostGatewayIP : parts[1]
+                hostsFileLines.append("\(ip) \(hostname)")
+                seenHostnames.insert(hostname)
+            }
+
+            // Re-add the container's own hostname → 127.0.0.1, the entry Apple's
+            // container daemon would normally generate itself, so anything inside
+            // the container that resolves its own hostname still works. Skipped if
+            // extra_hosts already defines that name explicitly, so an intentional
+            // user override wins.
+            let ownHostname = service.hostname.map { resolveVariable($0, with: environmentVariables) } ?? containerName
+            if !seenHostnames.contains(ownHostname) {
+                hostsFileLines.append("127.0.0.1 \(ownHostname)")
+            }
+
+            let hostsFilePath = Self.extraHostsFilePath(projectName: projectName, serviceName: serviceName)
+            do {
+                try (hostsFileLines.joined(separator: "\n") + "\n").write(toFile: hostsFilePath, atomically: true, encoding: .utf8)
+                runCommandArgs.append(contentsOf: ["-v", "\(hostsFilePath):/etc/hosts"])
+            } catch {
+                print("Warning: could not write hosts file for service '\(serviceName)' extra_hosts at \(hostsFilePath): \(error.localizedDescription)")
+            }
+        }
+
         // Add working directory
         if let workingDir = service.working_dir {
             let resolvedWorkingDir = resolveVariable(workingDir, with: environmentVariables)
@@ -912,11 +972,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("--read-only")
         }
 
-        // Add resource limits
+        // Add resource limits.
+        // `mem_limit` is the top-level shorthand; `deploy.resources.limits.memory` is
+        // the structured form. Both map to `container run --memory`. `mem_limit` takes
+        // precedence when both are set, matching Docker Compose CLI behaviour.
         if let cpus = service.deploy?.resources?.limits?.cpus {
             runCommandArgs.append(contentsOf: ["--cpus", cpus])
         }
-        if let memory = service.deploy?.resources?.limits?.memory {
+        let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
+        if let memory = effectiveMemoryLimit {
             runCommandArgs.append(contentsOf: ["--memory", memory])
         }
 
@@ -1204,6 +1268,89 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             projectName: projectName,
             volumeDefinitions: dockerCompose.volumes
         )
+    }
+}
+
+// MARK: extra_hosts file management
+extension ComposeUp {
+    /// Deterministic path for the generated /etc/hosts bind-mount source for a
+    /// given service (see the extra_hosts handling in `configService`). Reused
+    /// (overwritten) across repeated `up` runs of the same service rather than
+    /// accumulating a new file each time. `ComposeDown` removes it once the
+    /// container it was mounted into is actually stopped — not `up`, since the
+    /// file may still be bind-mounted into a running container.
+    static func extraHostsFilePath(projectName: String, serviceName: String) -> String {
+        NSTemporaryDirectory() + "container-compose-\(projectName)-\(serviceName)-hosts"
+    }
+}
+
+// MARK: Host gateway resolution
+extension ComposeUp {
+    /// Resolves the `host-gateway` token to the IP containers actually use to reach
+    /// the host, for translating `extra_hosts: ["hostname:host-gateway"]` into a
+    /// concrete `/etc/hosts` entry (see the extra_hosts handling in `configService`).
+    ///
+    /// Queries `container network inspect <networkName>` for `status.ipv4Gateway` —
+    /// the vmnet bridge gateway Apple's `container` runtime routes container→host
+    /// traffic through. This is deliberately *not* `route -n get default`: that
+    /// reports the Mac's LAN default-route gateway (the router), which is a
+    /// different, unreachable-from-the-container address on any machine whose
+    /// default route isn't the vmnet bridge itself — i.e. almost always.
+    ///
+    /// Falls back to parsing `route -n get default` (the previous, unreliable
+    /// approach) only if the network can't be inspected, with a warning — better
+    /// than nothing, but callers should treat it as a guess.
+    static func resolveHostGatewayIP(networkName: String = "default") -> String {
+        if let gateway = inspectNetworkGateway(networkName) {
+            return gateway
+        }
+
+        print(
+            "Warning: could not determine network '\(networkName)' gateway via 'container network inspect'; "
+                + "falling back to the host's LAN default-route gateway, which may not be reachable from the container."
+        )
+
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["route", "-n", "get", "default"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do { try process.run() } catch { return "host-gateway" }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return "host-gateway" }
+        let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("gateway:") {
+                return trimmed.dropFirst("gateway:".count).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return "host-gateway"
+    }
+
+    /// Runs `container network inspect <networkName>` and extracts `status.ipv4Gateway`.
+    /// Returns `nil` on any failure (missing binary, non-zero exit, unexpected JSON shape).
+    private static func inspectNetworkGateway(_ networkName: String) -> String? {
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["container", "network", "inspect", networkName]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do { try process.run() } catch { return nil }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        guard
+            let networks = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+            let status = networks.first?["status"] as? [String: Any],
+            let gateway = status["ipv4Gateway"] as? String,
+            !gateway.isEmpty
+        else {
+            return nil
+        }
+        return gateway
     }
 }
 

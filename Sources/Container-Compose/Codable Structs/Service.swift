@@ -110,13 +110,23 @@ public struct Service: Codable, Hashable {
     /// Allocate a pseudo-TTY (-t flag for `container run`)
     public let tty: Bool?
     
+    /// Memory limit shorthand (e.g., "512m", "1g") — top-level alternative to
+    /// `deploy.resources.limits.memory`. Takes precedence when both are set.
+    public let mem_limit: String?
+
+    /// Additional `/etc/hosts` entries injected into the container. Each entry is a
+    /// `"hostname:IP"` string. The special token `host-gateway` resolves to the host
+    /// machine's IP as seen from inside the container.
+    public let extra_hosts: [String]?
+
     /// Other services that depend on this service
     public var dependedBy: [String] = []
-    
+
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
-             container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform
+             container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
+             mem_limit, extra_hosts
     }
     
     /// Public memberwise initializer for testing
@@ -148,6 +158,8 @@ public struct Service: Codable, Hashable {
         secrets: [ServiceSecret]? = nil,
         stdin_open: Bool? = nil,
         tty: Bool? = nil,
+        mem_limit: String? = nil,
+        extra_hosts: [String]? = nil,
         dependedBy: [String] = []
     ) {
         self.image = image
@@ -177,6 +189,8 @@ public struct Service: Codable, Hashable {
         self.secrets = secrets
         self.stdin_open = stdin_open
         self.tty = tty
+        self.mem_limit = mem_limit
+        self.extra_hosts = extra_hosts
         self.dependedBy = dependedBy
     }
 
@@ -298,6 +312,26 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
+        if let s = try? container.decodeIfPresent(String.self, forKey: .mem_limit) {
+            mem_limit = s
+        } else if let i = try? container.decodeIfPresent(Int.self, forKey: .mem_limit) {
+            mem_limit = "\(i)"
+        } else {
+            mem_limit = nil
+        }
+
+        // `extra_hosts` accepts two forms per the Compose spec:
+        //   extra_hosts:               extra_hosts:
+        //     - "hostname:IP"    or      hostname: IP
+        //     - "other:host-gateway"
+        // The list form is most common; the map form is normalised to list form here.
+        if let list = try? container.decodeIfPresent([String].self, forKey: .extra_hosts) {
+            extra_hosts = list
+        } else if let map = try? container.decodeIfPresent([String: String].self, forKey: .extra_hosts) {
+            extra_hosts = map.map { "\($0.key):\($0.value)" }
+        } else {
+            extra_hosts = nil
+        }
     }
     
     /// Translates the list-form of `environment:` into the same `[String: String]`
