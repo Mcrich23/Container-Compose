@@ -119,6 +119,13 @@ public struct Service: Codable, Hashable {
     /// machine's IP as seen from inside the container.
     public let extra_hosts: [String]?
 
+    /// Profile names that gate this service (per the Compose spec `profiles` key).
+    /// A service with no profiles (nil/empty) is always eligible. A service with
+    /// profiles is only eligible when at least one of them is active — unless the
+    /// service is named explicitly on the command line, or is a dependency of an
+    /// eligible service, both of which bypass the profile gate per the Compose spec.
+    public let profiles: [String]?
+
     /// Other services that depend on this service
     public var dependedBy: [String] = []
 
@@ -126,7 +133,7 @@ public struct Service: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
-             mem_limit, extra_hosts
+             mem_limit, extra_hosts, profiles
     }
     
     /// Public memberwise initializer for testing
@@ -160,6 +167,7 @@ public struct Service: Codable, Hashable {
         tty: Bool? = nil,
         mem_limit: String? = nil,
         extra_hosts: [String]? = nil,
+        profiles: [String]? = nil,
         dependedBy: [String] = []
     ) {
         self.image = image
@@ -191,6 +199,7 @@ public struct Service: Codable, Hashable {
         self.tty = tty
         self.mem_limit = mem_limit
         self.extra_hosts = extra_hosts
+        self.profiles = profiles
         self.dependedBy = dependedBy
     }
 
@@ -332,6 +341,21 @@ public struct Service: Codable, Hashable {
         } else {
             extra_hosts = nil
         }
+
+        // `profiles` is a plain list of strings per the Compose spec (no shorthand
+        // single-string form).
+        profiles = try container.decodeIfPresent([String].self, forKey: .profiles)
+    }
+
+    /// True when this service should be included by default given the currently
+    /// active profiles. Per the Compose spec: a service with no `profiles` is
+    /// always eligible; a service with `profiles` is eligible only when at least
+    /// one of them is active. This gate is bypassed entirely for services named
+    /// explicitly on the command line and for dependencies of an eligible service
+    /// (see `selectServices(from:requestedServices:activeProfiles:)`).
+    public func isProfileEligible(activeProfiles: Set<String>) -> Bool {
+        guard let profiles, !profiles.isEmpty else { return true }
+        return !Set(profiles).isDisjoint(with: activeProfiles)
     }
     
     /// Translates the list-form of `environment:` into the same `[String: String]`
@@ -396,5 +420,51 @@ public struct Service: Codable, Hashable {
         }
 
         return sorted
+    }
+
+    /// Selects the services `up`, `build`, and `down` should act on by default,
+    /// applying both explicit service-name filtering and Compose `profiles` gating.
+    ///
+    /// Per the Compose spec, `profiles` gating is bypassed in two cases:
+    ///   - a service named explicitly in `requestedServices`
+    ///   - a service reached only as a `depends_on` dependency of an eligible
+    ///     service (its own `profiles` are ignored)
+    /// When `requestedServices` is empty, the seed set is every service that
+    /// is profile-eligible for `activeProfiles` (unprofiled, or one of its
+    /// profiles is active); dependencies of that seed are then pulled in
+    /// regardless of their own profile.
+    static func selectServices(
+        from services: [(serviceName: String, service: Service)],
+        requestedServices: [String],
+        activeProfiles: Set<String> = []
+    ) -> [(serviceName: String, service: Service)] {
+        let servicesByName = Dictionary(uniqueKeysWithValues: services.map { ($0.serviceName, $0.service) })
+
+        let seedNames: [String]
+        if !requestedServices.isEmpty {
+            seedNames = requestedServices
+        } else {
+            seedNames = services
+                .filter { $0.service.isProfileEligible(activeProfiles: activeProfiles) }
+                .map(\.serviceName)
+        }
+
+        var selected = Set<String>()
+
+        func include(_ serviceName: String) {
+            guard let service = servicesByName[serviceName], selected.insert(serviceName).inserted else {
+                return
+            }
+
+            for dependency in service.depends_on ?? [] {
+                include(dependency)
+            }
+        }
+
+        for serviceName in seedNames {
+            include(serviceName)
+        }
+
+        return services.filter { selected.contains($0.serviceName) }
     }
 }
