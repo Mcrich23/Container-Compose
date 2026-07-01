@@ -743,6 +743,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // any normal Wi-Fi/Ethernet setup) — so containers would gain an entry
         // pointing at the router, not the host.
         if let extraHosts = service.extra_hosts, !extraHosts.isEmpty {
+            print(
+                "Note: service '\(serviceName)' sets extra_hosts. Since 'container run' has no --add-host "
+                    + "flag, /etc/hosts is generated from scratch and bind-mounted in, which replaces the "
+                    + "daemon's own generated file wholesale (Docker's --add-host appends instead). The "
+                    + "container's own hostname is re-added below so self-resolution keeps working, but any "
+                    + "other daemon-managed entries are not preserved."
+            )
+
             // Resolve variables first: needsGateway must inspect the resolved value,
             // otherwise an entry fully wrapped in a variable (e.g. "${HOST_ENTRY}"
             // expanding to "foo:host-gateway") is missed and hostGatewayIP is left
@@ -753,14 +761,27 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
 
             var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
+            var seenHostnames: Set<String> = ["localhost"]
             for resolved in resolvedEntries {
                 let parts = resolved.split(separator: ":", maxSplits: 1).map(String.init)
                 guard parts.count == 2 else { continue }
                 let hostname = parts[0]
                 let ip = parts[1] == "host-gateway" ? hostGatewayIP : parts[1]
                 hostsFileLines.append("\(ip) \(hostname)")
+                seenHostnames.insert(hostname)
             }
-            let hostsFilePath = NSTemporaryDirectory() + "container-compose-\(projectName)-\(serviceName)-hosts"
+
+            // Re-add the container's own hostname → 127.0.0.1, the entry Apple's
+            // container daemon would normally generate itself, so anything inside
+            // the container that resolves its own hostname still works. Skipped if
+            // extra_hosts already defines that name explicitly, so an intentional
+            // user override wins.
+            let ownHostname = service.hostname.map { resolveVariable($0, with: environmentVariables) } ?? containerName
+            if !seenHostnames.contains(ownHostname) {
+                hostsFileLines.append("127.0.0.1 \(ownHostname)")
+            }
+
+            let hostsFilePath = Self.extraHostsFilePath(projectName: projectName, serviceName: serviceName)
             do {
                 try (hostsFileLines.joined(separator: "\n") + "\n").write(toFile: hostsFilePath, atomically: true, encoding: .utf8)
                 runCommandArgs.append(contentsOf: ["-v", "\(hostsFilePath):/etc/hosts"])
@@ -982,6 +1003,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     private func configVolume(_ volume: String) async throws -> [String] {
         try composeVolumeToRunArgs(volume, cwd: cwd, fileManager: fileManager, environmentVariables: environmentVariables, projectName: projectName)
+    }
+}
+
+// MARK: extra_hosts file management
+extension ComposeUp {
+    /// Deterministic path for the generated /etc/hosts bind-mount source for a
+    /// given service (see the extra_hosts handling in `configService`). Reused
+    /// (overwritten) across repeated `up` runs of the same service rather than
+    /// accumulating a new file each time. `ComposeDown` removes it once the
+    /// container it was mounted into is actually stopped — not `up`, since the
+    /// file may still be bind-mounted into a running container.
+    static func extraHostsFilePath(projectName: String, serviceName: String) -> String {
+        NSTemporaryDirectory() + "container-compose-\(projectName)-\(serviceName)-hosts"
     }
 }
 

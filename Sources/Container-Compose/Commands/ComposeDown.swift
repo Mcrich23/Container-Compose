@@ -155,6 +155,10 @@ public struct ComposeDown: AsyncParsableCommand {
             if !stoppedAny {
                 print("Warning: No container found for service '\(serviceName)' (tried: \(candidates.joined(separator: ", "))).")
             }
+
+            // Best-effort: the extra_hosts bind-mount source (if any) is only safe
+            // to remove once the container that had it mounted is stopped.
+            try? fileManager.removeItem(atPath: ComposeUp.extraHostsFilePath(projectName: projectName, serviceName: serviceName))
         }
     }
 }
