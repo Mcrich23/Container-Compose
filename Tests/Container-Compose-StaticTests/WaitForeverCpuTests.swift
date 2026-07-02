@@ -31,19 +31,25 @@ struct WaitForeverCpuTests {
 
     /// Regression for #27: `waitForever()` must suspend, not busy-loop.
     ///
-    /// Method: take a `getrusage(RUSAGE_SELF)` snapshot, spawn a child Task
-    /// that calls `waitForever()`, sleep for 200ms wall-clock, take a second
-    /// snapshot, and compare user-CPU consumed.
+    /// Method: `getrusage(RUSAGE_SELF)` is process-wide, not per-task — it counts
+    /// every thread in the process, including whatever other tests Swift Testing
+    /// is running concurrently in this same process (this suite is `.serialized`
+    /// internally, but that doesn't stop *other* suites from overlapping it). So
+    /// rather than an absolute threshold, take a baseline measurement over an
+    /// idle 200ms window immediately before the real one, then assert on the
+    /// *incremental* cost the `waitForever` task adds on top of that baseline.
+    /// This cancels out ambient noise from concurrent tests instead of assuming
+    /// it's near-zero, which stopped holding once the suite grew large enough
+    /// that something is almost always running during any given 200ms window.
     ///
     /// On the bug (`for await _ in AsyncStream<Void>(unfolding: {})`), the
-    /// child task pins one core, so user CPU consumed during the 200ms window
-    /// is around 200,000 µs (one full core). With the fix
-    /// (`withUnsafeContinuation { _ in }`), the child task suspends and
-    /// consumes essentially nothing.
+    /// child task pins one core, so it adds roughly 200,000 µs of user CPU on
+    /// top of baseline during the 200ms window. With the fix
+    /// (`withUnsafeContinuation { _ in }`), the child task suspends and adds
+    /// essentially nothing.
     ///
-    /// Threshold of 50,000 µs gives ~4× headroom over a noisy CI baseline
-    /// (test-runner overhead, parallel tasks) while still reliably catching
-    /// a single core's worth of busy-loop work.
+    /// Threshold of 50,000 µs of *incremental* cost gives ~4× headroom while
+    /// still reliably catching a single core's worth of busy-loop work.
     ///
     /// Side effect: this test leaks one suspended task per invocation
     /// (`waitForever` is `-> Never` and the suspended task can't be cancelled
@@ -52,6 +58,14 @@ struct WaitForeverCpuTests {
     @Test("waitForever does not pin a CPU core (regression for #27)")
     func waitForeverDoesNotPinCpu() async throws {
         let composeUp = ComposeUp()
+
+        // Baseline: ambient CPU consumed by the whole process over an idle
+        // 200ms window (no waitForever task running), to calibrate against
+        // whatever else is concurrently running in this test process.
+        let baselineBefore = userCpuMicroseconds()
+        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+        let baselineConsumed = userCpuMicroseconds() - baselineBefore
+
         let before = userCpuMicroseconds()
 
         // Detached so cancellation propagation from the test doesn't reach it
@@ -65,8 +79,9 @@ struct WaitForeverCpuTests {
 
         let after = userCpuMicroseconds()
         let consumed = after - before
+        let incremental = consumed - baselineConsumed
 
-        #expect(consumed < 50_000,
-                "waitForever consumed \(consumed) µs of user CPU in 200ms — likely busy-looping (regression for #27)")
+        #expect(incremental < 50_000,
+                "waitForever added \(incremental) µs of user CPU over a \(baselineConsumed) µs baseline in 200ms — likely busy-looping (regression for #27)")
     }
 }
