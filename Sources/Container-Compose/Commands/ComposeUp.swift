@@ -254,25 +254,117 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         if !detach {
-            await waitForever()
+            await runForegroundUntilStopped(serviceNames: services.map({ $0.serviceName }))
         }
     }
 
-    func waitForever() async -> Never {
-        // `AsyncStream<Void>(unfolding: () async -> Void?)` ends only when the
-        // closure returns `nil`. An empty closure returns `()`, which Swift
-        // auto-wraps as `.some(())` — never `nil` — so the previous
-        // `for await _ in AsyncStream<Void>(unfolding: {})` produced an
-        // infinite stream of `Void` values with no `await` between them and
-        // pinned a CPU core at 100% (issue #27).
-        //
-        // Suspending on a continuation that is never resumed parks the task
-        // indefinitely with zero CPU. `withUnsafeContinuation` (rather than
-        // `withCheckedContinuation`) avoids the runtime's "continuation leaked"
-        // diagnostic — leaking is the intent here, since the contract is to
-        // wait until the process is killed.
-        await withUnsafeContinuation { (_: UnsafeContinuation<Void, Never>) in }
-        fatalError("unreachable")
+    /// Foreground (`up` without `--detach`) behavior, matching `docker compose up`:
+    ///   - Ctrl-C (SIGINT) / `kill` (SIGTERM) gracefully stops the project's
+    ///     containers, then exits. A second signal forces an immediate exit.
+    ///   - If the containers stop on their own — or via `container compose down`
+    ///     from another shell — `up` returns instead of hanging forever.
+    func runForegroundUntilStopped(serviceNames: [String]) async -> Never {
+        let containerNames = projectName.map { project in
+            serviceNames.map { "\(project)-\($0)" }
+        } ?? []
+
+        // Exit once the containers stop by themselves or are stopped externally.
+        if !containerNames.isEmpty {
+            Task {
+                await Self.waitUntilAllContainersStopped(containerNames)
+                print("\nAll containers have stopped.")
+                Foundation.exit(0)
+            }
+        }
+
+        // Bridge SIGINT/SIGTERM into an async stream. The `ContainerCommands`
+        // invoked during `up` leave these signals neutered (SIG_IGN) via
+        // ContainerAPIService's async signal machinery, so a foreground `up`
+        // previously ignored Ctrl-C. A `DispatchSource` signal source observes
+        // them regardless of disposition.
+        let signals = Self.makeSignalStream([SIGINT, SIGTERM])
+        var stopping = false
+        for await _ in signals {
+            if !stopping {
+                stopping = true
+                print("\nGracefully stopping... (press Ctrl+C again to force)")
+                Task {
+                    await Self.stopContainers(containerNames)
+                    Foundation.exit(0)
+                }
+            } else {
+                print("\nForcing stop.")
+                Task {
+                    await Self.killContainers(containerNames)
+                    Foundation.exit(130)
+                }
+            }
+        }
+        Foundation.exit(0)
+    }
+
+    /// An `AsyncStream` of the given signals, delivered via `DispatchSource` so
+    /// they're received even after the disposition has been set to `SIG_IGN`.
+    private static func makeSignalStream(_ signals: [Int32]) -> AsyncStream<Int32> {
+        AsyncStream { continuation in
+            let queue = DispatchQueue(label: "container-compose.signals")
+            let sources: [DispatchSourceSignal] = signals.map { sig in
+                // Ignore the default action so the DispatchSource alone handles it.
+                signal(sig, SIG_IGN)
+                let source = DispatchSource.makeSignalSource(signal: sig, queue: queue)
+                source.setEventHandler { continuation.yield(sig) }
+                source.resume()
+                return source
+            }
+            continuation.onTermination = { _ in sources.forEach { $0.cancel() } }
+        }
+    }
+
+    /// Gracefully stops (without removing) the named containers — the
+    /// `docker compose up` Ctrl-C contract leaves stopped containers in place.
+    private static func stopContainers(_ containerNames: [String]) async {
+        let client = ContainerClient()
+        for name in containerNames {
+            guard let container = try? await client.get(id: name) else { continue }
+            print("Stopping container: \(name)")
+            do {
+                try await client.stop(id: container.id)
+            } catch {
+                print("Error stopping container \(name): \(error)")
+            }
+        }
+    }
+
+    /// Force-stops the named containers with SIGKILL — the second-Ctrl-C
+    /// contract, matching `docker compose up`'s "press Ctrl+C again to force".
+    private static func killContainers(_ containerNames: [String]) async {
+        let client = ContainerClient()
+        for name in containerNames {
+            guard let container = try? await client.get(id: name) else { continue }
+            print("Killing container: \(name)")
+            try? await client.kill(id: container.id, signal: "SIGKILL")
+        }
+    }
+
+    /// Polls until every named container has been observed running at least once
+    /// and then none remain running (stopped naturally or via `down`). Requiring
+    /// "seen running first" avoids returning before the containers have started.
+    private static func waitUntilAllContainersStopped(_ containerNames: [String], interval: TimeInterval = 1.0) async {
+        let client = ContainerClient()
+        var seenRunning = Set<String>()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            var running = Set<String>()
+            for name in containerNames {
+                if let container = try? await client.get(id: name), container.status == .running {
+                    running.insert(name)
+                }
+            }
+            seenRunning.formUnion(running)
+            if seenRunning.count == containerNames.count && running.isEmpty {
+                return
+            }
+        }
     }
 
     /// Translates Compose's `entrypoint` + `command` into args for `container run`.
