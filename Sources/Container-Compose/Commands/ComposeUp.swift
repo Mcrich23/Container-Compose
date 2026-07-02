@@ -24,13 +24,41 @@
 import ArgumentParser
 import ContainerCommands
 import ContainerAPIClient
+import ContainerXPC
 import ContainerizationExtras
 import Foundation
 @preconcurrency import Rainbow
 import Yams
 
+private enum ServiceStartState: Codable, Equatable {
+    case running
+    case completed
+}
+
+// `containerWait` must be registered while the runtime client is still alive;
+// once a fast one-shot reaches `.stopped`, the server can no longer recover it.
+private actor ServiceExitCodeRegistry {
+    static let shared = ServiceExitCodeRegistry()
+
+    private var tasks: [String: Task<Int32, Error>] = [:]
+
+    func set(_ task: Task<Int32, Error>, for containerName: String) {
+        tasks[containerName] = task
+    }
+
+    func task(for containerName: String) -> Task<Int32, Error>? {
+        tasks[containerName]
+    }
+
+    func remove(for containerName: String) {
+        tasks[containerName] = nil
+    }
+}
+
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
+
+    private static let networkAliasesSupported = supportsNetworkAliases()
 
     public static let configuration: CommandConfiguration = .init(
         commandName: "up",
@@ -99,8 +127,23 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
+    /// Apple `container` DNS domain to use for inter-container resolution. Derived
+    /// from `projectName` (sanitized to a valid DNS label). `nil` if the project
+    /// name produces no usable label.
+    private var dnsDomain: String?
+    /// True when `dnsDomain` is registered with `container system dns create`,
+    /// which means the daemon's embedded DNS server will answer for `*.<dnsDomain>`
+    /// queries from inside containers. When true, services get a dotted `--name`
+    /// + `--dns-domain` and the /etc/hosts cross-patcher is skipped.
+    private var dnsAvailable: Bool = false
     private var environmentVariables: [String: String] = [:]
     private var containerIps: [String: String] = [:]
+    private var serviceStartStates: [String: ServiceStartState] = [:]
+    private var serviceHealth: [String: Bool] = [:]
+    /// Resolved container ID (i.e. the name on disk) per service.
+    /// Equal to `service.container_name` when set, otherwise either
+    /// `<serviceName>.<dnsDomain>` (DNS path) or `<projectName>-<serviceName>` (legacy).
+    private var serviceContainerNames: [String: String] = [:]
     private var containerConsoleColors: [String: NamedColor] = [:]
 
     private static let availableContainerConsoleColors: Set<NamedColor> = [
@@ -134,11 +177,29 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             projectName = name
             print("Info: Docker Compose project name parsed as: \(name)")
             print(
-                "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
+                "Note: The 'name' field affects generated container names and default named-volume names. Full project-level isolation for other resources is not implemented by this tool."
             )
         } else {
             projectName = deriveProjectName(cwd: cwd)
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
+        }
+
+        // Determine whether real DNS is available for this project. If so, we'll
+        // give every container a dotted name (`<svc>.<dnsDomain>`) and pass
+        // `--dns-domain` so libc inside the container resolves peers via the
+        // daemon's DNS server. If not, fall back to /etc/hosts patching.
+        if let derived = Self.sanitizeDnsDomain(projectName ?? "") {
+            dnsDomain = derived
+            dnsAvailable = await checkDnsDomainRegistered(derived)
+            if dnsAvailable {
+                print("Info: DNS domain '\(derived)' is registered. Using real DNS for inter-container resolution.")
+            } else {
+                print("""
+                Note: DNS domain '\(derived)' is not registered. Inter-container hostname
+                      resolution will fall back to /etc/hosts patching. For real DNS:
+                          sudo container system dns create \(derived)
+                """)
+            }
         }
 
         // Get Services to use
@@ -149,14 +210,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         services = try Service.topoSortConfiguredServices(services)
 
         // Filter for specified services
-        if !self.services.isEmpty {
-            services = services.filter({ serviceName, service in
-                self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
-            })
-        }
+        services = Self.servicesSelectedForUp(services, requestedServices: self.services)
 
-        // Stop Services
-        try await stopOldStuff(services.map({ $0.serviceName }), remove: true)
+        // Stop Services. Pass every name a previous run might have used (legacy
+        // dashed, dotted DNS-mode, and explicit container_name) so the cleanup
+        // catches whichever shape exists on disk.
+        let containerNamesToStop: [String] = services.flatMap { (serviceName, service) -> [String] in
+            var names: [String] = []
+            if let projectName { names.append("\(projectName)-\(serviceName)") }
+            if let dnsDomain { names.append("\(serviceName).\(dnsDomain)") }
+            if let explicit = service.container_name, !names.contains(explicit) { names.append(explicit) }
+            return names
+        }
+        try await stopExistingContainers(containerNamesToStop, remove: true)
 
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
@@ -174,7 +240,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\n--- Processing Volumes ---")
             for (volumeName, volumeConfig) in volumes {
                 guard let volumeConfig else { continue }
-                await createVolumeHardLink(name: volumeName, config: volumeConfig)
+                try await createVolume(name: volumeName, config: volumeConfig)
             }
             print("--- Volumes Processed ---\n")
         }
@@ -338,13 +404,150 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return (entrypointFlag, positional)
     }
 
-    private func getIPForRunningService(_ serviceName: String) async throws -> String? {
-        guard let projectName else { return nil }
+    static func hostnameRunArgs(
+        hostname: String?,
+        serviceName: String,
+        environmentVariables: [String: String]
+    ) -> (args: [String], warning: String?) {
+        guard let hostname else {
+            return ([], nil)
+        }
 
-        let containerName = "\(projectName)-\(serviceName)"
+        let resolvedHostname = resolveVariable(hostname, with: environmentVariables)
+        return (
+            [],
+            "Warning: Service '\(serviceName)' defines hostname '\(resolvedHostname)', but Apple Container does not currently expose a container run hostname flag."
+        )
+    }
+
+    static func networkRunArg(
+        network: String,
+        aliases: [String],
+        serviceName: String,
+        environmentVariables: [String: String],
+        supportsAliases: Bool = networkAliasesSupported
+    ) -> (arg: String, warning: String?) {
+        let resolvedAliases = ([serviceName] + aliases.map { resolveVariable($0, with: environmentVariables) })
+            .reduce(into: [String]()) { result, alias in
+                guard !alias.isEmpty, !result.contains(alias) else { return }
+                result.append(alias)
+            }
+
+        if supportsAliases {
+            let aliasProperties = resolvedAliases.map { "alias=\($0)" }.joined(separator: ",")
+            return ("\(network),\(aliasProperties)", nil)
+        }
+
+        return (
+            network,
+            "Warning: Service '\(serviceName)' defines network aliases for '\(network)' (\(resolvedAliases.joined(separator: ", "))), but the linked Apple Container command parser does not expose a container run alias property."
+        )
+    }
+
+    private static func supportsNetworkAliases() -> Bool {
+        (try? Application.ContainerRun.parse([
+            "--network", "container-compose-probe,alias=container-compose-probe",
+            "alpine:latest",
+        ])) != nil
+    }
+
+    static func servicesSelectedForUp(
+        _ services: [(serviceName: String, service: Service)],
+        requestedServices: [String]
+    ) -> [(serviceName: String, service: Service)] {
+        guard !requestedServices.isEmpty else {
+            return services
+        }
+
+        let servicesByName = Dictionary(uniqueKeysWithValues: services.map { ($0.serviceName, $0.service) })
+        var selected = Set<String>()
+
+        func include(_ serviceName: String) {
+            guard let service = servicesByName[serviceName], selected.insert(serviceName).inserted else {
+                return
+            }
+
+            for dependency in service.depends_on ?? [] {
+                include(dependency)
+            }
+        }
+
+        for serviceName in requestedServices {
+            include(serviceName)
+        }
+
+        return services.filter { selected.contains($0.serviceName) }
+    }
+
+    static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
+        guard exitCode == 0 else {
+            throw ComposeError.containerRunFailed(serviceName, exitCode)
+        }
+    }
+
+    private func containerName(for serviceName: String) -> String {
+        if let explicit = serviceContainerNames[serviceName] { return explicit }
+        if let projectName { return "\(projectName)-\(serviceName)" }
+        return serviceName
+    }
+
+    /// Coerce an arbitrary project name into a single DNS label: lowercase, only
+    /// `[a-z0-9-]`, no leading/trailing/repeated hyphens, max 63 chars. Returns
+    /// `nil` when nothing usable remains (e.g. a name made entirely of separators).
+    static func sanitizeDnsDomain(_ name: String) -> String? {
+        let allowed: Set<Character> = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
+        var out = ""
+        for ch in name.lowercased() {
+            out.append(allowed.contains(ch) ? ch : "-")
+        }
+        while out.contains("--") {
+            out = out.replacingOccurrences(of: "--", with: "-")
+        }
+        while out.hasPrefix("-") { out.removeFirst() }
+        while out.hasSuffix("-") { out.removeLast() }
+        if out.count > 63 {
+            out = String(out.prefix(63))
+            while out.hasSuffix("-") { out.removeLast() }
+        }
+        return out.isEmpty ? nil : out
+    }
+
+    /// Pure parser for `container system dns list` output. Output looks like:
+    ///     DOMAIN
+    ///     foo
+    ///     bar
+    /// Each non-header line is a registered domain; header is `DOMAIN`.
+    static func dnsListContainsDomain(_ output: String, domain: String) -> Bool {
+        for raw in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line == "DOMAIN" { continue }
+            if line == domain { return true }
+        }
+        return false
+    }
+
+    /// Checks whether `domain` has been registered via `container system dns create`.
+    /// Returns `false` if the CLI is missing, the call fails, or the domain isn't listed.
+    private func checkDnsDomainRegistered(_ domain: String) async -> Bool {
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["container", "system", "dns", "list"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do { try process.run() } catch { return false }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return false }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        let text = String(data: data, encoding: .utf8) ?? ""
+        return Self.dnsListContainsDomain(text, domain: domain)
+    }
+
+    private func getIPForRunningService(_ serviceName: String) async throws -> String? {
+        let name = containerName(for: serviceName)
 
         let client = ContainerClient()
-        let container = try await client.get(id: containerName)
+        let container = try await client.get(id: name)
         // Use the container's own address, not the network gateway — every
         // container on a network shares the same gateway, so substituting the
         // gateway broke service-name -> IP environment resolution.
@@ -353,39 +556,99 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return ip
     }
 
-    /// Repeatedly checks `container list -a` until the given container is listed as `running`.
+    /// Repeatedly polls until the named container reports `running`.
+    ///
+    /// The container is launched by a `container run` subprocess that may first
+    /// download images — notably the one-time ~64 MB init image — and that pull
+    /// happens *inside* this wait window. A fixed wall-clock timeout therefore
+    /// aborted mid-download on slow connections (`up -d` failing with
+    /// "Timed out waiting for container ... to be running").
+    ///
+    /// Instead we use an *idle* timeout: the run subprocess streams pull/startup
+    /// progress into `activity`, so we only give up after `idleTimeout` seconds
+    /// with no output *and* the container still not running — i.e. genuinely
+    /// stuck, not merely slow. Mirrors `docker compose up`, which shows pull
+    /// progress and doesn't bail during an active download.
+    ///
+    /// On top of the idle timeout we keep an absolute `maxWait` backstop: a
+    /// container that keeps dribbling output every few seconds without ever
+    /// reaching `running` would otherwise refresh `activity` forever and hang
+    /// `up -d` indefinitely. The backstop bounds that pathological case while
+    /// still leaving plenty of room for a genuinely slow (but progressing) pull.
     /// - Parameters:
-    ///   - containerName: The exact name of the container (e.g. "Assignment-Manager-API-db").
-    ///   - timeout: Max seconds to wait before failing.
+    ///   - serviceName: Compose service name; the container is `<project>-<service>`.
+    ///   - activity: Tracks the last time the run subprocess produced output.
+    ///   - idleTimeout: Max seconds of no output (while not running) before failing.
+    ///   - maxWait: Absolute ceiling on the wait, regardless of ongoing output.
     ///   - interval: How often to poll (in seconds).
-    /// - Returns: `true` if the container reached "running" state within the timeout.
-    private func waitUntilServiceIsRunning(_ serviceName: String, timeout: TimeInterval = 30, interval: TimeInterval = 0.5) async throws {
-        guard let projectName else { return }
-        let containerName = "\(projectName)-\(serviceName)"
-
-        let deadline = Date().addingTimeInterval(timeout)
+    private func waitUntilServiceStarted(_ serviceName: String, activity: ActivityClock, idleTimeout: TimeInterval = 30, maxWait: TimeInterval = 300, interval: TimeInterval = 0.5) async throws -> ServiceStartState {
+        let containerName = containerName(for: serviceName)
         let client = ContainerClient()
+        let start = Date()
 
-        while Date() < deadline {
+        while true {
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             let container = try? await client.get(id: containerName)
             if container?.status == .running {
-                return
+                return .running
+            }
+            if container?.status == .stopped {
+                let exitCode: Int32
+                if let exitCodeTask = await ServiceExitCodeRegistry.shared.task(for: containerName) {
+                    exitCode = try await exitCodeTask.value
+                    await ServiceExitCodeRegistry.shared.remove(for: containerName)
+                } else {
+                    exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                }
+                try Self.validateStoppedServiceExitCode(exitCode, serviceName: serviceName)
+                return .completed
+            }
+            let now = Date()
+            // An active pull keeps refreshing `activity`, pushing the idle
+            // deadline out, so slow downloads never trip this — only genuine
+            // silence does.
+            if now.timeIntervalSince(activity.lastActivity) > idleTimeout {
+                throw NSError(
+                    domain: "ContainerWait", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                    ])
+            }
+            // Absolute backstop: even with continuous output, never wait past
+            // `maxWait` for the container to come up.
+            if now.timeIntervalSince(start) > maxWait {
+                throw NSError(
+                    domain: "ContainerWait", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running (exceeded \(Int(maxWait))s)."
+                    ])
             }
         }
+
 
         throw NSError(
             domain: "ContainerWait", code: 1,
             userInfo: [
-                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to be running."
+                NSLocalizedDescriptionKey: "Timed out waiting for container '\(containerName)' to start."
             ])
     }
 
-    private func stopOldStuff(_ services: [String], remove: Bool) async throws {
-        guard let projectName else { return }
-        let containers = services.map { "\(projectName)-\($0)" }
+    private static func waitForInitExitCode(containerName: String) async throws -> Int32 {
+        let request = XPCMessage(route: .containerWait)
+        request.set(key: .id, value: containerName)
+        request.set(key: .processIdentifier, value: containerName)
 
-        for container in containers {
+        let client = XPCClient(service: "com.apple.container.apiserver")
+        let response = try await client.send(request, responseTimeout: .seconds(10))
+        return Int32(response.int64(key: .exitCode))
+    }
+
+    /// Stops (and optionally removes) containers matching the given names.
+    /// Accepts pre-computed name strings so callers can pass all candidate
+    /// shapes (legacy dashed, dotted DNS, explicit `container_name`) and
+    /// teardown works regardless of which mode created them.
+    private func stopExistingContainers(_ names: [String], remove: Bool) async throws {
+        for container in names {
             print("Stopping container: \(container)")
             let client = ContainerClient()
             guard let container = try? await client.get(id: container) else { continue }
@@ -413,19 +676,68 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         for (key, value) in environmentVariables.map({ ($0, $1) }) where value == serviceName {
             self.environmentVariables[key] = ip ?? value
         }
+        if !dnsAvailable {
+            await crossPatchHostsForService(serviceName)
+        }
     }
 
-    private func createVolumeHardLink(name volumeName: String, config volumeConfig: Volume) async {
-        guard let projectName else { return }
-        let actualVolumeName = volumeConfig.name ?? volumeName  // Use explicit name or key as name
+    /// Apple `container` does not provide built-in DNS resolution between containers
+    /// on the same network. As each service comes up, mutate /etc/hosts in every
+    /// already-running peer to add `<thisIP> <thisService>`, and also add all the
+    /// previously-known peers into the new container. This is best-effort — services
+    /// that need DNS at startup time should still wait/retry.
+    private func crossPatchHostsForService(_ newServiceName: String) async {
+        guard let newIP = containerIps[newServiceName] else { return }
+        let newContainerID = containerName(for: newServiceName)
+        // Add the new entry in every previously-running peer.
+        for (peerName, peerIP) in containerIps where peerName != newServiceName {
+            let peerContainerID = containerName(for: peerName)
+            await appendHostsEntry(in: peerContainerID, name: newServiceName, ip: newIP)
+            // Also make the new container aware of this peer, in case it queries it later.
+            await appendHostsEntry(in: newContainerID, name: peerName, ip: peerIP)
+        }
+    }
 
-        let volumeUrl = URL.homeDirectory.appending(path: ".containers/Volumes/\(projectName)/\(actualVolumeName)")
-        let volumePath = volumeUrl.path(percentEncoded: false)
+    private func appendHostsEntry(in containerID: String, name: String, ip: String) async {
+        // Idempotent: skip if the line is already present. Use the `container` CLI
+        // because the streaming exec API is not exposed here.
+        let line = "\(ip) \(name)"
+        let cmd = "grep -qF '\(line)' /etc/hosts 2>/dev/null || echo '\(line)' >> /etc/hosts"
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["container", "exec", containerID, "sh", "-c", cmd]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        do { try process.run() } catch { return }
+        process.waitUntilExit()
+    }
 
-        print(
-            "Warning: Volume source '\(actualVolumeName)' appears to be a named volume reference. The 'container' tool does not support named volume references in 'container run -v' command. Linking to \(volumePath) instead."
+    private func createVolume(name volumeName: String, config volumeConfig: Volume) async throws {
+        let actualVolumeName = composeNamedVolumeName(
+            source: volumeName,
+            projectName: projectName,
+            volumeDefinition: volumeConfig
         )
-        try? fileManager.createDirectory(atPath: volumePath, withIntermediateDirectories: true)
+
+        if volumeConfig.external?.isExternal == true {
+            print("Info: Volume '\(volumeName)' is declared as external.")
+            print("This tool assumes external volume '\(actualVolumeName)' already exists and will not attempt to create it.")
+            return
+        }
+
+        if (try? await ClientVolume.inspect(actualVolumeName)) != nil {
+            print("Volume '\(actualVolumeName)' already exists")
+            return
+        }
+
+        print("Creating volume: \(volumeName) (Actual name: \(actualVolumeName))")
+        _ = try await ClientVolume.create(
+            name: actualVolumeName,
+            driver: volumeConfig.driver ?? "local",
+            driverOpts: volumeConfig.driver_opts ?? [:],
+            labels: volumeConfig.labels ?? [:]
+        )
+        print("Volume '\(actualVolumeName)' created")
     }
 
     private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
@@ -435,7 +747,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("Info: Network '\(networkName)' is declared as external.")
             print("This tool assumes external network '\(externalNetwork.name ?? actualNetworkName)' already exists and will not attempt to create it.")
         } else {
-            var networkCreateArgs: [String] = ["network", "create"]
+            let networkCreateArgs: [String] = ["network", "create"]
 
             #warning("Docker Compose Network Options Not Supported")
             // Add driver and driver options
@@ -493,6 +805,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
         guard let projectName else { throw ComposeError.invalidProjectName }
 
+        try waitForDependencyConditions(serviceName: serviceName, service: service)
+
         var imageToRun: String
         
         var runCommandArgs: [String] = []
@@ -534,12 +848,38 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if let explicitContainerName = service.container_name {
             containerName = explicitContainerName
             print("Info: Using explicit container_name: \(containerName)")
+        } else if dnsAvailable, let dnsDomain {
+            // Apple's DNS convention: the container's resolvable name is the
+            // `--name` itself, e.g. `db.<project>` (see apple/container #800).
+            containerName = "\(serviceName).\(dnsDomain)"
         } else {
             // Default container name based on project and service name
             containerName = "\(projectName)-\(serviceName)"
         }
+        serviceContainerNames[serviceName] = containerName
         runCommandArgs.append("--name")
         runCommandArgs.append(containerName)
+
+        // When real DNS is available, point the container at the project's DNS
+        // domain. The daemon writes `nameserver <gateway>` + `domain <dnsDomain>`
+        // into /etc/resolv.conf, so libc resolves both `db.<dnsDomain>` and the
+        // short `db` (via implicit search list) to the peer's address.
+        if dnsAvailable, let dnsDomain {
+            runCommandArgs.append(contentsOf: ["--dns-domain", dnsDomain])
+        }
+
+        // Apply any user-defined labels, then stamp Docker-Compose-compatible project/service
+        // labels so external tools (GUIs, dashboards) can group a stack's containers reliably
+        // by label instead of guessing from the `<project>-<service>` name prefix (which
+        // mis-groups unrelated containers that merely share a prefix). The compose labels are
+        // set last so they take precedence over a user value for the same key; keys are sorted
+        // for a deterministic `container run` argv.
+        var labels = service.labels ?? [:]
+        labels["com.docker.compose.project"] = projectName
+        labels["com.docker.compose.service"] = serviceName
+        for key in labels.keys.sorted() {
+            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(labels[key] ?? "")"])
+        }
 
         // REMOVED: Restart policy is not supported by `container run`
         // if let restart = service.restart {
@@ -556,7 +896,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Add volume mounts
         if let volumes = service.volumes {
             for volume in volumes {
-                let args = try await configVolume(volume)
+                let args = try await configVolume(volume, from: dockerCompose)
                 runCommandArgs.append(contentsOf: args)
             }
         }
@@ -615,7 +955,16 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 // Use the explicit network name from top-level definition if available, otherwise resolved name
                 let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
                 runCommandArgs.append("--network")
-                runCommandArgs.append(networkToConnect)
+                let networkTranslation = Self.networkRunArg(
+                    network: networkToConnect,
+                    aliases: service.networkConfigurations?[network]?.aliases ?? [],
+                    serviceName: serviceName,
+                    environmentVariables: environmentVariables
+                )
+                runCommandArgs.append(networkTranslation.arg)
+                if let warning = networkTranslation.warning {
+                    print(warning)
+                }
             }
             print(
                 "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composePath)."
@@ -627,11 +976,75 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("Note: Service '\(serviceName)' is not explicitly connected to any networks. It will likely use the default bridge network.")
         }
 
-        // Add hostname
-        if let hostname = service.hostname {
-            let resolvedHostname = resolveVariable(hostname, with: environmentVariables)
-            runCommandArgs.append("--hostname")
-            runCommandArgs.append(resolvedHostname)
+        // Apple Container 1.0.0 does not expose a `container run` hostname flag.
+        let hostnameTranslation = Self.hostnameRunArgs(
+            hostname: service.hostname,
+            serviceName: serviceName,
+            environmentVariables: environmentVariables
+        )
+        if let warning = hostnameTranslation.warning {
+            print(warning)
+        }
+        runCommandArgs.append(contentsOf: hostnameTranslation.args)
+
+        // Add extra_hosts entries. `container run` (verified against container CLI
+        // 1.0.0) has no --add-host flag at all — passing one fails immediately with
+        // "Error: Unknown option '--add-host'" — so entries are written to a hosts
+        // file and bind-mounted over /etc/hosts instead.
+        //
+        // The special token `host-gateway` is resolved via `container network
+        // inspect`, which reports the vmnet bridge gateway the container actually
+        // uses to reach the host. `route -n get default` (the previous approach)
+        // instead returns the Mac's LAN default-route gateway, which is a different
+        // address whenever the machine's default route isn't the vmnet bridge (e.g.
+        // any normal Wi-Fi/Ethernet setup) — so containers would gain an entry
+        // pointing at the router, not the host.
+        if let extraHosts = service.extra_hosts, !extraHosts.isEmpty {
+            print(
+                "Note: service '\(serviceName)' sets extra_hosts. Since 'container run' has no --add-host "
+                    + "flag, /etc/hosts is generated from scratch and bind-mounted in, which replaces the "
+                    + "daemon's own generated file wholesale (Docker's --add-host appends instead). The "
+                    + "container's own hostname is re-added below so self-resolution keeps working, but any "
+                    + "other daemon-managed entries are not preserved."
+            )
+
+            // Resolve variables first: needsGateway must inspect the resolved value,
+            // otherwise an entry fully wrapped in a variable (e.g. "${HOST_ENTRY}"
+            // expanding to "foo:host-gateway") is missed and hostGatewayIP is left
+            // empty, silently producing "--add-host foo:" (now "foo:" in /etc/hosts).
+            let resolvedEntries = extraHosts.map { resolveVariable($0, with: environmentVariables) }
+            let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
+            let resolvedNetworkName = service.networks?.first.map { resolveVariable($0, with: environmentVariables) } ?? "default"
+            let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
+
+            var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
+            var seenHostnames: Set<String> = ["localhost"]
+            for resolved in resolvedEntries {
+                let parts = resolved.split(separator: ":", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { continue }
+                let hostname = parts[0]
+                let ip = parts[1] == "host-gateway" ? hostGatewayIP : parts[1]
+                hostsFileLines.append("\(ip) \(hostname)")
+                seenHostnames.insert(hostname)
+            }
+
+            // Re-add the container's own hostname → 127.0.0.1, the entry Apple's
+            // container daemon would normally generate itself, so anything inside
+            // the container that resolves its own hostname still works. Skipped if
+            // extra_hosts already defines that name explicitly, so an intentional
+            // user override wins.
+            let ownHostname = service.hostname.map { resolveVariable($0, with: environmentVariables) } ?? containerName
+            if !seenHostnames.contains(ownHostname) {
+                hostsFileLines.append("127.0.0.1 \(ownHostname)")
+            }
+
+            let hostsFilePath = Self.extraHostsFilePath(projectName: projectName, serviceName: serviceName)
+            do {
+                try (hostsFileLines.joined(separator: "\n") + "\n").write(toFile: hostsFilePath, atomically: true, encoding: .utf8)
+                runCommandArgs.append(contentsOf: ["-v", "\(hostsFilePath):/etc/hosts"])
+            } catch {
+                print("Warning: could not write hosts file for service '\(serviceName)' extra_hosts at \(hostsFilePath): \(error.localizedDescription)")
+            }
         }
 
         // Add working directory
@@ -651,11 +1064,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("--read-only")
         }
 
-        // Add resource limits
+        // Add resource limits.
+        // `mem_limit` is the top-level shorthand; `deploy.resources.limits.memory` is
+        // the structured form. Both map to `container run --memory`. `mem_limit` takes
+        // precedence when both are set, matching Docker Compose CLI behaviour.
         if let cpus = service.deploy?.resources?.limits?.cpus {
             runCommandArgs.append(contentsOf: ["--cpus", cpus])
         }
-        if let memory = service.deploy?.resources?.limits?.memory {
+        let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
+        if let memory = effectiveMemoryLimit {
             runCommandArgs.append(contentsOf: ["--memory", memory])
         }
 
@@ -715,26 +1132,130 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        self.containerConsoleColors[serviceName] = serviceColor
+        let selectedColor = serviceColor
+        self.containerConsoleColors[serviceName] = selectedColor
 
-        Task { [self, serviceColor] in
-            @Sendable
-            func handleOutput(_ output: String) {
-                print("\(serviceName): \(output)".applyingColor(serviceColor))
-            }
+        // Tracks output from the run subprocess so the readiness wait below can
+        // tell an in-progress image pull from a stuck container.
+        let activity = ActivityClock()
 
+        @Sendable
+        func handleOutput(_ output: String) {
+            activity.touch()
+            print("\(serviceName): \(output)".applyingColor(selectedColor))
+        }
+
+        if detach {
             print("\nStarting service: \(serviceName)")
             print("Starting \(serviceName)")
             print("----------------------------------------\n")
-            let _ = try await streamCommand("container", args: ["run"] + runCommandArgs, onStdout: handleOutput, onStderr: handleOutput)
+            let exitCode = try await streamCommand(
+                "container",
+                args: ["run"] + runCommandArgs,
+                onStdout: handleOutput,
+                onStderr: handleOutput
+            )
+            guard exitCode == 0 else {
+                throw ComposeError.containerRunFailed(serviceName, exitCode)
+            }
+            let detachedContainerName = containerName
+            await ServiceExitCodeRegistry.shared.set(Task {
+                try await Self.waitForInitExitCode(containerName: detachedContainerName)
+            }, for: detachedContainerName)
+        } else {
+            Task { [self, selectedColor, activity] in
+                @Sendable
+                func handleOutput(_ output: String) {
+                    activity.touch()
+                    print("\(serviceName): \(output)".applyingColor(selectedColor))
+                }
+
+                print("\nStarting service: \(serviceName)")
+                print("Starting \(serviceName)")
+                print("----------------------------------------\n")
+                let exitCode = try await streamCommand(
+                    "container",
+                    args: ["run"] + runCommandArgs,
+                    onStdout: handleOutput,
+                    onStderr: handleOutput
+                )
+                if exitCode != 0 {
+                    fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
+                }
+            }
         }
 
-        do {
-            try await waitUntilServiceIsRunning(serviceName)
+        let startState = try await waitUntilServiceStarted(serviceName, activity: activity)
+        serviceStartStates[serviceName] = startState
+
+        switch startState {
+        case .running:
             try await updateEnvironmentWithServiceIP(serviceName)
-        } catch {
-            print(error)
+            if let healthcheck = service.healthcheck, !healthcheck.isDisabled {
+                try await waitUntilServiceIsHealthy(serviceName: serviceName, healthcheck: healthcheck)
+                serviceHealth[serviceName] = true
+            }
+        case .completed:
+            if let healthcheck = service.healthcheck, !healthcheck.isDisabled {
+                throw ComposeError.healthcheckUnavailable(serviceName)
+            }
         }
+    }
+
+    private func waitForDependencyConditions(serviceName: String, service: Service) throws {
+        for dependencyName in service.depends_on ?? [] {
+            let dependency = service.dependencyConditions?[dependencyName] ?? ServiceDependency()
+            switch dependency.effectiveCondition {
+            case ServiceDependency.serviceStarted:
+                guard serviceStartStates[dependencyName] != nil else {
+                    throw ComposeError.dependencyNotStarted(serviceName, dependencyName)
+                }
+            case ServiceDependency.serviceHealthy:
+                guard serviceHealth[dependencyName] == true else {
+                    throw ComposeError.dependencyNotHealthy(serviceName, dependencyName)
+                }
+            case ServiceDependency.serviceCompletedSuccessfully:
+                guard serviceStartStates[dependencyName] == .completed else {
+                    throw ComposeError.dependencyNotCompleted(serviceName, dependencyName)
+                }
+            default:
+                throw ComposeError.unsupportedDependencyCondition(serviceName, dependencyName, dependency.effectiveCondition)
+            }
+        }
+    }
+
+    private func waitUntilServiceIsHealthy(serviceName: String, healthcheck: Healthcheck) async throws {
+        guard let projectName else { throw ComposeError.invalidProjectName }
+        guard let execArguments = healthcheck.execArguments else {
+            return
+        }
+
+        let containerName = "\(projectName)-\(serviceName)"
+        let retries = max(healthcheck.retries ?? 3, 1)
+        let interval = Healthcheck.parseDuration(healthcheck.interval, default: 30)
+        let startPeriod = Healthcheck.parseDuration(healthcheck.start_period, default: 0)
+
+        if startPeriod > 0 {
+            try await Task.sleep(nanoseconds: UInt64(startPeriod * 1_000_000_000))
+        }
+
+        for attempt in 1...retries {
+            let exitCode = try await streamCommand(
+                "container",
+                args: ["exec", containerName] + execArguments,
+                onStdout: { _ in },
+                onStderr: { _ in }
+            )
+            if exitCode == 0 {
+                return
+            }
+
+            if attempt < retries {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            }
+        }
+
+        throw ComposeError.healthcheckFailed(serviceName)
     }
 
     private func pullImage(_ imageName: String, platform: String?) async throws {
@@ -830,8 +1351,98 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return imageToRun
     }
 
-    private func configVolume(_ volume: String) async throws -> [String] {
-        try composeVolumeToRunArgs(volume, cwd: cwd, fileManager: fileManager, environmentVariables: environmentVariables, projectName: projectName)
+    private func configVolume(_ volume: String, from dockerCompose: DockerCompose) async throws -> [String] {
+        try composeVolumeToRunArgs(
+            volume,
+            cwd: cwd,
+            fileManager: fileManager,
+            environmentVariables: environmentVariables,
+            projectName: projectName,
+            volumeDefinitions: dockerCompose.volumes
+        )
+    }
+}
+
+// MARK: extra_hosts file management
+extension ComposeUp {
+    /// Deterministic path for the generated /etc/hosts bind-mount source for a
+    /// given service (see the extra_hosts handling in `configService`). Reused
+    /// (overwritten) across repeated `up` runs of the same service rather than
+    /// accumulating a new file each time. `ComposeDown` removes it once the
+    /// container it was mounted into is actually stopped — not `up`, since the
+    /// file may still be bind-mounted into a running container.
+    static func extraHostsFilePath(projectName: String, serviceName: String) -> String {
+        NSTemporaryDirectory() + "container-compose-\(projectName)-\(serviceName)-hosts"
+    }
+}
+
+// MARK: Host gateway resolution
+extension ComposeUp {
+    /// Resolves the `host-gateway` token to the IP containers actually use to reach
+    /// the host, for translating `extra_hosts: ["hostname:host-gateway"]` into a
+    /// concrete `/etc/hosts` entry (see the extra_hosts handling in `configService`).
+    ///
+    /// Queries `container network inspect <networkName>` for `status.ipv4Gateway` —
+    /// the vmnet bridge gateway Apple's `container` runtime routes container→host
+    /// traffic through. This is deliberately *not* `route -n get default`: that
+    /// reports the Mac's LAN default-route gateway (the router), which is a
+    /// different, unreachable-from-the-container address on any machine whose
+    /// default route isn't the vmnet bridge itself — i.e. almost always.
+    ///
+    /// Falls back to parsing `route -n get default` (the previous, unreliable
+    /// approach) only if the network can't be inspected, with a warning — better
+    /// than nothing, but callers should treat it as a guess.
+    static func resolveHostGatewayIP(networkName: String = "default") -> String {
+        if let gateway = inspectNetworkGateway(networkName) {
+            return gateway
+        }
+
+        print(
+            "Warning: could not determine network '\(networkName)' gateway via 'container network inspect'; "
+                + "falling back to the host's LAN default-route gateway, which may not be reachable from the container."
+        )
+
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["route", "-n", "get", "default"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do { try process.run() } catch { return "host-gateway" }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return "host-gateway" }
+        let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("gateway:") {
+                return trimmed.dropFirst("gateway:".count).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return "host-gateway"
+    }
+
+    /// Runs `container network inspect <networkName>` and extracts `status.ipv4Gateway`.
+    /// Returns `nil` on any failure (missing binary, non-zero exit, unexpected JSON shape).
+    private static func inspectNetworkGateway(_ networkName: String) -> String? {
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["container", "network", "inspect", networkName]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        do { try process.run() } catch { return nil }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        guard
+            let networks = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+            let status = networks.first?["status"] as? [String: Any],
+            let gateway = status["ipv4Gateway"] as? String,
+            !gateway.isEmpty
+        else {
+            return nil
+        }
+        return gateway
     }
 }
 
@@ -865,9 +1476,9 @@ extension ComposeUp {
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            process.environment = ProcessInfo.processInfo.environment.merging([
-                "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            ]) { _, new in new }
+            var childEnvironment = ProcessInfo.processInfo.environment
+            childEnvironment["PATH"] = mergedExecutablePath(existing: childEnvironment["PATH"])
+            process.environment = childEnvironment
 
             let stdoutHandle = stdoutPipe.fileHandleForReading
             let stderrHandle = stderrPipe.fileHandleForReading

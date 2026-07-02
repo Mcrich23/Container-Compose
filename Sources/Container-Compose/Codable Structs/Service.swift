@@ -59,14 +59,26 @@ public struct Service: Codable, Hashable {
     /// Services this service depends on (for startup order)
     public let depends_on: [String]?
 
+    /// Service dependency options keyed by dependency service name.
+    public let dependencyConditions: [String: ServiceDependency]?
+
     /// User or UID to run the container as
     public let user: String?
 
     /// Explicit name for the container instance
     public let container_name: String?
 
+    /// User-defined labels applied to the container (e.g. `{ "foo": "bar" }`).
+    /// Passed through as `--label key=value`; the `com.docker.compose.project` and
+    /// `com.docker.compose.service` labels are additionally stamped by `ComposeUp`
+    /// and take precedence over any user value for those keys.
+    public let labels: [String: String]?
+
     /// List of networks the service will connect to
     public let networks: [String]?
+
+    /// Service network options keyed by network name.
+    public let networkConfigurations: [String: ServiceNetwork]?
 
     /// Container hostname
     public let hostname: String?
@@ -98,13 +110,23 @@ public struct Service: Codable, Hashable {
     /// Allocate a pseudo-TTY (-t flag for `container run`)
     public let tty: Bool?
     
+    /// Memory limit shorthand (e.g., "512m", "1g") — top-level alternative to
+    /// `deploy.resources.limits.memory`. Takes precedence when both are set.
+    public let mem_limit: String?
+
+    /// Additional `/etc/hosts` entries injected into the container. Each entry is a
+    /// `"hostname:IP"` string. The special token `host-gateway` resolves to the host
+    /// machine's IP as seen from inside the container.
+    public let extra_hosts: [String]?
+
     /// Other services that depend on this service
     public var dependedBy: [String] = []
-    
+
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
-             container_name, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform
+             container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
+             mem_limit, extra_hosts
     }
     
     /// Public memberwise initializer for testing
@@ -120,9 +142,12 @@ public struct Service: Codable, Hashable {
         ports: [String]? = nil,
         command: [String]? = nil,
         depends_on: [String]? = nil,
+        dependencyConditions: [String: ServiceDependency]? = nil,
         user: String? = nil,
         container_name: String? = nil,
+        labels: [String: String]? = nil,
         networks: [String]? = nil,
+        networkConfigurations: [String: ServiceNetwork]? = nil,
         hostname: String? = nil,
         entrypoint: [String]? = nil,
         privileged: Bool? = nil,
@@ -133,6 +158,8 @@ public struct Service: Codable, Hashable {
         secrets: [ServiceSecret]? = nil,
         stdin_open: Bool? = nil,
         tty: Bool? = nil,
+        mem_limit: String? = nil,
+        extra_hosts: [String]? = nil,
         dependedBy: [String] = []
     ) {
         self.image = image
@@ -146,9 +173,12 @@ public struct Service: Codable, Hashable {
         self.ports = ports
         self.command = command
         self.depends_on = depends_on
+        self.dependencyConditions = dependencyConditions
         self.user = user
         self.container_name = container_name
+        self.labels = labels
         self.networks = networks
+        self.networkConfigurations = networkConfigurations
         self.hostname = hostname
         self.entrypoint = entrypoint
         self.privileged = privileged
@@ -159,6 +189,8 @@ public struct Service: Codable, Hashable {
         self.secrets = secrets
         self.stdin_open = stdin_open
         self.tty = tty
+        self.mem_limit = mem_limit
+        self.extra_hosts = extra_hosts
         self.dependedBy = dependedBy
     }
 
@@ -192,7 +224,35 @@ public struct Service: Codable, Hashable {
             environment = nil
         }
 
-        env_file = try container.decodeIfPresent([String].self, forKey: .env_file)
+        // `env_file` accepts three forms per the Compose spec:
+        //   env_file: path.env               → single string
+        //   env_file: [path1.env, path2.env] → array of strings
+        //   env_file:                         → array of {path:, required:?} dicts (Compose 2.x extended form)
+        //     - path: optional.env
+        //       required: false
+        // Arrays may also mix plain strings and dict entries.
+        // Missing optional files (required: false) are loaded silently as empty — loadEnvFile
+        // already suppresses read errors, which is the correct behaviour for optional files.
+        struct EnvFileEntry: Decodable {
+            let path: String
+            init(from decoder: Decoder) throws {
+                if let s = try? decoder.singleValueContainer().decode(String.self) {
+                    path = s
+                } else {
+                    enum Keys: String, CodingKey { case path }
+                    let c = try decoder.container(keyedBy: Keys.self)
+                    path = try c.decode(String.self, forKey: .path)
+                }
+            }
+        }
+        if let entries = try? container.decodeIfPresent([EnvFileEntry].self, forKey: .env_file) {
+            env_file = entries.map(\.path)
+        } else if let single = try? container.decodeIfPresent(String.self, forKey: .env_file) {
+            env_file = [single]
+        } else {
+            env_file = nil
+        }
+
         ports = try container.decodeIfPresent([String].self, forKey: .ports)
 
         // Decode 'command' which can be either a single string or an array of strings.
@@ -206,19 +266,33 @@ public struct Service: Codable, Hashable {
         
         if let dependsOnString = try? container.decodeIfPresent(String.self, forKey: .depends_on) {
             depends_on = [dependsOnString]
+            dependencyConditions = [dependsOnString: ServiceDependency()]
         } else if let dependsOnArray = try? container.decodeIfPresent([String].self, forKey: .depends_on) {
             depends_on = dependsOnArray
-        } else if let dependsOnMap = try? container.decodeIfPresent([String: [String: String]].self, forKey: .depends_on) {
-            // Map form: depends_on: { db: { condition: service_healthy } }
-            // Preserve dependency order; conditions are not applicable to Apple Container.
-            depends_on = dependsOnMap.keys.sorted()
+            dependencyConditions = Dictionary(uniqueKeysWithValues: dependsOnArray.map { ($0, ServiceDependency()) })
+        } else if let dependsOnMap = try? container.decodeIfPresent([String: ServiceDependency?].self, forKey: .depends_on) {
+            let normalized = dependsOnMap.mapValues { $0 ?? ServiceDependency() }
+            depends_on = normalized.keys.sorted()
+            dependencyConditions = normalized
         } else {
             depends_on = nil
+            dependencyConditions = nil
         }
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
         container_name = try container.decodeIfPresent(String.self, forKey: .container_name)
-        networks = try container.decodeIfPresent([String].self, forKey: .networks)
+        labels = try container.decodeIfPresent([String: String].self, forKey: .labels)
+        if let networkArray = try? container.decodeIfPresent([String].self, forKey: .networks) {
+            networks = networkArray
+            networkConfigurations = Dictionary(uniqueKeysWithValues: networkArray.map { ($0, ServiceNetwork()) })
+        } else if let networkMap = try? container.decodeIfPresent([String: ServiceNetwork?].self, forKey: .networks) {
+            let normalized = networkMap.mapValues { $0 ?? ServiceNetwork() }
+            networks = normalized.keys.sorted()
+            networkConfigurations = normalized
+        } else {
+            networks = nil
+            networkConfigurations = nil
+        }
         hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         
         // Decode 'entrypoint' which can be either a single string or an array of strings.
@@ -238,6 +312,26 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
+        if let s = try? container.decodeIfPresent(String.self, forKey: .mem_limit) {
+            mem_limit = s
+        } else if let i = try? container.decodeIfPresent(Int.self, forKey: .mem_limit) {
+            mem_limit = "\(i)"
+        } else {
+            mem_limit = nil
+        }
+
+        // `extra_hosts` accepts two forms per the Compose spec:
+        //   extra_hosts:               extra_hosts:
+        //     - "hostname:IP"    or      hostname: IP
+        //     - "other:host-gateway"
+        // The list form is most common; the map form is normalised to list form here.
+        if let list = try? container.decodeIfPresent([String].self, forKey: .extra_hosts) {
+            extra_hosts = list
+        } else if let map = try? container.decodeIfPresent([String: String].self, forKey: .extra_hosts) {
+            extra_hosts = map.map { "\($0.key):\($0.value)" }
+        } else {
+            extra_hosts = nil
+        }
     }
     
     /// Translates the list-form of `environment:` into the same `[String: String]`

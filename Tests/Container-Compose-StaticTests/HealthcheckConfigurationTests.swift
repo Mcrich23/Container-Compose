@@ -132,6 +132,25 @@ struct HealthcheckConfigurationTests {
         
         #expect(healthcheck.test?.first == "CMD-SHELL")
     }
+
+    @Test("Healthcheck CMD translates to exec arguments")
+    func healthcheckCmdExecArguments() throws {
+        let healthcheck = Healthcheck(test: ["CMD", "curl", "-f", "http://localhost"])
+        #expect(healthcheck.execArguments == ["curl", "-f", "http://localhost"])
+    }
+
+    @Test("Healthcheck CMD-SHELL translates to shell exec arguments")
+    func healthcheckCmdShellExecArguments() throws {
+        let healthcheck = Healthcheck(test: ["CMD-SHELL", "curl -f http://localhost || exit 1"])
+        #expect(healthcheck.execArguments == ["sh", "-c", "curl -f http://localhost || exit 1"])
+    }
+
+    @Test("Healthcheck duration parser supports combined units")
+    func healthcheckDurationParser() throws {
+        #expect(Healthcheck.parseDuration("1m30s", default: 0) == 90)
+        #expect(Healthcheck.parseDuration("250ms", default: 0) == 0.25)
+        #expect(Healthcheck.parseDuration(nil, default: 7) == 7)
+    }
     
     @Test("Disable healthcheck")
     func disableHealthcheck() throws {

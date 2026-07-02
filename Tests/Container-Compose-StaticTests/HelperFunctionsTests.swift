@@ -98,6 +98,34 @@ struct HelperFunctionsTests {
         #expect(result == "0.0.0.0:3000:3000")
     }
 
+    @Test("Merged PATH keeps user order and contains all fallback dirs without duplicates")
+    func testMergedPathKeepsOrderNoDuplicates() throws {
+        let existing = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let result = mergedExecutablePath(existing: existing)
+        #expect(result == existing)
+        for dir in standardExecutablePathFallback {
+            #expect(result.split(separator: ":").filter { $0 == dir }.count == 1)
+        }
+    }
+
+    @Test("Merged PATH preserves a custom user directory")
+    func testMergedPathPreservesCustomDir() throws {
+        let result = mergedExecutablePath(existing: "/run/current-system/sw/bin:/usr/bin")
+        let entries = result.split(separator: ":").map(String.init)
+        #expect(entries.first == "/run/current-system/sw/bin")
+        #expect(entries.contains("/run/current-system/sw/bin"))
+        for dir in standardExecutablePathFallback {
+            #expect(entries.contains(dir))
+        }
+    }
+
+    @Test("Merged PATH falls back to the standard dirs when PATH is empty or unset")
+    func testMergedPathEmptyFallsBack() throws {
+        let expected = standardExecutablePathFallback.joined(separator: ":")
+        #expect(mergedExecutablePath(existing: nil) == expected)
+        #expect(mergedExecutablePath(existing: "") == expected)
+    }
+
 }
 
 /// Trait that creates a unique temporary directory before a test runs and removes it after.
@@ -218,6 +246,75 @@ struct ComposeVolumeTests {
     func testInvalidFormatReturnsEmpty() throws {
         let result = try composeVolumeToRunArgs("nodestination", cwd: "/tmp", projectName: "test")
         #expect(result == [])
+    }
+
+    @Test("Named volume is forwarded using project-scoped native container volume syntax")
+    func testNamedVolumeUsesNativeVolumeSyntax() throws {
+        let result = try composeVolumeToRunArgs(
+            "data:/var/lib/postgresql/data",
+            cwd: "/tmp",
+            projectName: "test"
+        )
+        #expect(result == ["-v", "test_data:/var/lib/postgresql/data"])
+    }
+
+    @Test("Named volume mounts at its declared single-segment destination")
+    func testNamedVolumeMountsAtDeclaredSingleSegmentDestination() throws {
+        let result = try composeVolumeToRunArgs(
+            "redisdata:/data",
+            cwd: "/tmp",
+            projectName: "proj"
+        )
+        #expect(result == ["-v", "proj_redisdata:/data"])
+    }
+
+    @Test("Named volume preserves nested destination and mode")
+    func testNamedVolumePreservesNestedDestinationAndMode() throws {
+        let result = try composeVolumeToRunArgs(
+            "pgdata:/var/lib/postgresql/data:ro",
+            cwd: "/tmp",
+            projectName: "proj"
+        )
+        #expect(result == ["-v", "proj_pgdata:/var/lib/postgresql/data:ro"])
+    }
+
+    @Test("Named volume uses explicit top-level volume name")
+    func testNamedVolumeUsesExplicitTopLevelName() throws {
+        let result = try composeVolumeToRunArgs(
+            "db-data:/var/lib/postgresql/data:ro",
+            cwd: "/tmp",
+            projectName: "test",
+            volumeDefinitions: [
+                "db-data": Volume(name: "prod-db-data")
+            ]
+        )
+        #expect(result == ["-v", "prod-db-data:/var/lib/postgresql/data:ro"])
+    }
+
+    @Test("External named volume without explicit name keeps source name")
+    func testNamedVolumeKeepsExternalSourceName() throws {
+        let result = try composeVolumeToRunArgs(
+            "db-data:/var/lib/postgresql/data",
+            cwd: "/tmp",
+            projectName: "test",
+            volumeDefinitions: [
+                "db-data": Volume(external: ExternalVolume(isExternal: true, name: nil))
+            ]
+        )
+        #expect(result == ["-v", "db-data:/var/lib/postgresql/data"])
+    }
+
+    @Test("External named volume uses explicit external name")
+    func testNamedVolumeUsesExplicitExternalName() throws {
+        let result = try composeVolumeToRunArgs(
+            "db-data:/var/lib/postgresql/data",
+            cwd: "/tmp",
+            projectName: "test",
+            volumeDefinitions: [
+                "db-data": Volume(external: ExternalVolume(isExternal: true, name: "shared-db-data"))
+            ]
+        )
+        #expect(result == ["-v", "shared-db-data:/var/lib/postgresql/data"])
     }
 
 }
