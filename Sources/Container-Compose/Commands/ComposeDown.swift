@@ -115,8 +115,8 @@ public struct ComposeDown: AsyncParsableCommand {
         } else {
             // Match `up`'s default selection: profile-eligible services plus their
             // dependencies (which bypass the profile gate). Anything excluded here
-            // was left running by a previous `up --profile ...` that isn't repeated
-            // on this `down` — warn instead of silently leaving it running.
+            // may still be running from a previous `up --profile ...` that isn't
+            // repeated on this `down` — warn instead of silently skipping it.
             let selected = Service.selectServices(from: services, requestedServices: [], activeProfiles: composeFileOptions.activeProfiles)
             let selectedNames = Set(selected.map(\.serviceName))
             let skipped = services.map(\.serviceName).filter { !selectedNames.contains($0) }
