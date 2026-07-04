@@ -31,22 +31,25 @@ struct ForegroundWaitCpuTests {
 
     /// Regression for #27: the foreground `up` wait must suspend, not busy-loop.
     ///
-    /// Method: take a `getrusage(RUSAGE_SELF)` snapshot, spawn a child Task that
-    /// calls `runForegroundUntilStopped` (with no services, so it just awaits the
-    /// signal stream and starts no container monitor), sleep for a 1s wall-clock
-    /// window, take a second snapshot, and compare user-CPU consumed.
+    /// Method: `getrusage(RUSAGE_SELF)` is process-wide, not per-task — it counts
+    /// every thread in the process, including whatever other tests Swift Testing
+    /// is running concurrently in this same process (this suite is `.serialized`
+    /// internally, but that doesn't stop *other* suites from overlapping it). So
+    /// rather than an absolute threshold, take a baseline measurement over an
+    /// idle 200ms window immediately before the real one, then assert on the
+    /// *incremental* cost the foreground-wait task adds on top of that baseline.
+    /// This cancels out ambient noise from concurrent tests instead of assuming
+    /// it's near-zero, which stopped holding once the suite grew large enough
+    /// that something is almost always running during any given 200ms window.
     ///
     /// On the original bug (`for await _ in AsyncStream<Void>(unfolding: {})`),
-    /// the child task pinned one core, so over a 1s window it consumes ~1,000,000
-    /// µs (one full core). The wait now suspends on a `DispatchSource` signal
-    /// stream and consumes essentially nothing.
+    /// the child task pins one core, so it adds roughly 200,000 µs of user CPU
+    /// on top of baseline during the 200ms window. The wait now suspends on a
+    /// `DispatchSource` signal stream (with no containers, so it starts no
+    /// container monitor) and adds essentially nothing.
     ///
-    /// `getrusage(RUSAGE_SELF)` is process-wide, so the other (fast, parallel)
-    /// static suites add CPU noise — but they finish within the first few hundred
-    /// ms, whereas a busy-loop runs the entire second. The 1s window plus a
-    /// 400,000 µs threshold (≈0.4 core-seconds) sits well above that transient
-    /// noise yet well below a full core's worth of spinning, so the test is
-    /// reliable in the full parallel suite, not just in isolation.
+    /// Threshold of 50,000 µs of *incremental* cost gives ~4× headroom while
+    /// still reliably catching a single core's worth of busy-loop work.
     ///
     /// Side effect: this test leaks one suspended task per invocation
     /// (`runForegroundUntilStopped` is `-> Never` and the suspended task can't be
@@ -55,21 +58,30 @@ struct ForegroundWaitCpuTests {
     @Test("foreground wait does not pin a CPU core (regression for #27)")
     func foregroundWaitDoesNotPinCpu() async throws {
         let composeUp = ComposeUp()
+
+        // Baseline: ambient CPU consumed by the whole process over an idle
+        // 200ms window (no foreground-wait task running), to calibrate against
+        // whatever else is concurrently running in this test process.
+        let baselineBefore = userCpuMicroseconds()
+        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+        let baselineConsumed = userCpuMicroseconds() - baselineBefore
+
         let before = userCpuMicroseconds()
 
         // Detached so cancellation propagation from the test doesn't reach it
         // (it wouldn't matter — the function ignores cancellation by contract —
         // but this makes the leak explicit rather than incidental).
         Task.detached {
-            await composeUp.runForegroundUntilStopped(serviceNames: [])
+            await composeUp.runForegroundUntilStopped(containerNames: [])
         }
 
-        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1s
+        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms
 
         let after = userCpuMicroseconds()
         let consumed = after - before
+        let incremental = consumed - baselineConsumed
 
-        #expect(consumed < 400_000,
-                "foreground wait consumed \(consumed) µs of user CPU in 1s — likely busy-looping (regression for #27)")
+        #expect(incremental < 50_000,
+                "foreground wait added \(incremental) µs of user CPU over a \(baselineConsumed) µs baseline in 200ms — likely busy-looping (regression for #27)")
     }
 }

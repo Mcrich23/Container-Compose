@@ -258,7 +258,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         if !detach {
-            await runForegroundUntilStopped(serviceNames: services.map({ $0.serviceName }))
+            await runForegroundUntilStopped(containerNames: services.map({ containerName(for: $0.serviceName) }))
         }
     }
 
@@ -267,11 +267,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///     containers, then exits. A second signal forces an immediate exit.
     ///   - If the containers stop on their own — or via `container compose down`
     ///     from another shell — `up` returns instead of hanging forever.
-    func runForegroundUntilStopped(serviceNames: [String]) async -> Never {
-        let containerNames = projectName.map { project in
-            serviceNames.map { "\(project)-\($0)" }
-        } ?? []
-
+    ///
+    /// Takes resolved container names (not service names): a service's container
+    /// may be named via explicit `container_name` or the dotted
+    /// `<service>.<dnsDomain>` DNS convention, not just `<project>-<service>`.
+    func runForegroundUntilStopped(containerNames: [String]) async -> Never {
         // Exit once the containers stop by themselves or are stopped externally.
         if !containerNames.isEmpty {
             Task {
