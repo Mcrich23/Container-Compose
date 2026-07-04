@@ -107,6 +107,39 @@ struct ComposeBuildTests {
         #expect(try await !imageExists(named: "excluded:latest"))
     }
 
+    @Test("Build with explicit service filter also builds its depends_on dependency")
+    func buildWithServiceFilterAlsoBuildsDependency() async throws {
+        let yaml = """
+        services:
+          app:
+            depends_on:
+              - worker
+            build:
+              context: .
+              dockerfile: Dockerfile
+          worker:
+            build:
+              context: .
+              dockerfile: Dockerfile
+          unrelated:
+            build:
+              context: .
+              dockerfile: Dockerfile
+        """
+
+        let project = try writeBuildProject(yaml: yaml)
+
+        var composeBuild = try ComposeBuild.parse([
+            "--cwd", project.base.path(percentEncoded: false),
+            "app",
+        ])
+        try await composeBuild.run()
+
+        #expect(try await imageExists(named: "app:latest"))
+        #expect(try await imageExists(named: "worker:latest"))
+        #expect(try await !imageExists(named: "unrelated:latest"))
+    }
+
     @Test("Build passes build args to Dockerfile")
     func buildPassesBuildArgsToDockerfile() async throws {
         let dockerfile = """

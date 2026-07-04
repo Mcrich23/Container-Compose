@@ -209,8 +209,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         })
         services = try Service.topoSortConfiguredServices(services)
 
-        // Filter for specified services
-        services = Self.servicesSelectedForUp(services, requestedServices: self.services)
+        // Filter for specified services and active Compose profiles
+        services = Service.selectServices(
+            from: services,
+            requestedServices: self.services,
+            activeProfiles: composeFileOptions.activeProfiles
+        )
 
         // Stop Services. Pass every name a previous run might have used (legacy
         // dashed, dotted DNS-mode, and explicit container_name) so the cleanup
@@ -449,34 +453,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             "--network", "container-compose-probe,alias=container-compose-probe",
             "alpine:latest",
         ])) != nil
-    }
-
-    static func servicesSelectedForUp(
-        _ services: [(serviceName: String, service: Service)],
-        requestedServices: [String]
-    ) -> [(serviceName: String, service: Service)] {
-        guard !requestedServices.isEmpty else {
-            return services
-        }
-
-        let servicesByName = Dictionary(uniqueKeysWithValues: services.map { ($0.serviceName, $0.service) })
-        var selected = Set<String>()
-
-        func include(_ serviceName: String) {
-            guard let service = servicesByName[serviceName], selected.insert(serviceName).inserted else {
-                return
-            }
-
-            for dependency in service.depends_on ?? [] {
-                include(dependency)
-            }
-        }
-
-        for serviceName in requestedServices {
-            include(serviceName)
-        }
-
-        return services.filter { selected.contains($0.serviceName) }
     }
 
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
