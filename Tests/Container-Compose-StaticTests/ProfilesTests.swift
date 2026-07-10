@@ -158,13 +158,13 @@ struct ProfilesTests {
     @Test("ComposeUp command accepts repeated --profile flags")
     func composeUpCommandAcceptsRepeatedProfileFlags() throws {
         let cmd = try ComposeUp.parse(["--profile", "debug", "--profile", "frontend"])
-        #expect(cmd.composeFileOptions.profile == ["debug", "frontend"])
+        #expect(cmd.projectOptions.composeFileOptions.profile == ["debug", "frontend"])
     }
 
     @Test("ComposeUp command defaults profile to empty")
     func composeUpCommandDefaultsProfileToEmpty() throws {
         let cmd = try ComposeUp.parse([])
-        #expect(cmd.composeFileOptions.profile.isEmpty)
+        #expect(cmd.projectOptions.composeFileOptions.profile.isEmpty)
     }
 
     @Test("ComposeBuild command accepts --profile flag")
@@ -187,7 +187,7 @@ struct ProfilesTests {
         defer { unsetenv("COMPOSE_PROFILES") }
 
         let cmd = try ComposeUp.parse(["--profile", "frontend"])
-        #expect(cmd.composeFileOptions.activeProfiles == ["frontend", "backend", "debug"])
+        #expect(cmd.projectOptions.composeFileOptions.activeProfiles == ["frontend", "backend", "debug"])
     }
 
     @Test("activeProfiles is empty when neither --profile nor COMPOSE_PROFILES is set")
@@ -195,6 +195,6 @@ struct ProfilesTests {
         unsetenv("COMPOSE_PROFILES")
 
         let cmd = try ComposeUp.parse([])
-        #expect(cmd.composeFileOptions.activeProfiles.isEmpty)
+        #expect(cmd.projectOptions.composeFileOptions.activeProfiles.isEmpty)
     }
 }

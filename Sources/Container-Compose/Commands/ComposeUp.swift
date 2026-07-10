@@ -74,41 +74,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var detach: Bool = false
 
     @OptionGroup
-    var composeFileOptions: ComposeFileOptions
+    var projectOptions: ComposeProjectOptions
 
-    private static let supportedComposeFilenames = [
-        "compose.yml",
-        "compose.yaml",
-        "docker-compose.yml",
-        "docker-compose.yaml",
-    ]
-
-    private var cwdURL: URL {
-        URL(fileURLWithPath: cwd)
-    }
-
-    private var composePath: String {
-        if let composeFilename = composeFileOptions.composeFilename {
-            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
-        }
-
-        for filename in Self.supportedComposeFilenames {
-            let candidate = cwdURL.appending(path: filename).path
-            if fileManager.fileExists(atPath: candidate) {
-                return candidate
-            }
-        }
-
-        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
-    }
+    private var composePath: String { projectOptions.composePath }
+    private var composeDirectory: String { projectOptions.composeDirectory }
+    private var cwd: String { projectOptions.cwd }
 
     private var envFilePath: String {
-        let envFile = process.envFile.first ?? ".env"
-        return resolvedPath(for: envFile, relativeTo: cwdURL)
-    }
-
-    private var composeDirectory: String {
-        URL(fileURLWithPath: composePath).deletingLastPathComponent().path
+        let envFile = projectOptions.process.envFile.first ?? ".env"
+        return resolvedPath(for: envFile, relativeTo: URL(fileURLWithPath: cwd))
     }
 
     @Flag(name: [.customShort("b"), .customLong("build")])
@@ -118,12 +92,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var noCache: Bool = false
 
     @OptionGroup
-    var process: Flags.Process
-
-    @OptionGroup
     var logging: Flags.Logging
-
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
 
     private var fileManager: FileManager { FileManager.default }
     private var projectName: String?
@@ -151,17 +120,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
-        // Read compose.yml content
-        guard let yamlData = fileManager.contents(atPath: composePath) else {
-            let path = URL(fileURLWithPath: composePath)
-                .deletingLastPathComponent()
-                .path
-            throw YamlError.composeFileNotFound(path)
-        }
-
-        // Decode the YAML file into the DockerCompose struct
-        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        // Read and decode the compose file
+        let dockerCompose = try projectOptions.loadCompose()
 
         // Load environment variables from .env file
         environmentVariables = loadEnvFile(path: envFilePath)
@@ -173,22 +133,22 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Determine project name for container naming
-        if let name = dockerCompose.name {
-            projectName = name
-            print("Info: Docker Compose project name parsed as: \(name)")
+        let projectName = projectOptions.projectName(for: dockerCompose)
+        self.projectName = projectName
+        if dockerCompose.name != nil {
+            print("Info: Docker Compose project name parsed as: \(projectName)")
             print(
                 "Note: The 'name' field affects generated container names and default named-volume names. Full project-level isolation for other resources is not implemented by this tool."
             )
         } else {
-            projectName = deriveProjectName(cwd: cwd)
-            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
+            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
         }
 
         // Determine whether real DNS is available for this project. If so, we'll
         // give every container a dotted name (`<svc>.<dnsDomain>`) and pass
         // `--dns-domain` so libc inside the container resolves peers via the
         // daemon's DNS server. If not, fall back to /etc/hosts patching.
-        if let derived = Self.sanitizeDnsDomain(projectName ?? "") {
+        if let derived = Self.sanitizeDnsDomain(projectName) {
             dnsDomain = derived
             dnsAvailable = await checkDnsDomainRegistered(derived)
             if dnsAvailable {
@@ -202,29 +162,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Get Services to use
-        var services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap({ serviceName, service in
-            guard let service else { return nil }
-            return (serviceName, service)
-        })
-        services = try Service.topoSortConfiguredServices(services)
-
-        // Filter for specified services and active Compose profiles
-        services = Service.selectServices(
-            from: services,
-            requestedServices: self.services,
-            activeProfiles: composeFileOptions.activeProfiles
-        )
+        // Resolve the services to start: topologically ordered, filtered by
+        // explicit names and active Compose profiles (shared selection).
+        let services = try projectOptions.orderedServices(of: dockerCompose, filteringBy: self.services)
 
         // Stop Services. Pass every name a previous run might have used (legacy
         // dashed, dotted DNS-mode, and explicit container_name) so the cleanup
         // catches whichever shape exists on disk.
-        let containerNamesToStop: [String] = services.flatMap { (serviceName, service) -> [String] in
-            var names: [String] = []
-            if let projectName { names.append("\(projectName)-\(serviceName)") }
-            if let dnsDomain { names.append("\(serviceName).\(dnsDomain)") }
-            if let explicit = service.container_name, !names.contains(explicit) { names.append(explicit) }
-            return names
+        let containerNamesToStop: [String] = services.flatMap { (serviceName, service) in
+            ComposeProject.candidateContainerNames(serviceName: serviceName, service: service, projectName: projectName)
         }
         try await stopExistingContainers(containerNamesToStop, remove: true)
 
