@@ -26,6 +26,40 @@ struct ComposeProjectTests {
         try YAMLDecoder().decode(DockerCompose.self, from: yaml)
     }
 
+    // MARK: - candidateContainerNames
+
+    @Test("Candidates try explicit container_name first, then both naming conventions")
+    func candidatesExplicitFirst() throws {
+        let service = Service(image: "nginx", container_name: "my-custom-name")
+        let names = ComposeProject.candidateContainerNames(
+            serviceName: "web", service: service, projectName: "proj")
+        #expect(names == ["my-custom-name", "proj-web", "web.proj"])
+    }
+
+    @Test("Candidates cover both <project>-<service> and dotted <service>.<dnsDomain> (#97)")
+    func candidatesBothConventions() throws {
+        let service = Service(image: "nginx")
+        let names = ComposeProject.candidateContainerNames(
+            serviceName: "web", service: service, projectName: "proj")
+        #expect(names == ["proj-web", "web.proj"])
+    }
+
+    @Test("Dotted candidate uses the DNS-sanitized project name")
+    func candidatesSanitizedDnsDomain() throws {
+        let service = Service(image: "nginx")
+        let names = ComposeProject.candidateContainerNames(
+            serviceName: "web", service: service, projectName: "My_Project")
+        #expect(names == ["My_Project-web", "web.my-project"])
+    }
+
+    @Test("Explicit container_name matching a convention is not duplicated")
+    func candidatesNoDuplicateExplicit() throws {
+        let service = Service(image: "nginx", container_name: "proj-web")
+        let names = ComposeProject.candidateContainerNames(
+            serviceName: "web", service: service, projectName: "proj")
+        #expect(names == ["proj-web", "web.proj"])
+    }
+
     // MARK: - projectName(for:)
 
     @Test("Project name uses compose name: when present")

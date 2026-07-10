@@ -26,6 +26,7 @@
 import ArgumentParser
 import ContainerCommands
 import ContainerAPIClient
+import ContainerResource
 import Foundation
 import Yams
 
@@ -141,7 +142,7 @@ public struct ComposeProjectOptions: ParsableArguments {
             ComposeProject.ServiceTarget(
                 serviceName: serviceName,
                 service: service,
-                containerName: ComposeProject.containerName(
+                candidateContainerNames: ComposeProject.candidateContainerNames(
                     serviceName: serviceName, service: service, projectName: projectName)
             )
         }
@@ -157,16 +158,47 @@ public struct ComposeProject {
     public let services: [ServiceTarget]
     public let cwd: String
 
-    /// A service paired with the container name it maps to.
+    /// A service paired with the container names it may map to.
     public struct ServiceTarget {
         public let serviceName: String
         public let service: Service
-        public let containerName: String
+        /// Names the service's container may exist under, in the order they
+        /// should be tried (see `candidateContainerNames(serviceName:service:projectName:)`).
+        public let candidateContainerNames: [String]
+
+        /// The container this service currently maps to, resolved by trying
+        /// each candidate name against the daemon. `nil` when none exist.
+        public func existingContainer(using client: ContainerClient = ContainerClient()) async -> ContainerSnapshot? {
+            for name in candidateContainerNames {
+                if let container = try? await client.get(id: name) {
+                    return container
+                }
+            }
+            return nil
+        }
     }
 
-    /// Container name for a service: explicit `container_name` if set, else the
-    /// `"<project>-<service>"` convention used across the tool.
-    public static func containerName(serviceName: String, service: Service, projectName: String) -> String {
-        service.container_name ?? "\(projectName)-\(serviceName)"
+    /// Container names a service's container may exist under, in try order.
+    ///
+    /// There is no single authoritative name: `up` names containers
+    /// `<service>.<dnsDomain>` when the project's DNS domain is registered with
+    /// `container system dns` at creation time (#97), `<project>-<service>`
+    /// otherwise, and an explicit `container_name` overrides both — so a
+    /// container from a previous run may exist under any of the three
+    /// (mirrors `ComposeDown.stopOldStuff`). Commands that only need running
+    /// containers of the project can instead match the
+    /// `com.docker.compose.project`/`.service` labels stamped since #126,
+    /// but names remain necessary for containers created before that.
+    public static func candidateContainerNames(serviceName: String, service: Service, projectName: String) -> [String] {
+        var candidates = ["\(projectName)-\(serviceName)"]
+        if let dnsDomain = ComposeUp.sanitizeDnsDomain(projectName) {
+            candidates.append("\(serviceName).\(dnsDomain)")
+        }
+        if let explicit = service.container_name, !candidates.contains(explicit) {
+            // First, not last: an explicit name is what `up` actually uses, so
+            // it's the most likely to exist.
+            candidates.insert(explicit, at: 0)
+        }
+        return candidates
     }
 }
