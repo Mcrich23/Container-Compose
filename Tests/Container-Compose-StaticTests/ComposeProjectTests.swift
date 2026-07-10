@@ -185,4 +185,66 @@ struct ComposeProjectTests {
         let ordered = try options.orderedServices(of: compose, filteringBy: ["app"])
         #expect(ordered.map(\.serviceName) == ["app"])
     }
+
+    @Test("orderedServices pulls in transitive dependencies of requested services")
+    func orderedServicesRequestExpandsDependencies() throws {
+        let options = try ComposeProjectOptions.parse(["--cwd", "/tmp"])
+        let compose = try decodeCompose(
+            """
+            services:
+              web:
+                image: nginx
+                depends_on:
+                  - app
+              app:
+                image: myapp
+                depends_on:
+                  - db
+              db:
+                image: postgres
+              other:
+                image: alpine
+            """)
+
+        let ordered = try options.orderedServices(of: compose, filteringBy: ["web"])
+        #expect(ordered.map(\.serviceName) == ["db", "app", "web"])
+    }
+
+    @Test("orderedServices gates default selection by active Compose profiles")
+    func orderedServicesProfileGating() throws {
+        let compose = try decodeCompose(
+            """
+            services:
+              web:
+                image: nginx
+              debug:
+                image: busybox
+                profiles: ["debug"]
+            """)
+
+        let defaultOptions = try ComposeProjectOptions.parse(["--cwd", "/tmp"])
+        let defaultNames = try defaultOptions.orderedServices(of: compose).map(\.serviceName)
+        #expect(defaultNames == ["web"])
+
+        let debugOptions = try ComposeProjectOptions.parse(["--cwd", "/tmp", "--profile", "debug"])
+        let debugNames = try debugOptions.orderedServices(of: compose).map(\.serviceName)
+        #expect(Set(debugNames) == ["web", "debug"])
+    }
+
+    @Test("orderedServices bypasses profile gating for explicitly requested services")
+    func orderedServicesExplicitRequestBypassesProfiles() throws {
+        let options = try ComposeProjectOptions.parse(["--cwd", "/tmp"])
+        let compose = try decodeCompose(
+            """
+            services:
+              web:
+                image: nginx
+              debug:
+                image: busybox
+                profiles: ["debug"]
+            """)
+
+        let ordered = try options.orderedServices(of: compose, filteringBy: ["debug"])
+        #expect(ordered.map(\.serviceName) == ["debug"])
+    }
 }

@@ -102,10 +102,18 @@ public struct ComposeProjectOptions: ParsableArguments {
         compose.name ?? deriveProjectName(cwd: cwd)
     }
 
-    /// Resolves the project's services in dependency (topological) order,
-    /// optionally narrowed to `requested` service names.
+    /// Resolves the services the command should act on, in dependency
+    /// (topological) order.
     ///
-    /// - Parameter requested: Service names to keep; empty means all services.
+    /// Selection delegates to `Service.selectServices` — the algorithm
+    /// `up`/`build`/`down` share since #126 — so Compose `profiles` gating and
+    /// dependency expansion behave identically here: with `requested` empty,
+    /// every profile-eligible service plus its dependencies; otherwise the
+    /// requested services plus their transitive dependencies (which bypass the
+    /// profile gate).
+    ///
+    /// - Parameter requested: Explicitly requested service names; empty means
+    ///   the project's default selection.
     /// - Returns: `(serviceName, service)` tuples in start order.
     public func orderedServices(
         of compose: DockerCompose,
@@ -116,9 +124,10 @@ public struct ComposeProjectOptions: ParsableArguments {
             return (serviceName, service)
         }
         services = try Service.topoSortConfiguredServices(services)
-
-        guard !requested.isEmpty else { return services }
-        return services.filter { requested.contains($0.serviceName) }
+        return Service.selectServices(
+            from: services,
+            requestedServices: requested,
+            activeProfiles: composeFileOptions.activeProfiles)
     }
 
     /// One-shot convenience: load the compose file and resolve everything a
