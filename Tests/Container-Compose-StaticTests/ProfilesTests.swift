@@ -170,7 +170,7 @@ struct ProfilesTests {
     @Test("ComposeBuild command accepts --profile flag")
     func composeBuildCommandAcceptsProfileFlag() throws {
         let cmd = try ComposeBuild.parse(["--profile", "debug"])
-        #expect(cmd.composeFileOptions.profile == ["debug"])
+        #expect(cmd.projectOptions.composeFileOptions.profile == ["debug"])
     }
 
     @Test("ComposeDown command accepts --profile flag")
