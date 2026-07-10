@@ -44,25 +44,23 @@ public struct ComposeDown: AsyncParsableCommand {
     private var fileManager: FileManager { FileManager.default }
 
     public func run() async throws {
-        let compose = try projectOptions.loadCompose()
+        let project = try projectOptions.resolve(filteringBy: services)
 
-        if let name = compose.name {
-            print("Info: Docker Compose project name parsed as: \(name)")
+        if project.compose.name != nil {
+            print("Info: Docker Compose project name parsed as: \(project.projectName)")
             print(
-                "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
+                "Note: The 'name' field currently only affects container naming (e.g., '\(project.projectName)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
             )
         } else {
-            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectOptions.projectName(for: compose))")
+            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(project.projectName)")
         }
-
-        let project = try projectOptions.resolve(filteringBy: services)
 
         // A service excluded by an inactive profile may still be running from a
         // previous `up --profile ...` that isn't repeated on this `down` — warn
         // instead of silently skipping it.
         if services.isEmpty {
             let selectedNames = Set(project.services.map(\.serviceName))
-            let skipped = compose.services.keys.filter { !selectedNames.contains($0) }
+            let skipped = project.compose.services.keys.filter { !selectedNames.contains($0) }
             if !skipped.isEmpty {
                 print(
                     "Note: not stopping '\(skipped.sorted().joined(separator: "', '"))' — gated by an inactive Compose profile. "
@@ -71,10 +69,10 @@ public struct ComposeDown: AsyncParsableCommand {
             }
         }
 
-        try await stop(project, remove: false)
+        try await stop(project)
     }
 
-    private func stop(_ project: ComposeProject, remove: Bool) async throws {
+    private func stop(_ project: ComposeProject) async throws {
         let client = ContainerClient()
         for target in project.services {
             // Stop every candidate name that exists — not just the first hit —
@@ -90,14 +88,6 @@ public struct ComposeDown: AsyncParsableCommand {
                     print("Successfully stopped container: \(name)")
                 } catch {
                     print("Error Stopping Container: \(error)")
-                }
-                if remove {
-                    do {
-                        try await client.delete(id: container.id)
-                        print("Successfully removed container: \(name)")
-                    } catch {
-                        print("Error Removing Container: \(error)")
-                    }
                 }
             }
             if !stoppedAny {

@@ -80,11 +80,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private var composeDirectory: String { projectOptions.composeDirectory }
     private var cwd: String { projectOptions.cwd }
 
-    private var envFilePath: String {
-        let envFile = projectOptions.process.envFile.first ?? ".env"
-        return resolvedPath(for: envFile, relativeTo: URL(fileURLWithPath: cwd))
-    }
-
     @Flag(name: [.customShort("b"), .customLong("build")])
     var rebuild: Bool = false
 
@@ -95,7 +90,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var logging: Flags.Logging
 
     private var fileManager: FileManager { FileManager.default }
-    private var projectName: String?
+    /// Project name namespacing this run's containers; set once at the top of
+    /// `run()` from the shared resolution, before anything reads it.
+    private var projectName = ""
     /// Apple `container` DNS domain to use for inter-container resolution. Derived
     /// from `projectName` (sanitized to a valid DNS label). `nil` if the project
     /// name produces no usable label.
@@ -120,11 +117,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
-        // Read and decode the compose file
-        let dockerCompose = try projectOptions.loadCompose()
+        // Load, decode, and resolve the compose project (shared resolution:
+        // topologically ordered services, filtered by explicit names and
+        // active Compose profiles).
+        let project = try projectOptions.resolve(filteringBy: services)
+        let dockerCompose = project.compose
+        projectName = project.projectName
 
         // Load environment variables from .env file
-        environmentVariables = loadEnvFile(path: envFilePath)
+        environmentVariables = loadEnvFile(path: projectOptions.envFilePath)
 
         // Handle 'version' field
         if let version = dockerCompose.version {
@@ -132,9 +133,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.")
         }
 
-        // Determine project name for container naming
-        let projectName = projectOptions.projectName(for: dockerCompose)
-        self.projectName = projectName
         if dockerCompose.name != nil {
             print("Info: Docker Compose project name parsed as: \(projectName)")
             print(
@@ -148,7 +146,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // give every container a dotted name (`<svc>.<dnsDomain>`) and pass
         // `--dns-domain` so libc inside the container resolves peers via the
         // daemon's DNS server. If not, fall back to /etc/hosts patching.
-        if let derived = Self.sanitizeDnsDomain(projectName) {
+        if let derived = ComposeProject.sanitizeDnsDomain(projectName) {
             dnsDomain = derived
             dnsAvailable = await checkDnsDomainRegistered(derived)
             if dnsAvailable {
@@ -162,17 +160,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Resolve the services to start: topologically ordered, filtered by
-        // explicit names and active Compose profiles (shared selection).
-        let services = try projectOptions.orderedServices(of: dockerCompose, filteringBy: self.services)
-
         // Stop Services. Pass every name a previous run might have used (legacy
         // dashed, dotted DNS-mode, and explicit container_name) so the cleanup
         // catches whichever shape exists on disk.
-        let containerNamesToStop: [String] = services.flatMap { (serviceName, service) in
-            ComposeProject.candidateContainerNames(serviceName: serviceName, service: service, projectName: projectName)
-        }
-        try await stopExistingContainers(containerNamesToStop, remove: true)
+        try await stopExistingContainers(project.services.flatMap(\.candidateContainerNames), remove: true)
 
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
@@ -198,13 +189,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
 
-        print(services.map(\.serviceName))
-        for (serviceName, service) in services {
-            try await configService(service, serviceName: serviceName, from: dockerCompose)
+        print(project.services.map(\.serviceName))
+        for target in project.services {
+            try await configService(target.service, serviceName: target.serviceName, from: dockerCompose)
         }
 
         if !detach {
-            await runForegroundUntilStopped(containerNames: services.map({ containerName(for: $0.serviceName) }))
+            await runForegroundUntilStopped(containerNames: project.services.map({ containerName(for: $0.serviceName) }))
         }
     }
 
@@ -408,30 +399,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func containerName(for serviceName: String) -> String {
-        if let explicit = serviceContainerNames[serviceName] { return explicit }
-        if let projectName { return "\(projectName)-\(serviceName)" }
-        return serviceName
-    }
-
-    /// Coerce an arbitrary project name into a single DNS label: lowercase, only
-    /// `[a-z0-9-]`, no leading/trailing/repeated hyphens, max 63 chars. Returns
-    /// `nil` when nothing usable remains (e.g. a name made entirely of separators).
-    static func sanitizeDnsDomain(_ name: String) -> String? {
-        let allowed: Set<Character> = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
-        var out = ""
-        for ch in name.lowercased() {
-            out.append(allowed.contains(ch) ? ch : "-")
-        }
-        while out.contains("--") {
-            out = out.replacingOccurrences(of: "--", with: "-")
-        }
-        while out.hasPrefix("-") { out.removeFirst() }
-        while out.hasSuffix("-") { out.removeLast() }
-        if out.count > 63 {
-            out = String(out.prefix(63))
-            while out.hasSuffix("-") { out.removeLast() }
-        }
-        return out.isEmpty ? nil : out
+        serviceContainerNames[serviceName] ?? "\(projectName)-\(serviceName)"
     }
 
     /// Pure parser for `container system dns list` output. Output looks like:
@@ -725,8 +693,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     // MARK: Compose Service Level Functions
     private mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
-        guard let projectName else { throw ComposeError.invalidProjectName }
-
         try waitForDependencyConditions(serviceName: serviceName, service: service)
 
         var imageToRun: String
@@ -1147,7 +1113,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func waitUntilServiceIsHealthy(serviceName: String, healthcheck: Healthcheck) async throws {
-        guard let projectName else { throw ComposeError.invalidProjectName }
         guard let execArguments = healthcheck.execArguments else {
             return
         }

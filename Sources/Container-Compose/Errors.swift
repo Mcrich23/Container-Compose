@@ -38,7 +38,6 @@ public enum YamlError: Error, LocalizedError {
 
 public enum ComposeError: Error, LocalizedError {
     case imageNotFound(String)
-    case invalidProjectName
     case containerRunFailed(String, Int32)
     case dependencyNotStarted(String, String)
     case dependencyNotHealthy(String, String)
@@ -51,8 +50,6 @@ public enum ComposeError: Error, LocalizedError {
         switch self {
         case .imageNotFound(let name):
             return "Service \(name) must define either 'image' or 'build'."
-        case .invalidProjectName:
-            return "Could not find project name."
         case .containerRunFailed(let service, let exitCode):
             return "Service '\(service)' failed to start (container run exited with status \(exitCode))."
         case .dependencyNotStarted(let service, let dependency):

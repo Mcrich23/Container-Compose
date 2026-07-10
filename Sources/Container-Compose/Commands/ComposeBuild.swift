@@ -50,11 +50,6 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
 
     private var composeDirectory: String { projectOptions.composeDirectory }
 
-    private var envFilePath: String {
-        let envFile = projectOptions.process.envFile.first ?? ".env"
-        return resolvedPath(for: envFile, relativeTo: URL(fileURLWithPath: projectOptions.cwd))
-    }
-
     public mutating func run() async throws {
         // Shared resolution routes both the explicit-service-name and default
         // cases through the same selection `up`/`down` use: an explicit name
@@ -64,7 +59,7 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         // profile-gated or just not named explicitly — would be started by
         // `up` but never get built here.
         let project = try projectOptions.resolve(filteringBy: services)
-        let environmentVariables = loadEnvFile(path: envFilePath)
+        let environmentVariables = loadEnvFile(path: projectOptions.envFilePath)
 
         let servicesToBuild = project.services.filter { $0.service.build != nil }
 

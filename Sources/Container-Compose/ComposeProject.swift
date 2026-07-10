@@ -24,9 +24,8 @@
 //
 
 import ArgumentParser
-import ContainerCommands
 import ContainerAPIClient
-import ContainerResource
+import ContainerCommands
 import Foundation
 import Yams
 
@@ -47,7 +46,7 @@ public struct ComposeProjectOptions: ParsableArguments {
     public var process: Flags.Process
 
     /// Compose filenames searched for, in order, when `--file` is not given.
-    public static let supportedComposeFilenames = [
+    private static let supportedComposeFilenames = [
         "compose.yml",
         "compose.yaml",
         "docker-compose.yml",
@@ -85,6 +84,13 @@ public struct ComposeProjectOptions: ParsableArguments {
         URL(fileURLWithPath: composePath).deletingLastPathComponent().path
     }
 
+    /// Path to the environment file: the first `--env-file` if given, otherwise
+    /// `.env` in `cwd`.
+    public var envFilePath: String {
+        let envFile = process.envFile.first ?? ".env"
+        return resolvedPath(for: envFile, relativeTo: cwdURL)
+    }
+
     /// Reads and decodes the compose file at `composePath`.
     /// - Throws: `YamlError.composeFileNotFound` if the file is missing.
     public func loadCompose() throws -> DockerCompose {
@@ -110,7 +116,8 @@ public struct ComposeProjectOptions: ParsableArguments {
     /// dependency expansion behave identically here: with `requested` empty,
     /// every profile-eligible service plus its dependencies; otherwise the
     /// requested services plus their transitive dependencies (which bypass the
-    /// profile gate).
+    /// profile gate). Requested names that match no service are warned about,
+    /// like compose.
     ///
     /// - Parameter requested: Explicitly requested service names; empty means
     ///   the project's default selection.
@@ -123,6 +130,12 @@ public struct ComposeProjectOptions: ParsableArguments {
             guard let service else { return nil }
             return (serviceName, service)
         }
+
+        let known = Set(services.map(\.serviceName))
+        for name in requested where !known.contains(name) {
+            print("Warning: No such service: \(name)")
+        }
+
         services = try Service.topoSortConfiguredServices(services)
         return Service.selectServices(
             from: services,
@@ -133,19 +146,12 @@ public struct ComposeProjectOptions: ParsableArguments {
     /// One-shot convenience: load the compose file and resolve everything a
     /// command typically needs.
     ///
-    /// - Parameter requested: Service names to keep; empty means all services.
+    /// - Parameter requested: Explicitly requested service names; empty means
+    ///   the project's default selection.
     public func resolve(filteringBy requested: [String] = []) throws -> ComposeProject {
         let compose = try loadCompose()
         let projectName = projectName(for: compose)
         let services = try orderedServices(of: compose, filteringBy: requested)
-
-        // Surface requested names that don't match any service, like compose.
-        if !requested.isEmpty {
-            let known = Set(services.map(\.serviceName))
-            for name in requested where !known.contains(name) {
-                print("Warning: No such service: \(name)")
-            }
-        }
 
         let containers = services.map { serviceName, service in
             ComposeProject.ServiceTarget(
@@ -155,7 +161,7 @@ public struct ComposeProjectOptions: ParsableArguments {
                     serviceName: serviceName, service: service, projectName: projectName)
             )
         }
-        return ComposeProject(compose: compose, projectName: projectName, services: containers, cwd: cwd)
+        return ComposeProject(compose: compose, projectName: projectName, services: containers)
     }
 }
 
@@ -165,7 +171,6 @@ public struct ComposeProject {
     public let compose: DockerCompose
     public let projectName: String
     public let services: [ServiceTarget]
-    public let cwd: String
 
     /// A service paired with the container names it may map to.
     public struct ServiceTarget {
@@ -174,17 +179,6 @@ public struct ComposeProject {
         /// Names the service's container may exist under, in the order they
         /// should be tried (see `candidateContainerNames(serviceName:service:projectName:)`).
         public let candidateContainerNames: [String]
-
-        /// The container this service currently maps to, resolved by trying
-        /// each candidate name against the daemon. `nil` when none exist.
-        public func existingContainer(using client: ContainerClient = ContainerClient()) async -> ContainerSnapshot? {
-            for name in candidateContainerNames {
-                if let container = try? await client.get(id: name) {
-                    return container
-                }
-            }
-            return nil
-        }
     }
 
     /// Container names a service's container may exist under, in try order.
@@ -193,14 +187,13 @@ public struct ComposeProject {
     /// `<service>.<dnsDomain>` when the project's DNS domain is registered with
     /// `container system dns` at creation time (#97), `<project>-<service>`
     /// otherwise, and an explicit `container_name` overrides both — so a
-    /// container from a previous run may exist under any of the three
-    /// (mirrors `ComposeDown.stopOldStuff`). Commands that only need running
-    /// containers of the project can instead match the
-    /// `com.docker.compose.project`/`.service` labels stamped since #126,
-    /// but names remain necessary for containers created before that.
+    /// container from a previous run may exist under any of the three.
+    /// Commands that only need running containers of the project can instead
+    /// match the `com.docker.compose.project`/`.service` labels stamped since
+    /// #126, but names remain necessary for containers created before that.
     public static func candidateContainerNames(serviceName: String, service: Service, projectName: String) -> [String] {
         var candidates = ["\(projectName)-\(serviceName)"]
-        if let dnsDomain = ComposeUp.sanitizeDnsDomain(projectName) {
+        if let dnsDomain = sanitizeDnsDomain(projectName) {
             candidates.append("\(serviceName).\(dnsDomain)")
         }
         if let explicit = service.container_name, !candidates.contains(explicit) {
@@ -209,5 +202,26 @@ public struct ComposeProject {
             candidates.insert(explicit, at: 0)
         }
         return candidates
+    }
+
+    /// Coerce an arbitrary project name into a single DNS label: lowercase, only
+    /// `[a-z0-9-]`, no leading/trailing/repeated hyphens, max 63 chars. Returns
+    /// `nil` when nothing usable remains (e.g. a name made entirely of separators).
+    static func sanitizeDnsDomain(_ name: String) -> String? {
+        let allowed: Set<Character> = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
+        var out = ""
+        for ch in name.lowercased() {
+            out.append(allowed.contains(ch) ? ch : "-")
+        }
+        while out.contains("--") {
+            out = out.replacingOccurrences(of: "--", with: "-")
+        }
+        while out.hasPrefix("-") { out.removeFirst() }
+        while out.hasSuffix("-") { out.removeLast() }
+        if out.count > 63 {
+            out = String(out.prefix(63))
+            while out.hasSuffix("-") { out.removeLast() }
+        }
+        return out.isEmpty ? nil : out
     }
 }
