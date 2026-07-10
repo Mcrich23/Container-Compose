@@ -70,7 +70,7 @@ struct ComposeUpTests {
         #expect(wpEnv["WORDPRESS_DB_NAME"] == "wordpress")
         
         // Check Volume
-        #expect(wordpressContainer.configuration.mounts.map(\.destination) == ["/var/www/"])
+        #expect(wordpressContainer.configuration.mounts.map(\.destination) == ["/var/www/html"])
         
         // Assert correct db container information
         
@@ -85,7 +85,7 @@ struct ComposeUpTests {
         #expect(dbEnv["MYSQL_PASSWORD"] == "wordpress")
         
         // Check Volume
-        #expect(dbContainer.configuration.mounts.map(\.destination) == ["/var/lib/"])
+        #expect(dbContainer.configuration.mounts.map(\.destination) == ["/var/lib/mysql"])
         print("")
         
         try? await stopInstance(location: tempLocation.deletingLastPathComponent())
@@ -375,6 +375,43 @@ struct ComposeUpTests {
         try? await stopInstance(location: upProject.base)
     }
 
+    @Test("up stamps compose project/service labels and passes user labels through")
+    func testUpStampsComposeLabels() async throws {
+        let explicitName = "container-compose-test-\(makeContainerName())"
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml10(containerName: explicitName)
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        var composeUp = try ComposeUp.parse([
+            "-d", "--cwd", project.base.path(percentEncoded: false),
+        ])
+        try await composeUp.run()
+
+        let container = try await ContainerClient().get(id: explicitName)
+        let labels = container.configuration.labels
+
+        // Compose labels are stamped with the resolved project/service name.
+        #expect(
+            labels["com.docker.compose.project"] == project.name,
+            "Expected com.docker.compose.project='\(project.name)', got '\(labels["com.docker.compose.project"] ?? "nil")'"
+        )
+        #expect(
+            labels["com.docker.compose.service"] == "web",
+            "Expected com.docker.compose.service='web', got '\(labels["com.docker.compose.service"] ?? "nil")'"
+        )
+        // User-defined labels pass through to the container.
+        #expect(
+            labels["app"] == "container-compose-tests",
+            "Expected user label app='container-compose-tests', got '\(labels["app"] ?? "nil")'"
+        )
+        // The stamped compose label wins over a user value for the same key.
+        #expect(
+            labels["com.docker.compose.service"] != "should-be-overridden",
+            "com.docker.compose.service should be overridden by the stamped value"
+        )
+
+        try? await stopInstance(location: project.base)
+    }
+
     enum Errors: Error {
         case containerNotFound
     }
@@ -389,9 +426,19 @@ struct ComposeUpTests {
 
 struct ContainerDependentTrait: TestScoping, TestTrait, SuiteTrait {
     func provideScope(for test: Test, testCase: Test.Case?, performing function: () async throws -> Void) async throws {
-        // Start Server
-        try await Application.SystemStart.parse(["--enable-kernel-install"]).run(); #warning("This is crashing")
-        
+        // `Application.SystemStart.run()` resolves the `container-apiserver` binary
+        // relative to `CommandLine.executablePath` — correct when invoked as the real
+        // `container` CLI, but when called in-process from this test binary that
+        // path resolves to the test runner itself, which has no `container-apiserver`
+        // sibling ("No such file or directory"). Shell out to the real installed
+        // `container` binary instead, the same way the rest of this codebase talks
+        // to `container`/`container-compose`.
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = ["container", "system", "start", "--enable-kernel-install"]
+        try process.run()
+        process.waitUntilExit()
+
         // Run Test
         try await function()
     }

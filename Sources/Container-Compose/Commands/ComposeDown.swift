@@ -107,11 +107,26 @@ public struct ComposeDown: AsyncParsableCommand {
         })
         services = try Service.topoSortConfiguredServices(services)
 
-        // Filter for specified services
+        // Filter for specified services and active Compose profiles
         if !self.services.isEmpty {
             services = services.filter({ serviceName, service in
                 self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
             })
+        } else {
+            // Match `up`'s default selection: profile-eligible services plus their
+            // dependencies (which bypass the profile gate). Anything excluded here
+            // may still be running from a previous `up --profile ...` that isn't
+            // repeated on this `down` — warn instead of silently skipping it.
+            let selected = Service.selectServices(from: services, requestedServices: [], activeProfiles: composeFileOptions.activeProfiles)
+            let selectedNames = Set(selected.map(\.serviceName))
+            let skipped = services.map(\.serviceName).filter { !selectedNames.contains($0) }
+            if !skipped.isEmpty {
+                print(
+                    "Note: not stopping '\(skipped.sorted().joined(separator: "', '"))' — gated by an inactive Compose profile. "
+                        + "Pass --profile <name> (or name the service explicitly) to also stop them."
+                )
+            }
+            services = selected
         }
 
         try await stopOldStuff(services, remove: false)
@@ -119,39 +134,46 @@ public struct ComposeDown: AsyncParsableCommand {
 
     private func stopOldStuff(_ services: [(serviceName: String, service: Service)], remove: Bool) async throws {
         guard let projectName else { return }
+        // The DNS path uses a dotted name `<svc>.<dnsDomain>`. Compute the
+        // domain the same way ComposeUp does so we can stop containers from
+        // either mode (and from a previous run that used a different mode).
+        let dnsDomain = ComposeUp.sanitizeDnsDomain(projectName)
 
         for (serviceName, service) in services {
-            // Respect explicit container_name, otherwise use default pattern
-            let containerName: String
-            if let explicitContainerName = service.container_name {
-                containerName = explicitContainerName
-            } else {
-                containerName = "\(projectName)-\(serviceName)"
+            var candidates: [String] = ["\(projectName)-\(serviceName)"]
+            if let dnsDomain { candidates.append("\(serviceName).\(dnsDomain)") }
+            if let explicit = service.container_name, !candidates.contains(explicit) {
+                candidates.append(explicit)
             }
 
-            print("Stopping container: \(containerName)")
-            
             let client = ContainerClient()
-            
-            guard let container = try? await client.get(id: containerName) else {
-                print("Warning: Container '\(containerName)' not found, skipping.")
-                continue
-            }
-
-            do {
-                try await client.stop(id: container.id)
-                print("Successfully stopped container: \(containerName)")
-            } catch {
-                print("Error Stopping Container: \(error)")
-            }
-            if remove {
+            var stoppedAny = false
+            for name in candidates {
+                guard let container = try? await client.get(id: name) else { continue }
+                stoppedAny = true
+                print("Stopping container: \(name)")
                 do {
-                    try await client.delete(id: container.id)
-                    print("Successfully removed container: \(containerName)")
+                    try await client.stop(id: container.id)
+                    print("Successfully stopped container: \(name)")
                 } catch {
-                    print("Error Removing Container: \(error)")
+                    print("Error Stopping Container: \(error)")
+                }
+                if remove {
+                    do {
+                        try await client.delete(id: container.id)
+                        print("Successfully removed container: \(name)")
+                    } catch {
+                        print("Error Removing Container: \(error)")
+                    }
                 }
             }
+            if !stoppedAny {
+                print("Warning: No container found for service '\(serviceName)' (tried: \(candidates.joined(separator: ", "))).")
+            }
+
+            // Best-effort: the extra_hosts bind-mount source (if any) is only safe
+            // to remove once the container that had it mounted is stopped.
+            try? fileManager.removeItem(atPath: ComposeUp.extraHostsFilePath(projectName: projectName, serviceName: serviceName))
         }
     }
 }

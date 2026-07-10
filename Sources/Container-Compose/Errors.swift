@@ -39,6 +39,13 @@ public enum YamlError: Error, LocalizedError {
 public enum ComposeError: Error, LocalizedError {
     case imageNotFound(String)
     case invalidProjectName
+    case containerRunFailed(String, Int32)
+    case dependencyNotStarted(String, String)
+    case dependencyNotHealthy(String, String)
+    case dependencyNotCompleted(String, String)
+    case unsupportedDependencyCondition(String, String, String)
+    case healthcheckUnavailable(String)
+    case healthcheckFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -46,6 +53,20 @@ public enum ComposeError: Error, LocalizedError {
             return "Service \(name) must define either 'image' or 'build'."
         case .invalidProjectName:
             return "Could not find project name."
+        case .containerRunFailed(let service, let exitCode):
+            return "Service '\(service)' failed to start (container run exited with status \(exitCode))."
+        case .dependencyNotStarted(let service, let dependency):
+            return "Service '\(service)' depends on '\(dependency)', but '\(dependency)' has not started."
+        case .dependencyNotHealthy(let service, let dependency):
+            return "Service '\(service)' depends on '\(dependency)' with condition 'service_healthy', but '\(dependency)' is not healthy."
+        case .dependencyNotCompleted(let service, let dependency):
+            return "Service '\(service)' depends on '\(dependency)' with condition 'service_completed_successfully', but '\(dependency)' has not completed successfully."
+        case .unsupportedDependencyCondition(let service, let dependency, let condition):
+            return "Service '\(service)' depends on '\(dependency)' with unsupported condition '\(condition)'."
+        case .healthcheckUnavailable(let service):
+            return "Service '\(service)' defines a healthcheck but completed before the healthcheck could run."
+        case .healthcheckFailed(let service):
+            return "Service '\(service)' failed its healthcheck."
         }
     }
 }
