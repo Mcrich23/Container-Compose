@@ -46,7 +46,7 @@ struct ComposeDownTests {
 
         #expect(containers.filter({ $0.status == .running }).count == 2, "Expected 2 running containers for \(project.name), found \(containers.filter({ $0.status == .running }).count)")
 
-        var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
+        let composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
         try await composeDown.run()
 
         containers = try await ContainerClient().list()
@@ -88,7 +88,7 @@ struct ComposeDownTests {
             "Expected container \(containerName) to be running, found status: \(containers.map(\.status))"
         )
 
-        var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
+        let composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
         try await composeDown.run()
 
         containers = try await ContainerClient().list()

@@ -176,7 +176,7 @@ struct ProfilesTests {
     @Test("ComposeDown command accepts --profile flag")
     func composeDownCommandAcceptsProfileFlag() throws {
         let cmd = try ComposeDown.parse(["--profile", "debug"])
-        #expect(cmd.composeFileOptions.profile == ["debug"])
+        #expect(cmd.projectOptions.composeFileOptions.profile == ["debug"])
     }
 
     // MARK: - COMPOSE_PROFILES environment variable
