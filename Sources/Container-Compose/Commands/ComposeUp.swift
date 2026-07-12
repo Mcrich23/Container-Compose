@@ -55,6 +55,23 @@ private actor ServiceExitCodeRegistry {
     }
 }
 
+/// Tracks the lifetime of an attached (non-detached) `container run` subprocess.
+///
+/// Apple Container reports a container as `.stopped` throughout the image/kernel
+/// fetch and only flips it to `.running` once init starts. `waitUntilServiceStarted`
+/// therefore must not treat that pre-running `.stopped` as a completed one-shot.
+/// For an attached run the subprocess itself is the authoritative signal: while
+/// it is still alive the container is still starting; once it returns an exit
+/// code, the container has finished (a genuine one-shot).
+private actor ForegroundRunHandle {
+    private var exitCode: Int32? = nil
+
+    func complete(_ code: Int32) { exitCode = code }
+
+    /// The run subprocess's exit code, or `nil` while it is still running.
+    func exitCodeIfCompleted() -> Int32? { exitCode }
+}
+
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
 
@@ -355,7 +372,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// "seen running first" avoids returning before the containers have started.
     private static func waitUntilAllContainersStopped(_ containerNames: [String], interval: TimeInterval = 1.0) async {
         let client = ContainerClient()
-        var seenRunning = Set<String>()
+        // `runForegroundUntilStopped` is only reached after `configService` has
+        // already confirmed every container started (running or completed), so
+        // treat them all as already observed: a `.stopped` container from here on
+        // is one that exited, not one that hasn't started yet. Without this, a
+        // fast one-shot that exits before the first poll would never be observed
+        // `.running` and foreground `up` would hang forever.
+        var seenRunning = Set<String>(containerNames)
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             var running = Set<String>()
@@ -619,7 +642,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///   - idleTimeout: Max seconds of no output (while not running) before failing.
     ///   - maxWait: Absolute ceiling on the wait, regardless of ongoing output.
     ///   - interval: How often to poll (in seconds).
-    private func waitUntilServiceStarted(_ serviceName: String, activity: ActivityClock, idleTimeout: TimeInterval = 30, maxWait: TimeInterval = 300, interval: TimeInterval = 0.5) async throws -> ServiceStartState {
+    private func waitUntilServiceStarted(
+        _ serviceName: String,
+        activity: ActivityClock,
+        foregroundRun: ForegroundRunHandle? = nil,
+        idleTimeout: TimeInterval = 30,
+        maxWait: TimeInterval = 300,
+        interval: TimeInterval = 0.5
+    ) async throws -> ServiceStartState {
         let containerName = containerName(for: serviceName)
         let client = ContainerClient()
         let start = Date()
@@ -631,15 +661,32 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 return .running
             }
             if container?.status == .stopped {
-                let exitCode: Int32
-                if let exitCodeTask = await ServiceExitCodeRegistry.shared.task(for: containerName) {
-                    exitCode = try await exitCodeTask.value
-                    await ServiceExitCodeRegistry.shared.remove(for: containerName)
+                if let foregroundRun {
+                    // Attached (non-detached) run. The daemon reports `.stopped`
+                    // throughout image/kernel fetch and only flips to `.running`
+                    // once init starts, so only treat `.stopped` as terminal once
+                    // the `container run` subprocess has actually exited. While it
+                    // is still alive the container is still starting — fall through
+                    // to the timeout checks and keep polling for `.running`.
+                    if let code = await foregroundRun.exitCodeIfCompleted() {
+                        try Self.validateStoppedServiceExitCode(code, serviceName: serviceName)
+                        return .completed
+                    }
                 } else {
-                    exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                    // Detached run: `container run -d` returns only after start, so
+                    // by the time we observe `.stopped` the container has run and
+                    // exited. Recover its exit code via the registry (registered
+                    // while the runtime client was still alive) or `containerWait`.
+                    let exitCode: Int32
+                    if let exitCodeTask = await ServiceExitCodeRegistry.shared.task(for: containerName) {
+                        exitCode = try await exitCodeTask.value
+                        await ServiceExitCodeRegistry.shared.remove(for: containerName)
+                    } else {
+                        exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                    }
+                    try Self.validateStoppedServiceExitCode(exitCode, serviceName: serviceName)
+                    return .completed
                 }
-                try Self.validateStoppedServiceExitCode(exitCode, serviceName: serviceName)
-                return .completed
             }
             let now = Date()
             // An active pull keeps refreshing `activity`, pushing the idle
@@ -1188,6 +1235,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\(serviceName): \(output)".applyingColor(selectedColor))
         }
 
+        var foregroundRunHandle: ForegroundRunHandle? = nil
         if detach {
             print("\nStarting service: \(serviceName)")
             print("Starting \(serviceName)")
@@ -1206,7 +1254,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 try await Self.waitForInitExitCode(containerName: detachedContainerName)
             }, for: detachedContainerName)
         } else {
-            Task { [self, selectedColor, activity] in
+            let runHandle = ForegroundRunHandle()
+            foregroundRunHandle = runHandle
+            Task { [self, selectedColor, activity, runHandle] in
                 @Sendable
                 func handleOutput(_ output: String) {
                     activity.touch()
@@ -1216,19 +1266,25 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 print("\nStarting service: \(serviceName)")
                 print("Starting \(serviceName)")
                 print("----------------------------------------\n")
-                let exitCode = try await streamCommand(
-                    "container",
-                    args: ["run"] + runCommandArgs,
-                    onStdout: handleOutput,
-                    onStderr: handleOutput
-                )
-                if exitCode != 0 {
-                    fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
+                do {
+                    let exitCode = try await streamCommand(
+                        "container",
+                        args: ["run"] + runCommandArgs,
+                        onStdout: handleOutput,
+                        onStderr: handleOutput
+                    )
+                    await runHandle.complete(exitCode)
+                    if exitCode != 0 {
+                        fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
+                    }
+                } catch {
+                    await runHandle.complete(-1)
+                    fputs("Error starting service '\(serviceName)': \(error)\n", stderr)
                 }
             }
         }
 
-        let startState = try await waitUntilServiceStarted(serviceName, activity: activity)
+        let startState = try await waitUntilServiceStarted(serviceName, activity: activity, foregroundRun: foregroundRunHandle)
         serviceStartStates[serviceName] = startState
 
         switch startState {
