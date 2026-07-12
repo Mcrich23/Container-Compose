@@ -431,9 +431,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         environmentVariables: [String: String],
         supportsAliases: Bool = networkAliasesSupported
     ) -> (arg: String, warning: String?) {
-        let resolvedAliases = ([serviceName] + aliases.map { resolveVariable($0, with: environmentVariables) })
+        let resolvedUserAliases = aliases
+            .map { resolveVariable($0, with: environmentVariables) }
             .reduce(into: [String]()) { result, alias in
                 guard !alias.isEmpty, !result.contains(alias) else { return }
+                result.append(alias)
+            }
+        // Also advertise the service name as an alias so a runtime that supports
+        // them can resolve `<service>` without /etc/hosts patching.
+        let resolvedAliases = ([serviceName] + resolvedUserAliases)
+            .reduce(into: [String]()) { result, alias in
+                guard !result.contains(alias) else { return }
                 result.append(alias)
             }
 
@@ -442,17 +450,31 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             return ("\(network),\(aliasProperties)", nil)
         }
 
-        return (
-            network,
-            "Warning: Service '\(serviceName)' defines network aliases for '\(network)' (\(resolvedAliases.joined(separator: ", "))), but the linked Apple Container command parser does not expose a container run alias property."
-        )
+        // Apple Container's `container run` only accepts the `mac` and `mtu`
+        // network properties — there is no `alias`. Drop them and rely on
+        // /etc/hosts patching for service-name resolution. Only warn when the
+        // user explicitly declared aliases; the implicit service-name alias is
+        // an internal detail and its absence is already covered by the hosts
+        // fallback, so it would just be noise on every networked service.
+        let warning: String? = resolvedUserAliases.isEmpty
+            ? nil
+            : "Warning: Service '\(serviceName)' declares network aliases for '\(network)' "
+                + "(\(resolvedUserAliases.joined(separator: ", "))), but Apple Container does not "
+                + "support them; ignoring. Service-name resolution still works via /etc/hosts."
+        return (network, warning)
     }
 
     private static func supportsNetworkAliases() -> Bool {
-        (try? Application.ContainerRun.parse([
-            "--network", "container-compose-probe,alias=container-compose-probe",
-            "alpine:latest",
-        ])) != nil
+        // Apple Container's `container run` does not support network aliases: the
+        // daemon accepts only the `mac` and `mtu` network properties and rejects
+        // `alias` with "unknown network property 'alias'. Available properties:
+        // mac, mtu". The previous probe tested container-compose's own
+        // ArgumentParser model (`Application.ContainerRun.parse`), which accepts
+        // any `key=value`, so it always reported support — which made
+        // `networkRunArg` emit `alias=<service>` for every service on a custom
+        // network and break startup. Return false until Apple Container gains
+        // alias support.
+        return false
     }
 
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
