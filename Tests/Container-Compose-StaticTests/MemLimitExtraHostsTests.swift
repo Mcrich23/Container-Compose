@@ -150,4 +150,66 @@ struct MemLimitExtraHostsTests {
         let result = ComposeUp.resolveHostGatewayIP()
         #expect(!result.isEmpty)
     }
+
+    // MARK: - memory parsing & clamping
+
+    @Test("parseMemoryToBytes handles byte/k/m/g units (binary)")
+    func parseMemoryUnits() {
+        let kb: Int64 = 1_024
+        let mb: Int64 = 1_024 * 1_024
+        let gb: Int64 = 1_024 * 1_024 * 1_024
+        #expect(ComposeUp.parseMemoryToBytes("128m") == 128 * mb)
+        #expect(ComposeUp.parseMemoryToBytes("2g") == 2 * gb)
+        #expect(ComposeUp.parseMemoryToBytes("512k") == 512 * kb)
+        #expect(ComposeUp.parseMemoryToBytes("1024") == kb)
+        #expect(ComposeUp.parseMemoryToBytes("1gb") == gb)
+    }
+
+    @Test("parseMemoryToBytes is case-insensitive and tolerates whitespace")
+    func parseMemoryCaseInsensitive() {
+        let mb: Int64 = 1_024 * 1_024
+        let gb: Int64 = 1_024 * 1_024 * 1_024
+        #expect(ComposeUp.parseMemoryToBytes(" 256M ") == 256 * mb)
+        #expect(ComposeUp.parseMemoryToBytes("1GiB") == gb)
+    }
+
+    @Test("parseMemoryToBytes returns nil for garbage")
+    func parseMemoryGarbage() {
+        #expect(ComposeUp.parseMemoryToBytes("abc") == nil)
+        #expect(ComposeUp.parseMemoryToBytes("") == nil)
+        #expect(ComposeUp.parseMemoryToBytes("12x") == nil)
+    }
+
+    @Test("clampMemoryLimit raises sub-200m values to 200m")
+    func clampRaisesSmallValues() {
+        let small = ComposeUp.clampMemoryLimit("128m")
+        #expect(small.value == "200m")
+        #expect(small.clamped == true)
+
+        let bare = ComposeUp.clampMemoryLimit("134217728") // 128 MiB in bytes
+        #expect(bare.value == "200m")
+        #expect(bare.clamped == true)
+    }
+
+    @Test("clampMemoryLimit leaves >=200m values untouched")
+    func clampLeavesLargeValues() {
+        let at = ComposeUp.clampMemoryLimit("200m")
+        #expect(at.value == "200m")
+        #expect(at.clamped == false)
+
+        let over = ComposeUp.clampMemoryLimit("512m")
+        #expect(over.value == "512m")
+        #expect(over.clamped == false)
+
+        let gb = ComposeUp.clampMemoryLimit("1g")
+        #expect(gb.value == "1g")
+        #expect(gb.clamped == false)
+    }
+
+    @Test("clampMemoryLimit passes unparseable values through verbatim")
+    func clampPassesThroughGarbage() {
+        let garbage = ComposeUp.clampMemoryLimit("${UNSET_VAR}")
+        #expect(garbage.value == "${UNSET_VAR}")
+        #expect(garbage.clamped == false)
+    }
 }

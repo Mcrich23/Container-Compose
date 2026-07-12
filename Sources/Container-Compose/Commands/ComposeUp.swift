@@ -477,6 +477,46 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return false
     }
 
+    /// Parses a Compose memory string (e.g. `"128m"`, `"2g"`, `"512"`) into bytes.
+    /// Units are binary (1k = 1024), matching how Apple Container interprets
+    /// `--memory` (`128m` → 134217728 = 128 MiB). Returns `nil` when the value
+    /// can't be parsed, so callers can fall back to passing it through verbatim.
+    static func parseMemoryToBytes(_ value: String) -> Int64? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return nil }
+
+        // Split the leading number from the unit suffix.
+        guard let split = trimmed.firstIndex(where: { !$0.isNumber && $0 != "." }) else {
+            // Bare number → bytes.
+            return Int64(trimmed)
+        }
+        let numberPart = String(trimmed[..<split])
+        let unit = String(trimmed[split...]).filter { $0.isLetter }
+        guard let amount = Double(numberPart) else { return nil }
+
+        let multiplier: Int64
+        switch unit {
+        case "", "b": multiplier = 1
+        case "k", "kb", "kib": multiplier = 1_024
+        case "m", "mb", "mib": multiplier = 1_024 * 1_024
+        case "g", "gb", "gib": multiplier = 1_024 * 1_024 * 1_024
+        default: return nil
+        }
+        return Int64(amount * Double(multiplier))
+    }
+
+    /// Apple Container enforces a 200 MiB minimum container memory size and rejects
+    /// anything smaller with a confusing daemon error. Clamp sub-minimum values up
+    /// to 200 MiB so common Docker values like `mem_limit: 128m` keep working.
+    /// Returns the value to pass to `--memory` and whether it was raised.
+    static func clampMemoryLimit(_ value: String) -> (value: String, clamped: Bool) {
+        let minimumBytes: Int64 = 200 * 1_024 * 1_024
+        if let bytes = parseMemoryToBytes(value), bytes < minimumBytes {
+            return ("200m", true)
+        }
+        return (value, false)
+    }
+
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
         guard exitCode == 0 else {
             throw ComposeError.containerRunFailed(serviceName, exitCode)
@@ -1071,7 +1111,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
         let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
         if let memory = effectiveMemoryLimit {
-            runCommandArgs.append(contentsOf: ["--memory", memory])
+            let resolved = resolveVariable(memory, with: environmentVariables)
+            let (memoryArg, didClamp) = Self.clampMemoryLimit(resolved)
+            if didClamp {
+                print("Note: Service '\(serviceName)' mem_limit '\(resolved)' is below Apple Container's 200 MiB minimum; clamping to \(memoryArg).")
+            }
+            runCommandArgs.append(contentsOf: ["--memory", memoryArg])
         }
 
         // Handle service-level configs (note: still only parsing/logging, not attaching)
