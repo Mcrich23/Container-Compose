@@ -55,6 +55,23 @@ private actor ServiceExitCodeRegistry {
     }
 }
 
+/// Tracks the lifetime of an attached (non-detached) `container run` subprocess.
+///
+/// Apple Container reports a container as `.stopped` throughout the image/kernel
+/// fetch and only flips it to `.running` once init starts. `waitUntilServiceStarted`
+/// therefore must not treat that pre-running `.stopped` as a completed one-shot.
+/// For an attached run the subprocess itself is the authoritative signal: while
+/// it is still alive the container is still starting; once it returns an exit
+/// code, the container has finished (a genuine one-shot).
+private actor ForegroundRunHandle {
+    private var exitCode: Int32? = nil
+
+    func complete(_ code: Int32) { exitCode = code }
+
+    /// The run subprocess's exit code, or `nil` while it is still running.
+    func exitCodeIfCompleted() -> Int32? { exitCode }
+}
+
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
 
@@ -292,7 +309,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// "seen running first" avoids returning before the containers have started.
     private static func waitUntilAllContainersStopped(_ containerNames: [String], interval: TimeInterval = 1.0) async {
         let client = ContainerClient()
-        var seenRunning = Set<String>()
+        // `runForegroundUntilStopped` is only reached after `configService` has
+        // already confirmed every container started (running or completed), so
+        // treat them all as already observed: a `.stopped` container from here on
+        // is one that exited, not one that hasn't started yet. Without this, a
+        // fast one-shot that exits before the first poll would never be observed
+        // `.running` and foreground `up` would hang forever.
+        var seenRunning = Set<String>(containerNames)
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             var running = Set<String>()
@@ -368,9 +391,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         environmentVariables: [String: String],
         supportsAliases: Bool = networkAliasesSupported
     ) -> (arg: String, warning: String?) {
-        let resolvedAliases = ([serviceName] + aliases.map { resolveVariable($0, with: environmentVariables) })
+        let resolvedUserAliases = aliases
+            .map { resolveVariable($0, with: environmentVariables) }
             .reduce(into: [String]()) { result, alias in
                 guard !alias.isEmpty, !result.contains(alias) else { return }
+                result.append(alias)
+            }
+        // Also advertise the service name as an alias so a runtime that supports
+        // them can resolve `<service>` without /etc/hosts patching.
+        let resolvedAliases = ([serviceName] + resolvedUserAliases)
+            .reduce(into: [String]()) { result, alias in
+                guard !result.contains(alias) else { return }
                 result.append(alias)
             }
 
@@ -379,17 +410,71 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             return ("\(network),\(aliasProperties)", nil)
         }
 
-        return (
-            network,
-            "Warning: Service '\(serviceName)' defines network aliases for '\(network)' (\(resolvedAliases.joined(separator: ", "))), but the linked Apple Container command parser does not expose a container run alias property."
-        )
+        // Apple Container's `container run` only accepts the `mac` and `mtu`
+        // network properties — there is no `alias`. Drop them and rely on
+        // /etc/hosts patching for service-name resolution. Only warn when the
+        // user explicitly declared aliases; the implicit service-name alias is
+        // an internal detail and its absence is already covered by the hosts
+        // fallback, so it would just be noise on every networked service.
+        let warning: String? = resolvedUserAliases.isEmpty
+            ? nil
+            : "Warning: Service '\(serviceName)' declares network aliases for '\(network)' "
+                + "(\(resolvedUserAliases.joined(separator: ", "))), but Apple Container does not "
+                + "support them; ignoring. Service-name resolution still works via /etc/hosts."
+        return (network, warning)
     }
 
     private static func supportsNetworkAliases() -> Bool {
-        (try? Application.ContainerRun.parse([
-            "--network", "container-compose-probe,alias=container-compose-probe",
-            "alpine:latest",
-        ])) != nil
+        // Apple Container's `container run` does not support network aliases: the
+        // daemon accepts only the `mac` and `mtu` network properties and rejects
+        // `alias` with "unknown network property 'alias'. Available properties:
+        // mac, mtu". The previous probe tested container-compose's own
+        // ArgumentParser model (`Application.ContainerRun.parse`), which accepts
+        // any `key=value`, so it always reported support — which made
+        // `networkRunArg` emit `alias=<service>` for every service on a custom
+        // network and break startup. Return false until Apple Container gains
+        // alias support.
+        return false
+    }
+
+    /// Parses a Compose memory string (e.g. `"128m"`, `"2g"`, `"512"`) into bytes.
+    /// Units are binary (1k = 1024), matching how Apple Container interprets
+    /// `--memory` (`128m` → 134217728 = 128 MiB). Returns `nil` when the value
+    /// can't be parsed, so callers can fall back to passing it through verbatim.
+    static func parseMemoryToBytes(_ value: String) -> Int64? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return nil }
+
+        // Split the leading number from the unit suffix.
+        guard let split = trimmed.firstIndex(where: { !$0.isNumber && $0 != "." }) else {
+            // Bare number → bytes.
+            return Int64(trimmed)
+        }
+        let numberPart = String(trimmed[..<split])
+        let unit = String(trimmed[split...]).filter { $0.isLetter }
+        guard let amount = Double(numberPart) else { return nil }
+
+        let multiplier: Int64
+        switch unit {
+        case "", "b": multiplier = 1
+        case "k", "kb", "kib": multiplier = 1_024
+        case "m", "mb", "mib": multiplier = 1_024 * 1_024
+        case "g", "gb", "gib": multiplier = 1_024 * 1_024 * 1_024
+        default: return nil
+        }
+        return Int64(amount * Double(multiplier))
+    }
+
+    /// Apple Container enforces a 200 MiB minimum container memory size and rejects
+    /// anything smaller with a confusing daemon error. Clamp sub-minimum values up
+    /// to 200 MiB so common Docker values like `mem_limit: 128m` keep working.
+    /// Returns the value to pass to `--memory` and whether it was raised.
+    static func clampMemoryLimit(_ value: String) -> (value: String, clamped: Bool) {
+        let minimumBytes: Int64 = 200 * 1_024 * 1_024
+        if let bytes = parseMemoryToBytes(value), bytes < minimumBytes {
+            return ("200m", true)
+        }
+        return (value, false)
     }
 
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
@@ -471,7 +556,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///   - idleTimeout: Max seconds of no output (while not running) before failing.
     ///   - maxWait: Absolute ceiling on the wait, regardless of ongoing output.
     ///   - interval: How often to poll (in seconds).
-    private func waitUntilServiceStarted(_ serviceName: String, activity: ActivityClock, idleTimeout: TimeInterval = 30, maxWait: TimeInterval = 300, interval: TimeInterval = 0.5) async throws -> ServiceStartState {
+    private func waitUntilServiceStarted(
+        _ serviceName: String,
+        activity: ActivityClock,
+        foregroundRun: ForegroundRunHandle? = nil,
+        idleTimeout: TimeInterval = 30,
+        maxWait: TimeInterval = 300,
+        interval: TimeInterval = 0.5
+    ) async throws -> ServiceStartState {
         let containerName = containerName(for: serviceName)
         let client = ContainerClient()
         let start = Date()
@@ -483,15 +575,32 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 return .running
             }
             if container?.status == .stopped {
-                let exitCode: Int32
-                if let exitCodeTask = await ServiceExitCodeRegistry.shared.task(for: containerName) {
-                    exitCode = try await exitCodeTask.value
-                    await ServiceExitCodeRegistry.shared.remove(for: containerName)
+                if let foregroundRun {
+                    // Attached (non-detached) run. The daemon reports `.stopped`
+                    // throughout image/kernel fetch and only flips to `.running`
+                    // once init starts, so only treat `.stopped` as terminal once
+                    // the `container run` subprocess has actually exited. While it
+                    // is still alive the container is still starting — fall through
+                    // to the timeout checks and keep polling for `.running`.
+                    if let code = await foregroundRun.exitCodeIfCompleted() {
+                        try Self.validateStoppedServiceExitCode(code, serviceName: serviceName)
+                        return .completed
+                    }
                 } else {
-                    exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                    // Detached run: `container run -d` returns only after start, so
+                    // by the time we observe `.stopped` the container has run and
+                    // exited. Recover its exit code via the registry (registered
+                    // while the runtime client was still alive) or `containerWait`.
+                    let exitCode: Int32
+                    if let exitCodeTask = await ServiceExitCodeRegistry.shared.task(for: containerName) {
+                        exitCode = try await exitCodeTask.value
+                        await ServiceExitCodeRegistry.shared.remove(for: containerName)
+                    } else {
+                        exitCode = try await Self.waitForInitExitCode(containerName: containerName)
+                    }
+                    try Self.validateStoppedServiceExitCode(exitCode, serviceName: serviceName)
+                    return .completed
                 }
-                try Self.validateStoppedServiceExitCode(exitCode, serviceName: serviceName)
-                return .completed
             }
             let now = Date()
             // An active pull keeps refreshing `activity`, pushing the idle
@@ -961,7 +1070,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
         let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
         if let memory = effectiveMemoryLimit {
-            runCommandArgs.append(contentsOf: ["--memory", memory])
+            let resolved = resolveVariable(memory, with: environmentVariables)
+            let (memoryArg, didClamp) = Self.clampMemoryLimit(resolved)
+            if didClamp {
+                print("Note: Service '\(serviceName)' mem_limit '\(resolved)' is below Apple Container's 200 MiB minimum; clamping to \(memoryArg).")
+            }
+            runCommandArgs.append(contentsOf: ["--memory", memoryArg])
         }
 
         // Handle service-level configs (note: still only parsing/logging, not attaching)
@@ -1033,6 +1147,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\(serviceName): \(output)".applyingColor(selectedColor))
         }
 
+        var foregroundRunHandle: ForegroundRunHandle? = nil
         if detach {
             print("\nStarting service: \(serviceName)")
             print("Starting \(serviceName)")
@@ -1051,7 +1166,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 try await Self.waitForInitExitCode(containerName: detachedContainerName)
             }, for: detachedContainerName)
         } else {
-            Task { [self, selectedColor, activity] in
+            let runHandle = ForegroundRunHandle()
+            foregroundRunHandle = runHandle
+            Task { [self, selectedColor, activity, runHandle] in
                 @Sendable
                 func handleOutput(_ output: String) {
                     activity.touch()
@@ -1061,19 +1178,25 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 print("\nStarting service: \(serviceName)")
                 print("Starting \(serviceName)")
                 print("----------------------------------------\n")
-                let exitCode = try await streamCommand(
-                    "container",
-                    args: ["run"] + runCommandArgs,
-                    onStdout: handleOutput,
-                    onStderr: handleOutput
-                )
-                if exitCode != 0 {
-                    fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
+                do {
+                    let exitCode = try await streamCommand(
+                        "container",
+                        args: ["run"] + runCommandArgs,
+                        onStdout: handleOutput,
+                        onStderr: handleOutput
+                    )
+                    await runHandle.complete(exitCode)
+                    if exitCode != 0 {
+                        fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
+                    }
+                } catch {
+                    await runHandle.complete(-1)
+                    fputs("Error starting service '\(serviceName)': \(error)\n", stderr)
                 }
             }
         }
 
-        let startState = try await waitUntilServiceStarted(serviceName, activity: activity)
+        let startState = try await waitUntilServiceStarted(serviceName, activity: activity, foregroundRun: foregroundRunHandle)
         serviceStartStates[serviceName] = startState
 
         switch startState {

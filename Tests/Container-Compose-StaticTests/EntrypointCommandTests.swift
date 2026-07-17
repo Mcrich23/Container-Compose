@@ -172,7 +172,24 @@ struct EntrypointCommandTests {
             supportsAliases: false
         )
 
+        // Only the user-declared aliases appear in the warning (not the implicit
+        // service name); the service-name alias is covered by the /etc/hosts
+        // fallback, so warning about it on every networked service would be noise.
         #expect(r.arg == "backend")
-        #expect(r.warning == "Warning: Service 'web' defines network aliases for 'backend' (web, db, database), but the linked Apple Container command parser does not expose a container run alias property.")
+        #expect(r.warning == "Warning: Service 'web' declares network aliases for 'backend' (db, database), but Apple Container does not support them; ignoring. Service-name resolution still works via /etc/hosts.")
+    }
+
+    @Test("no alias warning when only the implicit service-name alias is present")
+    func networkAliasesNoWarningWithoutUserAliases() {
+        let r = ComposeUp.networkRunArg(
+            network: "backend",
+            aliases: [],
+            serviceName: "web",
+            environmentVariables: [:],
+            supportsAliases: false
+        )
+
+        #expect(r.arg == "backend")
+        #expect(r.warning == nil)
     }
 }
