@@ -1240,7 +1240,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             return
         }
 
-        let containerName = "\(projectName)-\(serviceName)"
+        let containerName = containerName(for: serviceName)
         let retries = max(healthcheck.retries ?? 3, 1)
         let interval = Healthcheck.parseDuration(healthcheck.interval, default: 30)
         let startPeriod = Healthcheck.parseDuration(healthcheck.start_period, default: 0)
