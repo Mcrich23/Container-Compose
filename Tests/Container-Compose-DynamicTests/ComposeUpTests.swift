@@ -412,6 +412,36 @@ struct ComposeUpTests {
         try? await stopInstance(location: project.base)
     }
 
+    // Regression: `waitUntilServiceIsHealthy` used to rebuild its target as
+    // `<project>-<service>`, so a service created under an explicit
+    // `container_name` (or the dotted DNS-mode name) health-checked a
+    // nonexistent container, burned every retry, and `up` threw
+    // `healthcheckFailed` even though the container was healthy.
+    @Test("healthcheck execs against the resolved container name, not <project>-<service>")
+    func testHealthcheckUsesResolvedContainerName() async throws {
+        let explicitName = "container-compose-test-\(makeContainerName())"
+        let yaml = """
+        services:
+          web:
+            image: nginx:alpine
+            container_name: \(explicitName)
+            healthcheck:
+              test: ["CMD-SHELL", "true"]
+              interval: "1"
+              retries: 2
+        """
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+
+        var composeUp = try ComposeUp.parse(["-d", "--cwd", project.base.path(percentEncoded: false)])
+        // On the bug this throws healthcheckFailed("web") after exhausting retries.
+        try await composeUp.run()
+
+        let container = try await ContainerClient().get(id: explicitName)
+        #expect(container.status == .running)
+
+        try? await stopInstance(location: project.base)
+    }
+
     enum Errors: Error {
         case containerNotFound
     }

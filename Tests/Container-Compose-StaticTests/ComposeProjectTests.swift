@@ -137,6 +137,24 @@ struct ComposeProjectTests {
         #expect(!FileManager.default.fileExists(atPath: expected))
     }
 
+    // MARK: - loadCompose
+
+    @Test("loadCompose throws composeFileNotFound when no compose file exists", .tempDir)
+    func loadComposeThrowsWhenFileMissing() throws {
+        let tmp = TempDirTrait.current
+        let options = try ComposeProjectOptions.parse(["--cwd", tmp.path])
+        do {
+            _ = try options.loadCompose()
+            Issue.record("Expected loadCompose to throw composeFileNotFound")
+        } catch let error as ContainerComposeCore.YamlError {
+            guard case .composeFileNotFound(let path) = error else {
+                Issue.record("Unexpected YamlError: \(error)")
+                return
+            }
+            #expect(path == tmp.path)
+        }
+    }
+
     // MARK: - orderedServices(of:filteringBy:)
 
     @Test("orderedServices returns dependencies before dependents")
