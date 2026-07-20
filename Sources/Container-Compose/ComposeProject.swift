@@ -116,8 +116,11 @@ public struct ComposeProjectOptions: ParsableArguments {
     /// dependency expansion behave identically here: with `requested` empty,
     /// every profile-eligible service plus its dependencies; otherwise the
     /// requested services plus their transitive dependencies (which bypass the
-    /// profile gate). Requested names that match no service are warned about,
-    /// like compose.
+    /// profile gate).
+    ///
+    /// Note: callers that want a hard error on unknown service names (e.g.
+    /// `ComposeUp`) should call `Service.validateRequestedServices` before
+    /// or after `resolve()`.
     ///
     /// - Parameter requested: Explicitly requested service names; empty means
     ///   the project's default selection.
@@ -129,11 +132,6 @@ public struct ComposeProjectOptions: ParsableArguments {
         var services: [(serviceName: String, service: Service)] = compose.services.compactMap { serviceName, service in
             guard let service else { return nil }
             return (serviceName, service)
-        }
-
-        let known = Set(services.map(\.serviceName))
-        for name in requested where !known.contains(name) {
-            print("Warning: No such service: \(name)")
         }
 
         services = try Service.topoSortConfiguredServices(services)

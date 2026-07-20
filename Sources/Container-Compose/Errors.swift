@@ -45,6 +45,7 @@ public enum ComposeError: Error, LocalizedError {
     case unsupportedDependencyCondition(String, String, String)
     case healthcheckUnavailable(String)
     case healthcheckFailed(String)
+    case noSuchService(String)
 
     public var errorDescription: String? {
         switch self {
@@ -64,6 +65,8 @@ public enum ComposeError: Error, LocalizedError {
             return "Service '\(service)' defines a healthcheck but completed before the healthcheck could run."
         case .healthcheckFailed(let service):
             return "Service '\(service)' failed its healthcheck."
+        case .noSuchService(let name):
+            return "no such service: \(name)"
         }
     }
 }
