@@ -430,6 +430,120 @@ struct DockerComposeParsingTests {
         #expect(compose.services["app"]??.platform == "linux/amd64")
     }
 
+    @Test("Parse deploy replicas as integer")
+    func parseComposeWithDeployReplicasInteger() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            deploy:
+              mode: replicated
+              replicas: 3
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.deploy?.mode == "replicated")
+        #expect(compose.services["app"]??.deploy?.replicas == 3)
+        #expect(compose.services["app"]??.deploy?.replicasExpression == nil)
+    }
+
+    @Test("Parse deploy replicas as quoted numeric scalar")
+    func parseComposeWithDeployReplicasQuotedNumeric() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            deploy:
+              mode: replicated
+              replicas: "2"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.deploy?.mode == "replicated")
+        #expect(compose.services["app"]??.deploy?.replicas == 2)
+        #expect(compose.services["app"]??.deploy?.replicasExpression == nil)
+    }
+
+    @Test("Parse deploy replicas as env-var expression")
+    func parseComposeWithDeployReplicasEnvVarExpression() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            deploy:
+              mode: replicated
+              replicas: ${CORES}
+              resources:
+                limits:
+                  cpus: "0.5"
+                  memory: "512M"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.deploy?.mode == "replicated")
+        #expect(compose.services["app"]??.deploy?.replicas == nil)
+        #expect(compose.services["app"]??.deploy?.replicasExpression == "${CORES}")
+        #expect(compose.services["app"]??.deploy?.resources?.limits?.cpus == "0.5")
+        #expect(compose.services["app"]??.deploy?.resources?.limits?.memory == "512M")
+    }
+
+    @Test("Reject deploy replicas mapping value")
+    func rejectComposeWithDeployReplicasMapping() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            deploy:
+              mode: replicated
+              replicas:
+                count: 2
+        """
+
+        let decoder = YAMLDecoder()
+        #expect(throws: Error.self) {
+            try decoder.decode(DockerCompose.self, from: yaml)
+        }
+    }
+
+    @Test("Parse multi-service compose with deploy replicas env-var expression")
+    func parseMultiServiceComposeWithDeployReplicasEnvVarExpression() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          web:
+            image: nginx:latest
+            depends_on:
+              - worker
+          worker:
+            image: alpine:latest
+            deploy:
+              mode: replicated
+              replicas: ${CORES}
+          db:
+            image: postgres:14
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services.count == 3)
+        #expect(compose.services["web"]??.depends_on?.contains("worker") == true)
+        #expect(compose.services["worker"]??.deploy?.mode == "replicated")
+        #expect(compose.services["worker"]??.deploy?.replicas == nil)
+        #expect(compose.services["worker"]??.deploy?.replicasExpression == "${CORES}")
+        #expect(compose.services["db"]??.image == "postgres:14")
+    }
+
     @Test("Parse deploy resources limits (cpus and memory)")
     func parseComposeWithDeployResources() throws {
         let yaml = """
