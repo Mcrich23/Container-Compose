@@ -39,116 +39,47 @@ public struct ComposeDown: AsyncParsableCommand {
     var services: [String] = []
 
     @OptionGroup
-    var process: Flags.Process
-
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
-
-    @OptionGroup
-    var composeFileOptions: ComposeFileOptions
-
-    private static let supportedComposeFilenames = [
-        "compose.yml",
-        "compose.yaml",
-        "docker-compose.yml",
-        "docker-compose.yaml",
-    ]
-
-    private var cwdURL: URL {
-        URL(fileURLWithPath: cwd)
-    }
-
-    private var composePath: String {
-        if let composeFilename = composeFileOptions.composeFilename {
-            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
-        }
-
-        for filename in Self.supportedComposeFilenames {
-            let candidate = cwdURL.appending(path: filename).path
-            if fileManager.fileExists(atPath: candidate) {
-                return candidate
-            }
-        }
-
-        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
-    }
+    var projectOptions: ComposeProjectOptions
 
     private var fileManager: FileManager { FileManager.default }
-    private var projectName: String?
 
-    public mutating func run() async throws {
+    public func run() async throws {
+        let project = try projectOptions.resolve(filteringBy: services)
 
-        // Read docker-compose.yml content
-        guard let yamlData = fileManager.contents(atPath: composePath) else {
-            let path = URL(fileURLWithPath: composePath)
-                .deletingLastPathComponent()
-                .path
-            throw YamlError.composeFileNotFound(path)
-        }
-
-        // Decode the YAML file into the DockerCompose struct
-        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
-
-        // Determine project name for container naming
-        if let name = dockerCompose.name {
-            projectName = name
-            print("Info: Docker Compose project name parsed as: \(name)")
+        if project.compose.name != nil {
+            print("Info: Docker Compose project name parsed as: \(project.projectName)")
             print(
-                "Note: The 'name' field currently only affects container naming (e.g., '\(name)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
+                "Note: The 'name' field currently only affects container naming (e.g., '\(project.projectName)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
             )
         } else {
-            projectName = deriveProjectName(cwd: cwd)
-            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
+            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(project.projectName)")
         }
 
-        var services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap({ serviceName, service in
-            guard let service else { return nil }
-            return (serviceName, service)
-        })
-        services = try Service.topoSortConfiguredServices(services)
-
-        // Filter for specified services and active Compose profiles
-        if !self.services.isEmpty {
-            services = services.filter({ serviceName, service in
-                self.services.contains(where: { $0 == serviceName }) || self.services.contains(where: { service.dependedBy.contains($0) })
-            })
-        } else {
-            // Match `up`'s default selection: profile-eligible services plus their
-            // dependencies (which bypass the profile gate). Anything excluded here
-            // may still be running from a previous `up --profile ...` that isn't
-            // repeated on this `down` — warn instead of silently skipping it.
-            let selected = Service.selectServices(from: services, requestedServices: [], activeProfiles: composeFileOptions.activeProfiles)
-            let selectedNames = Set(selected.map(\.serviceName))
-            let skipped = services.map(\.serviceName).filter { !selectedNames.contains($0) }
+        // A service excluded by an inactive profile may still be running from a
+        // previous `up --profile ...` that isn't repeated on this `down` — warn
+        // instead of silently skipping it.
+        if services.isEmpty {
+            let selectedNames = Set(project.services.map(\.serviceName))
+            let skipped = project.compose.services.keys.filter { !selectedNames.contains($0) }
             if !skipped.isEmpty {
                 print(
                     "Note: not stopping '\(skipped.sorted().joined(separator: "', '"))' — gated by an inactive Compose profile. "
                         + "Pass --profile <name> (or name the service explicitly) to also stop them."
                 )
             }
-            services = selected
         }
 
-        try await stopOldStuff(services, remove: false)
+        try await stop(project)
     }
 
-    private func stopOldStuff(_ services: [(serviceName: String, service: Service)], remove: Bool) async throws {
-        guard let projectName else { return }
-        // The DNS path uses a dotted name `<svc>.<dnsDomain>`. Compute the
-        // domain the same way ComposeUp does so we can stop containers from
-        // either mode (and from a previous run that used a different mode).
-        let dnsDomain = ComposeUp.sanitizeDnsDomain(projectName)
-
-        for (serviceName, service) in services {
-            var candidates: [String] = ["\(projectName)-\(serviceName)"]
-            if let dnsDomain { candidates.append("\(serviceName).\(dnsDomain)") }
-            if let explicit = service.container_name, !candidates.contains(explicit) {
-                candidates.append(explicit)
-            }
-
-            let client = ContainerClient()
+    private func stop(_ project: ComposeProject) async throws {
+        let client = ContainerClient()
+        for target in project.services {
+            // Stop every candidate name that exists — not just the first hit —
+            // so a container left behind by a previous run in the other naming
+            // mode is cleaned up too.
             var stoppedAny = false
-            for name in candidates {
+            for name in target.candidateContainerNames {
                 guard let container = try? await client.get(id: name) else { continue }
                 stoppedAny = true
                 print("Stopping container: \(name)")
@@ -158,22 +89,14 @@ public struct ComposeDown: AsyncParsableCommand {
                 } catch {
                     print("Error Stopping Container: \(error)")
                 }
-                if remove {
-                    do {
-                        try await client.delete(id: container.id)
-                        print("Successfully removed container: \(name)")
-                    } catch {
-                        print("Error Removing Container: \(error)")
-                    }
-                }
             }
             if !stoppedAny {
-                print("Warning: No container found for service '\(serviceName)' (tried: \(candidates.joined(separator: ", "))).")
+                print("Warning: No container found for service '\(target.serviceName)' (tried: \(target.candidateContainerNames.joined(separator: ", "))).")
             }
 
             // Best-effort: the extra_hosts bind-mount source (if any) is only safe
             // to remove once the container that had it mounted is stopped.
-            try? fileManager.removeItem(atPath: ComposeUp.extraHostsFilePath(projectName: projectName, serviceName: serviceName))
+            try? fileManager.removeItem(atPath: ComposeUp.extraHostsFilePath(projectName: project.projectName, serviceName: target.serviceName))
         }
     }
 }

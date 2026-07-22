@@ -91,42 +91,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var detach: Bool = false
 
     @OptionGroup
-    var composeFileOptions: ComposeFileOptions
+    var projectOptions: ComposeProjectOptions
 
-    private static let supportedComposeFilenames = [
-        "compose.yml",
-        "compose.yaml",
-        "docker-compose.yml",
-        "docker-compose.yaml",
-    ]
-
-    private var cwdURL: URL {
-        URL(fileURLWithPath: cwd)
-    }
-
-    private var composePath: String {
-        if let composeFilename = composeFileOptions.composeFilename {
-            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
-        }
-
-        for filename in Self.supportedComposeFilenames {
-            let candidate = cwdURL.appending(path: filename).path
-            if fileManager.fileExists(atPath: candidate) {
-                return candidate
-            }
-        }
-
-        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
-    }
-
-    private var envFilePath: String {
-        let envFile = process.envFile.first ?? ".env"
-        return resolvedPath(for: envFile, relativeTo: cwdURL)
-    }
-
-    private var composeDirectory: String {
-        URL(fileURLWithPath: composePath).deletingLastPathComponent().path
-    }
+    private var composePath: String { projectOptions.composePath }
+    private var composeDirectory: String { projectOptions.composeDirectory }
+    private var cwd: String { projectOptions.cwd }
 
     @Flag(name: [.customShort("b"), .customLong("build")])
     var rebuild: Bool = false
@@ -135,15 +104,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     var noCache: Bool = false
 
     @OptionGroup
-    var process: Flags.Process
-
-    @OptionGroup
     var logging: Flags.Logging
 
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
-
     private var fileManager: FileManager { FileManager.default }
-    private var projectName: String?
+    /// Project name namespacing this run's containers; set once at the top of
+    /// `run()` from the shared resolution, before anything reads it.
+    private var projectName = ""
     /// Apple `container` DNS domain to use for inter-container resolution. Derived
     /// from `projectName` (sanitized to a valid DNS label). `nil` if the project
     /// name produces no usable label.
@@ -168,20 +134,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
-        // Read compose.yml content
-        guard let yamlData = fileManager.contents(atPath: composePath) else {
-            let path = URL(fileURLWithPath: composePath)
-                .deletingLastPathComponent()
-                .path
-            throw YamlError.composeFileNotFound(path)
-        }
-
-        // Decode the YAML file into the DockerCompose struct
-        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        // Load, decode, and resolve the compose project (shared resolution:
+        // topologically ordered services, filtered by explicit names and
+        // active Compose profiles).
+        let project = try projectOptions.resolve(filteringBy: services)
+        let dockerCompose = project.compose
+        projectName = project.projectName
 
         // Load environment variables from .env file
-        environmentVariables = loadEnvFile(path: envFilePath)
+        environmentVariables = loadEnvFile(path: projectOptions.envFilePath)
 
         // Handle 'version' field
         if let version = dockerCompose.version {
@@ -189,23 +150,20 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.")
         }
 
-        // Determine project name for container naming
-        if let name = dockerCompose.name {
-            projectName = name
-            print("Info: Docker Compose project name parsed as: \(name)")
+        if dockerCompose.name != nil {
+            print("Info: Docker Compose project name parsed as: \(projectName)")
             print(
                 "Note: The 'name' field affects generated container names and default named-volume names. Full project-level isolation for other resources is not implemented by this tool."
             )
         } else {
-            projectName = deriveProjectName(cwd: cwd)
-            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName ?? "")")
+            print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
         }
 
         // Determine whether real DNS is available for this project. If so, we'll
         // give every container a dotted name (`<svc>.<dnsDomain>`) and pass
         // `--dns-domain` so libc inside the container resolves peers via the
         // daemon's DNS server. If not, fall back to /etc/hosts patching.
-        if let derived = Self.sanitizeDnsDomain(projectName ?? "") {
+        if let derived = ComposeProject.sanitizeDnsDomain(projectName) {
             dnsDomain = derived
             dnsAvailable = await checkDnsDomainRegistered(derived)
             if dnsAvailable {
@@ -219,31 +177,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Get Services to use
-        var services: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap({ serviceName, service in
-            guard let service else { return nil }
-            return (serviceName, service)
-        })
-        services = try Service.topoSortConfiguredServices(services)
-
-        // Filter for specified services and active Compose profiles
-        services = Service.selectServices(
-            from: services,
-            requestedServices: self.services,
-            activeProfiles: composeFileOptions.activeProfiles
-        )
-
         // Stop Services. Pass every name a previous run might have used (legacy
         // dashed, dotted DNS-mode, and explicit container_name) so the cleanup
         // catches whichever shape exists on disk.
-        let containerNamesToStop: [String] = services.flatMap { (serviceName, service) -> [String] in
-            var names: [String] = []
-            if let projectName { names.append("\(projectName)-\(serviceName)") }
-            if let dnsDomain { names.append("\(serviceName).\(dnsDomain)") }
-            if let explicit = service.container_name, !names.contains(explicit) { names.append(explicit) }
-            return names
-        }
-        try await stopExistingContainers(containerNamesToStop, remove: true)
+        try await stopExistingContainers(project.services.flatMap(\.candidateContainerNames), remove: true)
 
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
@@ -269,13 +206,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
 
-        print(services.map(\.serviceName))
-        for (serviceName, service) in services {
-            try await configService(service, serviceName: serviceName, from: dockerCompose)
+        print(project.services.map(\.serviceName))
+        for target in project.services {
+            try await configService(target.service, serviceName: target.serviceName, from: dockerCompose)
         }
 
         if !detach {
-            await runForegroundUntilStopped(containerNames: services.map({ containerName(for: $0.serviceName) }))
+            await runForegroundUntilStopped(containerNames: project.services.map({ containerName(for: $0.serviceName) }))
         }
     }
 
@@ -547,30 +484,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func containerName(for serviceName: String) -> String {
-        if let explicit = serviceContainerNames[serviceName] { return explicit }
-        if let projectName { return "\(projectName)-\(serviceName)" }
-        return serviceName
-    }
-
-    /// Coerce an arbitrary project name into a single DNS label: lowercase, only
-    /// `[a-z0-9-]`, no leading/trailing/repeated hyphens, max 63 chars. Returns
-    /// `nil` when nothing usable remains (e.g. a name made entirely of separators).
-    static func sanitizeDnsDomain(_ name: String) -> String? {
-        let allowed: Set<Character> = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
-        var out = ""
-        for ch in name.lowercased() {
-            out.append(allowed.contains(ch) ? ch : "-")
-        }
-        while out.contains("--") {
-            out = out.replacingOccurrences(of: "--", with: "-")
-        }
-        while out.hasPrefix("-") { out.removeFirst() }
-        while out.hasSuffix("-") { out.removeLast() }
-        if out.count > 63 {
-            out = String(out.prefix(63))
-            while out.hasSuffix("-") { out.removeLast() }
-        }
-        return out.isEmpty ? nil : out
+        serviceContainerNames[serviceName] ?? "\(projectName)-\(serviceName)"
     }
 
     /// Pure parser for `container system dns list` output. Output looks like:
@@ -888,8 +802,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     // MARK: Compose Service Level Functions
     private mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
-        guard let projectName else { throw ComposeError.invalidProjectName }
-
         try waitForDependencyConditions(serviceName: serviceName, service: service)
 
         var imageToRun: String
@@ -1324,12 +1236,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func waitUntilServiceIsHealthy(serviceName: String, healthcheck: Healthcheck) async throws {
-        guard let projectName else { throw ComposeError.invalidProjectName }
         guard let execArguments = healthcheck.execArguments else {
             return
         }
 
-        let containerName = "\(projectName)-\(serviceName)"
+        let containerName = containerName(for: serviceName)
         let retries = max(healthcheck.retries ?? 3, 1)
         let interval = Healthcheck.parseDuration(healthcheck.interval, default: 30)
         let startPeriod = Healthcheck.parseDuration(healthcheck.start_period, default: 0)

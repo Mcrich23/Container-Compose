@@ -40,85 +40,28 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
     var services: [String] = []
 
     @OptionGroup
-    var composeFileOptions: ComposeFileOptions
+    var projectOptions: ComposeProjectOptions
 
     @Flag(name: .long, help: "Do not use cache when building")
     var noCache: Bool = false
 
     @OptionGroup
-    var process: Flags.Process
-
-    @OptionGroup
     var logging: Flags.Logging
 
-    private var cwd: String { process.cwd ?? FileManager.default.currentDirectoryPath }
-
-    private var cwdURL: URL { URL(fileURLWithPath: cwd) }
-
-    private static let supportedComposeFilenames = [
-        "compose.yml",
-        "compose.yaml",
-        "docker-compose.yml",
-        "docker-compose.yaml",
-    ]
-
-    private var composePath: String {
-        if let composeFilename = composeFileOptions.composeFilename {
-            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
-        }
-        for filename in Self.supportedComposeFilenames {
-            let candidate = cwdURL.appending(path: filename).path
-            if FileManager.default.fileExists(atPath: candidate) {
-                return candidate
-            }
-        }
-        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
-    }
-
-    private var composeDirectory: String {
-        URL(fileURLWithPath: composePath).deletingLastPathComponent().path
-    }
-
-    private var envFilePath: String {
-        let envFile = process.envFile.first ?? ".env"
-        return resolvedPath(for: envFile, relativeTo: cwdURL)
-    }
+    private var composeDirectory: String { projectOptions.composeDirectory }
 
     public mutating func run() async throws {
-        guard let yamlData = FileManager.default.contents(atPath: composePath) else {
-            let dir = URL(fileURLWithPath: composePath).deletingLastPathComponent().path
-            throw YamlError.composeFileNotFound(dir)
-        }
+        // Shared resolution routes both the explicit-service-name and default
+        // cases through the same selection `up`/`down` use: an explicit name
+        // (or the default profile-eligible set) pulls in its `depends_on` graph
+        // regardless of that dependency's own build/profile status. Without
+        // this, a dependency only reachable via `depends_on` — whether
+        // profile-gated or just not named explicitly — would be started by
+        // `up` but never get built here.
+        let project = try projectOptions.resolve(filteringBy: services)
+        let environmentVariables = loadEnvFile(path: projectOptions.envFilePath)
 
-        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        let dockerCompose = try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
-        let environmentVariables = loadEnvFile(path: envFilePath)
-
-        let projectName: String
-        if let name = dockerCompose.name {
-            projectName = name
-        } else {
-            projectName = deriveProjectName(cwd: cwd)
-        }
-
-        // Route both the explicit-service-name and default cases through the same
-        // selection `up`/`down` use: an explicit name (or the default profile-eligible
-        // set) pulls in its `depends_on` graph regardless of that dependency's own
-        // build/profile status. Without this, a dependency only reachable via
-        // `depends_on` — whether profile-gated or just not named explicitly — would
-        // be started by `up` but never get built here.
-        let allServices: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { name, service in
-            guard let service else { return nil }
-            return (name, service)
-        }
-        let selectedNames = Set(
-            Service.selectServices(from: allServices, requestedServices: services, activeProfiles: composeFileOptions.activeProfiles)
-                .map(\.serviceName)
-        )
-        let servicesToBuild: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { name, service in
-            guard let service, service.build != nil, selectedNames.contains(name) else { return nil }
-            return (name, service)
-        }
+        let servicesToBuild = project.services.filter { $0.service.build != nil }
 
         if servicesToBuild.isEmpty {
             print("No services with a 'build' configuration found.")
@@ -126,8 +69,10 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         }
 
         print("Building services")
-        for (serviceName, service) in servicesToBuild {
-            try await buildService(service.build!, for: service, serviceName: serviceName, projectName: projectName, environmentVariables: environmentVariables)
+        for target in servicesToBuild {
+            try await buildService(
+                target.service.build!, for: target.service, serviceName: target.serviceName,
+                projectName: project.projectName, environmentVariables: environmentVariables)
         }
         print("Build complete")
     }

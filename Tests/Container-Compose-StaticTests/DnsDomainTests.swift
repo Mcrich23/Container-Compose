@@ -23,44 +23,44 @@ struct DnsDomainTests {
 
     @Test("sanitize - already valid label is unchanged")
     func sanitizeIdentity() {
-        #expect(ComposeUp.sanitizeDnsDomain("dnstest") == "dnstest")
-        #expect(ComposeUp.sanitizeDnsDomain("my-app-1") == "my-app-1")
+        #expect(ComposeProject.sanitizeDnsDomain("dnstest") == "dnstest")
+        #expect(ComposeProject.sanitizeDnsDomain("my-app-1") == "my-app-1")
     }
 
     @Test("sanitize - lowercases mixed case")
     func sanitizeLowercases() {
-        #expect(ComposeUp.sanitizeDnsDomain("Container-Compose") == "container-compose")
+        #expect(ComposeProject.sanitizeDnsDomain("Container-Compose") == "container-compose")
     }
 
     @Test("sanitize - replaces underscores, dots, spaces with hyphens")
     func sanitizeReplacesSeparators() {
-        #expect(ComposeUp.sanitizeDnsDomain("my_app") == "my-app")
-        #expect(ComposeUp.sanitizeDnsDomain("my.app") == "my-app")
-        #expect(ComposeUp.sanitizeDnsDomain("my app") == "my-app")
+        #expect(ComposeProject.sanitizeDnsDomain("my_app") == "my-app")
+        #expect(ComposeProject.sanitizeDnsDomain("my.app") == "my-app")
+        #expect(ComposeProject.sanitizeDnsDomain("my app") == "my-app")
     }
 
     @Test("sanitize - collapses runs of separators")
     func sanitizeCollapsesRuns() {
-        #expect(ComposeUp.sanitizeDnsDomain("a__b..c   d") == "a-b-c-d")
+        #expect(ComposeProject.sanitizeDnsDomain("a__b..c   d") == "a-b-c-d")
     }
 
     @Test("sanitize - trims leading and trailing hyphens")
     func sanitizeTrims() {
-        #expect(ComposeUp.sanitizeDnsDomain("--foo--") == "foo")
-        #expect(ComposeUp.sanitizeDnsDomain(".devcontainers") == "devcontainers")
+        #expect(ComposeProject.sanitizeDnsDomain("--foo--") == "foo")
+        #expect(ComposeProject.sanitizeDnsDomain(".devcontainers") == "devcontainers")
     }
 
     @Test("sanitize - returns nil for unusable input")
     func sanitizeReturnsNil() {
-        #expect(ComposeUp.sanitizeDnsDomain("") == nil)
-        #expect(ComposeUp.sanitizeDnsDomain("___") == nil)
-        #expect(ComposeUp.sanitizeDnsDomain("...") == nil)
+        #expect(ComposeProject.sanitizeDnsDomain("") == nil)
+        #expect(ComposeProject.sanitizeDnsDomain("___") == nil)
+        #expect(ComposeProject.sanitizeDnsDomain("...") == nil)
     }
 
     @Test("sanitize - clamps to 63 chars and re-trims")
     func sanitizeClampsLength() {
         let long = String(repeating: "a", count: 70) + "-"
-        let out = ComposeUp.sanitizeDnsDomain(long)
+        let out = ComposeProject.sanitizeDnsDomain(long)
         #expect(out?.count == 63)
         #expect(out?.last != "-")
     }
