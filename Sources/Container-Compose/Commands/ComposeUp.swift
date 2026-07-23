@@ -177,6 +177,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
+        // Fail fast on a typo'd/unknown service name, matching `docker compose up
+        // <svc>` ("no such service: <svc>"). Without this an unknown name selected
+        // nothing and a foreground `up` then blocked forever in
+        // `runForegroundUntilStopped` instead of returning.
+        let allServices: [(serviceName: String, service: Service)] = dockerCompose.services.compactMap { name, service in
+            guard let service else { return nil }
+            return (name, service)
+        }
+        try Service.validateRequestedServices(self.services, against: allServices)
         // Stop Services. Pass every name a previous run might have used (legacy
         // dashed, dotted DNS-mode, and explicit container_name) so the cleanup
         // catches whichever shape exists on disk.

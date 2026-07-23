@@ -422,6 +422,26 @@ public struct Service: Codable, Hashable {
         return sorted
     }
 
+    /// Validates that every explicitly requested service name exists among the
+    /// services defined in the compose file. Mirrors `docker compose up <svc>`,
+    /// which fails with "no such service: <svc>" rather than silently selecting
+    /// nothing — the latter previously left a foreground `up` hanging forever
+    /// (see `ComposeUp.runForegroundUntilStopped`).
+    /// - Parameters:
+    ///   - requested: Service names passed on the command line (may be empty).
+    ///   - defined: All services declared in the compose file.
+    /// - Throws: `ComposeError.noSuchService` for the first requested name that
+    ///   is not defined.
+    static func validateRequestedServices(
+        _ requested: [String],
+        against defined: [(serviceName: String, service: Service)]
+    ) throws {
+        let definedNames = Set(defined.map(\.serviceName))
+        for name in requested where !definedNames.contains(name) {
+            throw ComposeError.noSuchService(name)
+        }
+    }
+
     /// Selects the services `up`, `build`, and `down` should act on by default,
     /// applying both explicit service-name filtering and Compose `profiles` gating.
     ///
