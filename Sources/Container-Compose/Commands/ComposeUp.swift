@@ -843,7 +843,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         } else if let img = service.image {
             // Use specified image if no build config
             // Pull image if necessary
-            try await pullImage(img, platform: service.platform)
+            try await pullImage(img, platform: service.effectivePullPlatform())
             imageToRun = img
         } else {
             // Should not happen due to Service init validation, but as a fallback
