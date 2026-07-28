@@ -42,7 +42,17 @@ public struct Build: Codable, Hashable {
             let keyedContainer = try decoder.container(keyedBy: CodingKeys.self)
             self.context = try keyedContainer.decode(String.self, forKey: .context)
             self.dockerfile = try keyedContainer.decodeIfPresent(String.self, forKey: .dockerfile)
-            self.args = try keyedContainer.decodeIfPresent([String: String].self, forKey: .args)
+            // `args:` accepts both forms per the Compose spec:
+            //   args:                 args:
+            //     KEY: value            - KEY=value
+            // The list form previously threw `typeMismatch` and crashed `up` (#136).
+            if let asMap = try? keyedContainer.decodeIfPresent([String: String].self, forKey: .args) {
+                self.args = asMap
+            } else if let asList = try? keyedContainer.decodeIfPresent([String].self, forKey: .args) {
+                self.args = parseComposeKeyValueList(asList)
+            } else {
+                self.args = nil
+            }
         }
     }
 
