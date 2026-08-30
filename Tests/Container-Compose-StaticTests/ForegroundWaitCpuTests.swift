@@ -72,7 +72,7 @@ struct ForegroundWaitCpuTests {
         // (it wouldn't matter — the function ignores cancellation by contract —
         // but this makes the leak explicit rather than incidental).
         Task.detached {
-            await composeUp.runForegroundUntilStopped(containerNames: [])
+            await composeUp.runForegroundUntilStopped(containerTargets: [])
         }
 
         try await Task.sleep(nanoseconds: 200_000_000)  // 200ms

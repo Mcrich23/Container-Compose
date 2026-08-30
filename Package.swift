@@ -29,6 +29,10 @@ let package = Package(
                     package: "container"
                 ),
                 .product(
+                    name: "ContainerResource",
+                    package: "container"
+                ),
+                .product(
                     name: "ArgumentParser",
                     package: "swift-argument-parser"
                 ),

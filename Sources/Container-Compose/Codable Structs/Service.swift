@@ -38,6 +38,9 @@ public struct Service: Codable, Hashable {
     /// Restart policy (e.g., 'unless-stopped', 'always')
     public let restart: String?
 
+    /// Time Compose waits for the container to stop before sending SIGKILL.
+    public let stop_grace_period: StopGracePeriod?
+
     /// Healthcheck configuration
     public let healthcheck: Healthcheck?
 
@@ -131,7 +134,7 @@ public struct Service: Codable, Hashable {
 
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
-        case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
+        case image, build, deploy, restart, stop_grace_period, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
              mem_limit, extra_hosts, profiles
     }
@@ -142,6 +145,7 @@ public struct Service: Codable, Hashable {
         build: Build? = nil,
         deploy: Deploy? = nil,
         restart: String? = nil,
+        stop_grace_period: StopGracePeriod? = nil,
         healthcheck: Healthcheck? = nil,
         volumes: [String]? = nil,
         environment: [String: String]? = nil,
@@ -174,6 +178,7 @@ public struct Service: Codable, Hashable {
         self.build = build
         self.deploy = deploy
         self.restart = restart
+        self.stop_grace_period = stop_grace_period
         self.healthcheck = healthcheck
         self.volumes = volumes
         self.environment = environment
@@ -216,6 +221,7 @@ public struct Service: Codable, Hashable {
         }
 
         restart = try container.decodeIfPresent(String.self, forKey: .restart)
+        stop_grace_period = try container.decodeIfPresent(StopGracePeriod.self, forKey: .stop_grace_period)
         healthcheck = try container.decodeIfPresent(Healthcheck.self, forKey: .healthcheck)
         volumes = try container.decodeIfPresent([String].self, forKey: .volumes)
 
@@ -356,6 +362,12 @@ public struct Service: Codable, Hashable {
     public func isProfileEligible(activeProfiles: Set<String>) -> Bool {
         guard let profiles, !profiles.isEmpty else { return true }
         return !Set(profiles).isDisjoint(with: activeProfiles)
+    }
+
+    /// The stop timeout passed to Apple Container, using Compose's 10-second
+    /// default when the service does not specify `stop_grace_period`.
+    public var stopTimeoutInSeconds: Int32 {
+        stop_grace_period?.timeoutInSeconds ?? StopGracePeriod.defaultTimeoutInSeconds
     }
     
     /// Translates the list-form of `environment:` into the same `[String: String]`
