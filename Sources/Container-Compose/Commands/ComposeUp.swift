@@ -1253,24 +1253,38 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let retries = max(healthcheck.retries ?? 3, 1)
         let interval = Healthcheck.parseDuration(healthcheck.interval, default: 30)
         let startPeriod = Healthcheck.parseDuration(healthcheck.start_period, default: 0)
+        let timeout = Healthcheck.parseDuration(healthcheck.timeout, default: 30)
 
+        @Sendable func probeSucceeded() async throws -> Bool {
+            try await streamCommand(
+                "container",
+                args: ["exec", containerName] + execArguments,
+                timeout: timeout,
+                onStdout: { _ in },
+                onStderr: { _ in }
+            ) == 0
+        }
+
+        // Compose `start_period` is a grace window, not a delay: probes run
+        // during it and their failures do not consume the retry budget, and the
+        // first success ends the wait immediately.
         if startPeriod > 0 {
-            try await Task.sleep(nanoseconds: UInt64(startPeriod * 1_000_000_000))
+            let deadline = ContinuousClock.now.advanced(by: .seconds(startPeriod))
+            while ContinuousClock.now < deadline {
+                if try await probeSucceeded() {
+                    return
+                }
+                try await Task.sleep(for: .seconds(interval))
+            }
         }
 
         for attempt in 1...retries {
-            let exitCode = try await streamCommand(
-                "container",
-                args: ["exec", containerName] + execArguments,
-                onStdout: { _ in },
-                onStderr: { _ in }
-            )
-            if exitCode == 0 {
+            if try await probeSucceeded() {
                 return
             }
 
             if attempt < retries {
-                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                try await Task.sleep(for: .seconds(interval))
             }
         }
 
@@ -1481,6 +1495,7 @@ extension ComposeUp {
     func streamCommand(
         _ command: String,
         args: [String] = [],
+        timeout: TimeInterval? = nil,
         onStdout: @escaping (@Sendable (String) -> Void),
         onStderr: @escaping (@Sendable (String) -> Void)
     ) async throws -> Int32 {
@@ -1526,6 +1541,16 @@ extension ComposeUp {
 
             do {
                 try process.run()
+                if let timeout, timeout > 0 {
+                    // Docker treats a check that overruns `timeout` as one failed
+                    // attempt, not as a hang. Terminating the child makes the
+                    // termination handler fire with a non-zero status, so the
+                    // caller sees a normal failure.
+                    DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak process] in
+                        guard let process, process.isRunning else { return }
+                        process.terminate()
+                    }
+                }
             } catch {
                 continuation.resume(throwing: error)
             }
