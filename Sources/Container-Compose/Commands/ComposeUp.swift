@@ -504,6 +504,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             args.append(contentsOf: ["--cap-add", capability])
         }
 
+        if let shmSize = service.shm_size {
+            args.append(contentsOf: ["--shm-size", shmSize])
+        }
+        if service.runInit == true {
+            args.append("--init")
+        }
+        for name in (service.ulimits ?? [:]).keys.sorted() {
+            guard let value = service.ulimits?[name] else { continue }
+            args.append(contentsOf: ["--ulimit", "\(name)=\(value)"])
+        }
+
         return args
     }
 

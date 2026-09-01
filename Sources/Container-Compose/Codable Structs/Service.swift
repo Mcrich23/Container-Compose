@@ -98,6 +98,17 @@ public struct Service: Codable, Hashable {
     /// Linux capabilities to drop, e.g. `ALL`
     public let cap_drop: [String]?
 
+    /// Size of `/dev/shm`, e.g. `256m`
+    public let shm_size: String?
+
+    /// Compose `init:` — run an init process that reaps zombies.
+    /// Named `runInit` because `init` is a Swift keyword; the wire name is
+    /// restored by the `init` CodingKey below.
+    public let runInit: Bool?
+
+    /// Resource limits, e.g. `["nofile": "65535"]`
+    public let ulimits: [String: String]?
+
     /// Working directory inside the container
     public let working_dir: String?
 
@@ -139,7 +150,8 @@ public struct Service: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
-             mem_limit, extra_hosts, profiles, cap_add, cap_drop
+             mem_limit, extra_hosts, profiles, cap_add, cap_drop, shm_size, ulimits
+        case runInit = "init"
     }
     
     /// Public memberwise initializer for testing
@@ -167,6 +179,9 @@ public struct Service: Codable, Hashable {
         read_only: Bool? = nil,
         cap_add: [String]? = nil,
         cap_drop: [String]? = nil,
+        shm_size: String? = nil,
+        runInit: Bool? = nil,
+        ulimits: [String: String]? = nil,
         working_dir: String? = nil,
         platform: String? = nil,
         configs: [ServiceConfig]? = nil,
@@ -201,6 +216,9 @@ public struct Service: Codable, Hashable {
         self.read_only = read_only
         self.cap_add = cap_add
         self.cap_drop = cap_drop
+        self.shm_size = shm_size
+        self.runInit = runInit
+        self.ulimits = ulimits
         self.working_dir = working_dir
         self.platform = platform
         self.configs = configs
@@ -327,6 +345,15 @@ public struct Service: Codable, Hashable {
         read_only = try container.decodeIfPresent(Bool.self, forKey: .read_only)
         cap_add = try container.decodeIfPresent([String].self, forKey: .cap_add)
         cap_drop = try container.decodeIfPresent([String].self, forKey: .cap_drop)
+        shm_size = try container.decodeIfPresent(String.self, forKey: .shm_size)
+        runInit = try container.decodeIfPresent(Bool.self, forKey: .runInit)
+        if let stringForm = try? container.decodeIfPresent([String: String].self, forKey: .ulimits) {
+            ulimits = stringForm
+        } else if let intForm = try? container.decodeIfPresent([String: Int].self, forKey: .ulimits) {
+            ulimits = intForm.mapValues { "\($0)" }
+        } else {
+            ulimits = nil
+        }
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
         configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)
         secrets = try container.decodeIfPresent([ServiceSecret].self, forKey: .secrets)

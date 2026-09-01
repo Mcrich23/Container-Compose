@@ -46,6 +46,35 @@ struct HardeningArgsTests {
         #expect(args == ["--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE"])
     }
 
+
+    @Test("shm_size, init and ulimits parse")
+    func scalarHardeningParse() throws {
+        let svc = try service("""
+        image: alpine
+        shm_size: 256m
+        init: true
+        ulimits:
+          nofile: 65535
+        """)
+        #expect(svc.shm_size == "256m")
+        #expect(svc.runInit == true)
+        #expect(svc.ulimits?["nofile"] == "65535")
+    }
+
+    @Test("shm_size, init and ulimits emit flags")
+    func scalarHardeningArgs() throws {
+        let svc = Service(image: "alpine", shm_size: "256m", runInit: true, ulimits: ["nofile": "65535"])
+        let args = ComposeUp.hardeningRunArgs(for: svc)
+        #expect(args.contains("--init"))
+        #expect(args.firstIndex(of: "--shm-size").map { args[$0 + 1] } == "256m")
+        #expect(args.firstIndex(of: "--ulimit").map { args[$0 + 1] } == "nofile=65535")
+    }
+
+    @Test("init false emits no flag")
+    func initFalseEmitsNothing() throws {
+        let svc = Service(image: "alpine", runInit: false)
+        #expect(ComposeUp.hardeningRunArgs(for: svc).contains("--init") == false)
+    }
     @Test("no hardening keys yields no args")
     func emptyYieldsNothing() throws {
         let svc = Service(image: "alpine")
