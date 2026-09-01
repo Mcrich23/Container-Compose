@@ -486,6 +486,27 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return (value, false)
     }
 
+    /// Maps the container-hardening compose keys to `container run` flags.
+    ///
+    /// Extracted as a pure function so the mapping is directly testable: the
+    /// surrounding argument assembly has no test seam, which is how
+    /// `healthcheck.timeout` stayed parsed-but-unapplied.
+    ///
+    /// `cap_drop` is emitted before `cap_add` so that `cap_drop: [ALL]` followed
+    /// by a narrow `cap_add` behaves as Compose specifies.
+    static func hardeningRunArgs(for service: Service) -> [String] {
+        var args: [String] = []
+
+        for capability in service.cap_drop ?? [] {
+            args.append(contentsOf: ["--cap-drop", capability])
+        }
+        for capability in service.cap_add ?? [] {
+            args.append(contentsOf: ["--cap-add", capability])
+        }
+
+        return args
+    }
+
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
         guard exitCode == 0 else {
             throw ComposeError.containerRunFailed(serviceName, exitCode)
@@ -1069,6 +1090,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if service.read_only == true {
             runCommandArgs.append("--read-only")
         }
+
+        runCommandArgs.append(contentsOf: Self.hardeningRunArgs(for: service))
 
         // Add resource limits.
         // `mem_limit` is the top-level shorthand; `deploy.resources.limits.memory` is

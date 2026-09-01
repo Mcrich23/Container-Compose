@@ -92,6 +92,12 @@ public struct Service: Codable, Hashable {
     /// Mount container's root filesystem as read-only
     public let read_only: Bool?
 
+    /// Linux capabilities to add, e.g. `NET_BIND_SERVICE`
+    public let cap_add: [String]?
+
+    /// Linux capabilities to drop, e.g. `ALL`
+    public let cap_drop: [String]?
+
     /// Working directory inside the container
     public let working_dir: String?
 
@@ -133,7 +139,7 @@ public struct Service: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
-             mem_limit, extra_hosts, profiles
+             mem_limit, extra_hosts, profiles, cap_add, cap_drop
     }
     
     /// Public memberwise initializer for testing
@@ -159,6 +165,8 @@ public struct Service: Codable, Hashable {
         entrypoint: [String]? = nil,
         privileged: Bool? = nil,
         read_only: Bool? = nil,
+        cap_add: [String]? = nil,
+        cap_drop: [String]? = nil,
         working_dir: String? = nil,
         platform: String? = nil,
         configs: [ServiceConfig]? = nil,
@@ -191,6 +199,8 @@ public struct Service: Codable, Hashable {
         self.entrypoint = entrypoint
         self.privileged = privileged
         self.read_only = read_only
+        self.cap_add = cap_add
+        self.cap_drop = cap_drop
         self.working_dir = working_dir
         self.platform = platform
         self.configs = configs
@@ -315,6 +325,8 @@ public struct Service: Codable, Hashable {
 
         privileged = try container.decodeIfPresent(Bool.self, forKey: .privileged)
         read_only = try container.decodeIfPresent(Bool.self, forKey: .read_only)
+        cap_add = try container.decodeIfPresent([String].self, forKey: .cap_add)
+        cap_drop = try container.decodeIfPresent([String].self, forKey: .cap_drop)
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
         configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)
         secrets = try container.decodeIfPresent([ServiceSecret].self, forKey: .secrets)
