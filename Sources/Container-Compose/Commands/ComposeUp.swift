@@ -559,6 +559,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
+        if let mode = service.network_mode {
+            warnings.append(
+                "Note: Service '\(serviceName)' sets network_mode: \(mode). `container run` has no equivalent; the container will join the default network."
+            )
+        }
+
         return warnings
     }
 

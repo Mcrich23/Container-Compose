@@ -112,6 +112,10 @@ public struct Service: Codable, Hashable {
     /// tmpfs mounts, Compose list form: `["/run:noexec,nosuid", "/tmp"]`
     public let tmpfs: [String]?
 
+    /// Compose `network_mode`. Parsed so it can be reported; `container run`
+    /// has no equivalent, see `ComposeUp.unsupportedOptionWarnings`.
+    public let network_mode: String?
+
     /// Working directory inside the container
     public let working_dir: String?
 
@@ -153,7 +157,7 @@ public struct Service: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
-             mem_limit, extra_hosts, profiles, cap_add, cap_drop, shm_size, ulimits, tmpfs
+             mem_limit, extra_hosts, profiles, cap_add, cap_drop, shm_size, ulimits, tmpfs, network_mode
         case runInit = "init"
     }
     
@@ -186,6 +190,7 @@ public struct Service: Codable, Hashable {
         runInit: Bool? = nil,
         ulimits: [String: String]? = nil,
         tmpfs: [String]? = nil,
+        network_mode: String? = nil,
         working_dir: String? = nil,
         platform: String? = nil,
         configs: [ServiceConfig]? = nil,
@@ -224,6 +229,7 @@ public struct Service: Codable, Hashable {
         self.runInit = runInit
         self.ulimits = ulimits
         self.tmpfs = tmpfs
+        self.network_mode = network_mode
         self.working_dir = working_dir
         self.platform = platform
         self.configs = configs
@@ -367,6 +373,7 @@ public struct Service: Codable, Hashable {
         } else {
             tmpfs = nil
         }
+        network_mode = try container.decodeIfPresent(String.self, forKey: .network_mode)
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
         configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)
         secrets = try container.decodeIfPresent([ServiceSecret].self, forKey: .secrets)

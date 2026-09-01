@@ -120,6 +120,34 @@ struct HardeningArgsTests {
         #expect(ComposeUp.unsupportedOptionWarnings(for: svc, serviceName: "web").isEmpty)
     }
 
+    @Test("network_mode parses")
+    func networkModeParses() throws {
+        let svc = try service("""
+        image: alpine
+        network_mode: none
+        """)
+        #expect(svc.network_mode == "none")
+    }
+
+    @Test("network_mode emits no run args")
+    func networkModeEmitsNoArgs() throws {
+        let svc = Service(image: "alpine", network_mode: "none")
+        #expect(ComposeUp.hardeningRunArgs(for: svc).isEmpty)
+    }
+
+    @Test("network_mode is reported as unsupported")
+    func networkModeIsReported() throws {
+        let svc = Service(image: "alpine", network_mode: "none")
+        let warnings = ComposeUp.unsupportedOptionWarnings(for: svc, serviceName: "etcd-init")
+        #expect(warnings.contains { $0.contains("network_mode") && $0.contains("etcd-init") })
+    }
+
+    @Test("absent network_mode produces no warning")
+    func absentNetworkModeNoWarning() throws {
+        let svc = Service(image: "alpine")
+        #expect(ComposeUp.unsupportedOptionWarnings(for: svc, serviceName: "web").isEmpty)
+    }
+
     @Test("no hardening keys yields no args")
     func emptyYieldsNothing() throws {
         let svc = Service(image: "alpine")
