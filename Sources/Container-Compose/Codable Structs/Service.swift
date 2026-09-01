@@ -109,6 +109,9 @@ public struct Service: Codable, Hashable {
     /// Resource limits, e.g. `["nofile": "65535"]`
     public let ulimits: [String: String]?
 
+    /// tmpfs mounts, Compose list form: `["/run:noexec,nosuid", "/tmp"]`
+    public let tmpfs: [String]?
+
     /// Working directory inside the container
     public let working_dir: String?
 
@@ -150,7 +153,7 @@ public struct Service: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
-             mem_limit, extra_hosts, profiles, cap_add, cap_drop, shm_size, ulimits
+             mem_limit, extra_hosts, profiles, cap_add, cap_drop, shm_size, ulimits, tmpfs
         case runInit = "init"
     }
     
@@ -182,6 +185,7 @@ public struct Service: Codable, Hashable {
         shm_size: String? = nil,
         runInit: Bool? = nil,
         ulimits: [String: String]? = nil,
+        tmpfs: [String]? = nil,
         working_dir: String? = nil,
         platform: String? = nil,
         configs: [ServiceConfig]? = nil,
@@ -219,6 +223,7 @@ public struct Service: Codable, Hashable {
         self.shm_size = shm_size
         self.runInit = runInit
         self.ulimits = ulimits
+        self.tmpfs = tmpfs
         self.working_dir = working_dir
         self.platform = platform
         self.configs = configs
@@ -353,6 +358,14 @@ public struct Service: Codable, Hashable {
             ulimits = intForm.mapValues { "\($0)" }
         } else {
             ulimits = nil
+        }
+
+        if let list = try? container.decodeIfPresent([String].self, forKey: .tmpfs) {
+            tmpfs = list
+        } else if let single = try? container.decodeIfPresent(String.self, forKey: .tmpfs) {
+            tmpfs = [single]
+        } else {
+            tmpfs = nil
         }
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
         configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)

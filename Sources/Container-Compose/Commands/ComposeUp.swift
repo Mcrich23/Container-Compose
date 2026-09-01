@@ -515,7 +515,51 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             args.append(contentsOf: ["--ulimit", "\(name)=\(value)"])
         }
 
+        for entry in service.tmpfs ?? [] {
+            let (target, options) = Self.splitTmpfsEntry(entry)
+            var spec = "type=tmpfs,target=\(target)"
+            for option in options where option.hasPrefix("mode=") || option.hasPrefix("size=") {
+                spec += ",\(option)"
+            }
+            args.append(contentsOf: ["--mount", spec])
+        }
+
         return args
+    }
+
+    /// Splits a Compose tmpfs entry into its target path and its option list.
+    static func splitTmpfsEntry(_ entry: String) -> (target: String, options: [String]) {
+        let parts = entry.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        let target = String(parts[0])
+        guard parts.count == 2 else { return (target, []) }
+        return (target, parts[1].split(separator: ",").map(String.init))
+    }
+
+    /// Compose options this tool parses but `container run` cannot express.
+    ///
+    /// Returned rather than printed so the mapping stays testable, and reported
+    /// rather than dropped silently — a silent drop is the failure mode this
+    /// change set exists to remove.
+    static func unsupportedOptionWarnings(for service: Service, serviceName: String) -> [String] {
+        var warnings: [String] = []
+
+        for entry in service.tmpfs ?? [] {
+            let (target, options) = Self.splitTmpfsEntry(entry)
+            let dropped = options.filter { !$0.hasPrefix("mode=") && !$0.hasPrefix("size=") }
+            guard !dropped.isEmpty else { continue }
+
+            warnings.append(
+                "Note: Service '\(serviceName)' tmpfs '\(target)': `container run` accepts only target, mode and size; dropped \(dropped.joined(separator: ","))."
+            )
+
+            if dropped.contains(where: { $0.hasPrefix("uid=") || $0.hasPrefix("gid=") }) {
+                warnings.append(
+                    "Warning: Service '\(serviceName)' tmpfs '\(target)' requested uid/gid ownership, which `container run` cannot express. The mount will be owned by root, so a non-root container cannot write to it unless the mode is world-writable."
+                )
+            }
+        }
+
+        return warnings
     }
 
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
@@ -1103,6 +1147,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         runCommandArgs.append(contentsOf: Self.hardeningRunArgs(for: service))
+        for warning in Self.unsupportedOptionWarnings(for: service, serviceName: serviceName) {
+            print(warning)
+        }
 
         // Add resource limits.
         // `mem_limit` is the top-level shorthand; `deploy.resources.limits.memory` is

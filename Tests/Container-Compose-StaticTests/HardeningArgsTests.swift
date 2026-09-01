@@ -75,6 +75,51 @@ struct HardeningArgsTests {
         let svc = Service(image: "alpine", runInit: false)
         #expect(ComposeUp.hardeningRunArgs(for: svc).contains("--init") == false)
     }
+
+    @Test("tmpfs list form parses")
+    func tmpfsParses() throws {
+        let svc = try service("""
+        image: alpine
+        tmpfs:
+          - /run:noexec,nosuid
+          - /tmp
+        """)
+        #expect(svc.tmpfs == ["/run:noexec,nosuid", "/tmp"])
+    }
+
+    @Test("tmpfs maps to --mount type=tmpfs, never --tmpfs")
+    func tmpfsUsesMountFlag() throws {
+        let svc = Service(image: "alpine", tmpfs: ["/tmp"])
+        let args = ComposeUp.hardeningRunArgs(for: svc)
+        #expect(args.contains("--tmpfs") == false)
+        #expect(args.firstIndex(of: "--mount").map { args[$0 + 1] } == "type=tmpfs,target=/tmp")
+    }
+
+    @Test("tmpfs mode is carried through, unsupported options are not")
+    func tmpfsCarriesModeOnly() throws {
+        let svc = Service(image: "alpine", tmpfs: ["/run/postgresql:noexec,nosuid,uid=70,gid=70,mode=0755"])
+        let args = ComposeUp.hardeningRunArgs(for: svc)
+        let spec = try #require(args.firstIndex(of: "--mount").map { args[$0 + 1] })
+        #expect(spec.contains("target=/run/postgresql"))
+        #expect(spec.contains("mode=0755"))
+        #expect(spec.contains("uid=") == false)
+        #expect(spec.contains("noexec") == false)
+    }
+
+    @Test("dropped tmpfs options are reported, and uid/gid gets its own warning")
+    func tmpfsDroppedOptionsAreReported() throws {
+        let svc = Service(image: "alpine", tmpfs: ["/run/postgresql:noexec,nosuid,uid=70,gid=70,mode=0755"])
+        let warnings = ComposeUp.unsupportedOptionWarnings(for: svc, serviceName: "patroni1")
+        #expect(warnings.contains { $0.contains("noexec") && $0.contains("/run/postgresql") })
+        #expect(warnings.contains { $0.contains("non-root") })
+    }
+
+    @Test("tmpfs with no options produces no warning")
+    func tmpfsNoOptionsNoWarning() throws {
+        let svc = Service(image: "alpine", tmpfs: ["/tmp"])
+        #expect(ComposeUp.unsupportedOptionWarnings(for: svc, serviceName: "web").isEmpty)
+    }
+
     @Test("no hardening keys yields no args")
     func emptyYieldsNothing() throws {
         let svc = Service(image: "alpine")
