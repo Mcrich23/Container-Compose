@@ -25,6 +25,41 @@ import Foundation
 
 
 /// Represents a single service definition within the `services` section.
+/// One `ulimits:` entry.
+///
+/// Compose accepts either a single value (`nofile: 65535`) or a soft/hard pair
+/// (`nofile: {soft: 20000, hard: 40000}`). `container run --ulimit` takes
+/// `<type>=<soft>[:<hard>]`, so both forms are normalised to that string here.
+///
+/// Decoding is deliberately throwing: an entry this cannot understand fails the
+/// whole file rather than nilling the map, which would drop the sibling entries
+/// with it and give no sign that anything was lost.
+private struct UlimitValue: Decodable {
+    let flagValue: String
+
+    private enum CodingKeys: String, CodingKey {
+        case soft, hard
+    }
+
+    init(from decoder: any Decoder) throws {
+        if let single = try? decoder.singleValueContainer() {
+            if let intValue = try? single.decode(Int.self) {
+                flagValue = "\(intValue)"
+                return
+            }
+            if let stringValue = try? single.decode(String.self) {
+                flagValue = stringValue
+                return
+            }
+        }
+
+        let keyed = try decoder.container(keyedBy: CodingKeys.self)
+        let soft = try keyed.decode(Int.self, forKey: .soft)
+        let hard = try keyed.decode(Int.self, forKey: .hard)
+        flagValue = "\(soft):\(hard)"
+    }
+}
+
 public struct Service: Codable, Hashable {
     /// Docker image name
     public let image: String?
@@ -358,20 +393,18 @@ public struct Service: Codable, Hashable {
         cap_drop = try container.decodeIfPresent([String].self, forKey: .cap_drop)
         shm_size = try container.decodeIfPresent(String.self, forKey: .shm_size)
         runInit = try container.decodeIfPresent(Bool.self, forKey: .runInit)
-        if let stringForm = try? container.decodeIfPresent([String: String].self, forKey: .ulimits) {
-            ulimits = stringForm
-        } else if let intForm = try? container.decodeIfPresent([String: Int].self, forKey: .ulimits) {
-            ulimits = intForm.mapValues { "\($0)" }
-        } else {
-            ulimits = nil
-        }
+        ulimits = try container
+            .decodeIfPresent([String: UlimitValue].self, forKey: .ulimits)?
+            .mapValues(\.flagValue)
 
-        if let list = try? container.decodeIfPresent([String].self, forKey: .tmpfs) {
-            tmpfs = list
-        } else if let single = try? container.decodeIfPresent(String.self, forKey: .tmpfs) {
-            tmpfs = [single]
-        } else {
+        // List form is the common one; a bare string is also legal. Anything else
+        // throws rather than silently becoming nil.
+        if !container.contains(.tmpfs) {
             tmpfs = nil
+        } else if let list = try? container.decode([String].self, forKey: .tmpfs) {
+            tmpfs = list
+        } else {
+            tmpfs = [try container.decode(String.self, forKey: .tmpfs)]
         }
         network_mode = try container.decodeIfPresent(String.self, forKey: .network_mode)
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)

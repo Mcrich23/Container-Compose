@@ -492,31 +492,34 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// surrounding argument assembly has no test seam, which is how
     /// `healthcheck.timeout` stayed parsed-but-unapplied.
     ///
-    /// `cap_drop` is emitted before `cap_add` so that `cap_drop: [ALL]` followed
-    /// by a narrow `cap_add` behaves as Compose specifies.
-    static func hardeningRunArgs(for service: Service) -> [String] {
+    /// Capabilities are emitted drop-then-add for readability only. `container`
+    /// collects `--cap-add` and `--cap-drop` into two separate arrays and then
+    /// computes the effective set (drop-ALL clears the base, adds are applied,
+    /// individual drops are removed), so the order they appear in on the command
+    /// line carries no meaning.
+    static func hardeningRunArgs(for service: Service, environment: [String: String] = [:]) -> [String] {
         var args: [String] = []
 
         for capability in service.cap_drop ?? [] {
-            args.append(contentsOf: ["--cap-drop", capability])
+            args.append(contentsOf: ["--cap-drop", resolveVariable(capability, with: environment)])
         }
         for capability in service.cap_add ?? [] {
-            args.append(contentsOf: ["--cap-add", capability])
+            args.append(contentsOf: ["--cap-add", resolveVariable(capability, with: environment)])
         }
 
         if let shmSize = service.shm_size {
-            args.append(contentsOf: ["--shm-size", shmSize])
+            args.append(contentsOf: ["--shm-size", resolveVariable(shmSize, with: environment)])
         }
         if service.runInit == true {
             args.append("--init")
         }
         for name in (service.ulimits ?? [:]).keys.sorted() {
             guard let value = service.ulimits?[name] else { continue }
-            args.append(contentsOf: ["--ulimit", "\(name)=\(value)"])
+            args.append(contentsOf: ["--ulimit", "\(name)=\(resolveVariable(value, with: environment))"])
         }
 
         for entry in service.tmpfs ?? [] {
-            let (target, options) = Self.splitTmpfsEntry(entry)
+            let (target, options) = Self.splitTmpfsEntry(resolveVariable(entry, with: environment))
             var spec = "type=tmpfs,target=\(target)"
             for option in options where option.hasPrefix("mode=") || option.hasPrefix("size=") {
                 spec += ",\(option)"
@@ -530,9 +533,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// Splits a Compose tmpfs entry into its target path and its option list.
     static func splitTmpfsEntry(_ entry: String) -> (target: String, options: [String]) {
         let parts = entry.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-        let target = String(parts[0])
+        let target = String(parts[0]).trimmingCharacters(in: .whitespaces)
         guard parts.count == 2 else { return (target, []) }
-        return (target, parts[1].split(separator: ",").map(String.init))
+        // `/run:noexec, mode=0755` is legal Compose; without the trim the second
+        // option would not match its prefix and would be dropped as unsupported.
+        let options = parts[1]
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return (target, options)
     }
 
     /// Compose options this tool parses but `container run` cannot express.
@@ -540,11 +549,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// Returned rather than printed so the mapping stays testable, and reported
     /// rather than dropped silently — a silent drop is the failure mode this
     /// change set exists to remove.
-    static func unsupportedOptionWarnings(for service: Service, serviceName: String) -> [String] {
+    static func unsupportedOptionWarnings(
+        for service: Service,
+        serviceName: String,
+        environment: [String: String] = [:]
+    ) -> [String] {
         var warnings: [String] = []
 
         for entry in service.tmpfs ?? [] {
-            let (target, options) = Self.splitTmpfsEntry(entry)
+            let (target, options) = Self.splitTmpfsEntry(resolveVariable(entry, with: environment))
             let dropped = options.filter { !$0.hasPrefix("mode=") && !$0.hasPrefix("size=") }
             guard !dropped.isEmpty else { continue }
 
@@ -1152,8 +1165,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("--read-only")
         }
 
-        runCommandArgs.append(contentsOf: Self.hardeningRunArgs(for: service))
-        for warning in Self.unsupportedOptionWarnings(for: service, serviceName: serviceName) {
+        runCommandArgs.append(
+            contentsOf: Self.hardeningRunArgs(for: service, environment: environmentVariables)
+        )
+        for warning in Self.unsupportedOptionWarnings(
+            for: service,
+            serviceName: serviceName,
+            environment: environmentVariables
+        ) {
             print(warning)
         }
 

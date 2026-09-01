@@ -75,14 +75,11 @@ struct HardeningComposeIntegrationTests {
         }
     }
 
-    @Test("inherited and per-service capabilities combine in Compose order")
+    @Test("inherited and per-service capabilities both reach the command line")
     func capabilitiesCombine() throws {
         let args = ComposeUp.hardeningRunArgs(for: try service("web"))
-        let dropIndex = try #require(args.firstIndex(of: "--cap-drop"))
-        let addIndex = try #require(args.firstIndex(of: "--cap-add"))
-        #expect(dropIndex < addIndex)
-        #expect(args[dropIndex + 1] == "ALL")
-        #expect(args[addIndex + 1] == "NET_BIND_SERVICE")
+        #expect(zip(args, args.dropFirst()).contains { $0 == "--cap-drop" && $1 == "ALL" })
+        #expect(zip(args, args.dropFirst()).contains { $0 == "--cap-add" && $1 == "NET_BIND_SERVICE" })
     }
 
     @Test("tmpfs keeps mode, drops what container run cannot express, and says so")
