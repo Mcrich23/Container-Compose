@@ -486,6 +486,40 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return (value, false)
     }
 
+    /// The image reference a service is actually pulled and run from.
+    ///
+    /// Interpolated: pinning an image per environment with
+    /// `image: repo/name:${TAG:-1.0}` is the common case, and container rejects
+    /// the raw form with "invalid format for image reference".
+    ///
+    /// Pure so the mapping is testable; the surrounding assembly has no seam.
+    static func resolvedImageReference(_ image: String, environment: [String: String]) -> String {
+        resolveVariable(image, with: environment)
+    }
+
+    /// The `--label` arguments for a service, including the two Compose adds.
+    ///
+    /// The compose labels are set first so the project/service labels take
+    /// precedence over a user value for the same key; keys are sorted for a
+    /// deterministic argv.
+    static func labelRunArgs(
+        for service: Service,
+        serviceName: String,
+        projectName: String,
+        environment: [String: String]
+    ) -> [String] {
+        var labels = service.labels ?? [:]
+        labels["com.docker.compose.project"] = projectName
+        labels["com.docker.compose.service"] = serviceName
+
+        var args: [String] = []
+        for key in labels.keys.sorted() {
+            let value = resolveVariable(labels[key] ?? "", with: environment)
+            args.append(contentsOf: ["--label", "\(key)=\(value)"])
+        }
+        return args
+    }
+
     /// The name a top-level network is actually created under.
     ///
     /// Interpolated for the same reason the service-level network reference is:
@@ -845,7 +879,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // Interpolated: pinning an image per environment with
             // `image: repo/name:${TAG:-1.0}` is the common case, and container
             // rejects the raw form with "invalid format for image reference".
-            let resolvedImage = resolveVariable(img, with: environmentVariables)
+            let resolvedImage = Self.resolvedImageReference(img, environment: environmentVariables)
             try await pullImage(resolvedImage, platform: service.platform)
             imageToRun = resolvedImage
         } else {
@@ -903,13 +937,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // mis-groups unrelated containers that merely share a prefix). The compose labels are
         // set last so they take precedence over a user value for the same key; keys are sorted
         // for a deterministic `container run` argv.
-        var labels = service.labels ?? [:]
-        labels["com.docker.compose.project"] = projectName
-        labels["com.docker.compose.service"] = serviceName
-        for key in labels.keys.sorted() {
-            let value = resolveVariable(labels[key] ?? "", with: environmentVariables)
-            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(value)"])
-        }
+        runCommandArgs.append(contentsOf: Self.labelRunArgs(
+            for: service,
+            serviceName: serviceName,
+            projectName: projectName,
+            environment: environmentVariables
+        ))
 
         // REMOVED: Restart policy is not supported by `container run`
         // if let restart = service.restart {
@@ -1344,7 +1377,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
         // Determine image tag for built image
         let imageToRun = service.image
-            .map { resolveVariable($0, with: environmentVariables) }
+            .map { Self.resolvedImageReference($0, environment: environmentVariables) }
             ?? "\(serviceName):latest"
         let imageList = try await ClientImage.list()
         if !rebuild, imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageToRun }) {

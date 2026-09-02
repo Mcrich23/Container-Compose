@@ -44,12 +44,77 @@ struct NetworkNameInterpolationTests {
         """)
         let image = try #require(svc.image)
 
-        let overridden = resolveVariable(image, with: ["CC_TEST_IMAGE_TAG": "2026-06-01"])
-        #expect(overridden == "docker.io/lldap/lldap:2026-06-01")
+        #expect(
+            ComposeUp.resolvedImageReference(image, environment: ["CC_TEST_IMAGE_TAG": "2026-06-01"])
+                == "docker.io/lldap/lldap:2026-06-01"
+        )
 
-        let defaulted = resolveVariable(image, with: [:])
+        let defaulted = ComposeUp.resolvedImageReference(image, environment: [:])
         #expect(defaulted == "docker.io/lldap/lldap:2026-05-26-alpine")
         #expect(defaulted.contains("${") == false)
+    }
+
+    @Test("label values are interpolated")
+    func labelsInterpolate() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: """
+        image: alpine
+        labels:
+          traefik.http.routers.app.rule: Host(`${CC_TEST_APP_HOST:-app.local}`)
+        """)
+        let args = ComposeUp.labelRunArgs(
+            for: svc,
+            serviceName: "web",
+            projectName: "proj",
+            environment: ["CC_TEST_APP_HOST": "app.example.com"]
+        )
+        // labelRunArgs returns a flat argv: ["--label", "key=value", ...]
+        #expect(args.contains("traefik.http.routers.app.rule=Host(`app.example.com`)"))
+        #expect(args.contains { $0.contains("${") } == false)
+    }
+
+    @Test("the compose project and service labels are always emitted")
+    func composeLabelsAlwaysPresent() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: "image: alpine")
+        let args = ComposeUp.labelRunArgs(
+            for: svc,
+            serviceName: "web",
+            projectName: "proj",
+            environment: [:]
+        )
+        #expect(args.contains("com.docker.compose.project=proj"))
+        #expect(args.contains("com.docker.compose.service=web"))
+    }
+
+    @Test("the compose labels win over a user label of the same key")
+    func composeLabelsTakePrecedence() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: """
+        image: alpine
+        labels:
+          com.docker.compose.project: user-supplied
+        """)
+        let args = ComposeUp.labelRunArgs(
+            for: svc,
+            serviceName: "web",
+            projectName: "proj",
+            environment: [:]
+        )
+        #expect(args.contains("com.docker.compose.project=proj"))
+        #expect(args.contains("com.docker.compose.project=user-supplied") == false)
+    }
+
+    @Test("label argv is sorted, so the command line is deterministic")
+    func labelArgvIsSorted() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: """
+        image: alpine
+        labels:
+          zzz: last
+          aaa: first
+        """)
+        let args = ComposeUp.labelRunArgs(
+            for: svc, serviceName: "web", projectName: "proj", environment: [:]
+        )
+        let keys = stride(from: 1, to: args.count, by: 2).map { args[$0].split(separator: "=")[0] }
+        #expect(keys == keys.sorted())
     }
 
     @Test("the process environment wins over the supplied map, as Compose specifies")
@@ -61,20 +126,6 @@ struct NetworkNameInterpolationTests {
         #expect(resolved == fromProcess)
         #expect(resolved != "ignored-by-design")
     }
-
-    @Test("label values are interpolated")
-    func labelsInterpolate() throws {
-        let svc = try YAMLDecoder().decode(Service.self, from: """
-        image: alpine
-        labels:
-          traefik.http.routers.app.rule: Host(`${CC_TEST_APP_HOST:-app.local}`)
-        """)
-        let raw = try #require(svc.labels?["traefik.http.routers.app.rule"])
-        #expect(resolveVariable(raw, with: ["CC_TEST_APP_HOST": "app.example.com"])
-            == "Host(`app.example.com`)")
-        #expect(resolveVariable(raw, with: [:]) == "Host(`app.local`)")
-    }
-
 
     private func network(_ yaml: String) throws -> Network {
         try YAMLDecoder().decode(Network.self, from: yaml)
