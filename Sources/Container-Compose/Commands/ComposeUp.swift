@@ -486,6 +486,22 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return (value, false)
     }
 
+    /// The name a top-level network is actually created under.
+    ///
+    /// Interpolated for the same reason the service-level network reference is:
+    /// a compose file that selects its ingress network per environment writes
+    /// `name: ${INGRESS_NET:-local}`, and passing that through raw makes
+    /// `container network create` reject it with "invalid network name".
+    ///
+    /// Pure so the mapping is testable; `setupNetwork` itself has no test seam.
+    static func resolvedNetworkName(
+        key networkKey: String,
+        config: Network?,
+        environment: [String: String]
+    ) -> String {
+        resolveVariable(config?.name ?? networkKey, with: environment)
+    }
+
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
         guard exitCode == 0 else {
             throw ComposeError.containerRunFailed(serviceName, exitCode)
@@ -749,7 +765,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
-        let actualNetworkName = networkConfig?.name ?? networkName  // Use explicit name or key as name
+        let actualNetworkName = Self.resolvedNetworkName(
+            key: networkName,
+            config: networkConfig,
+            environment: environmentVariables
+        )
 
         if let externalNetwork = networkConfig?.external, externalNetwork.isExternal {
             print("Info: Network '\(networkName)' is declared as external.")
