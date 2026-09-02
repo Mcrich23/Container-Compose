@@ -841,10 +841,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if let buildConfig = service.build {
             imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
         } else if let img = service.image {
-            // Use specified image if no build config
-            // Pull image if necessary
-            try await pullImage(img, platform: service.platform)
-            imageToRun = img
+            // Use specified image if no build config.
+            // Interpolated: pinning an image per environment with
+            // `image: repo/name:${TAG:-1.0}` is the common case, and container
+            // rejects the raw form with "invalid format for image reference".
+            let resolvedImage = resolveVariable(img, with: environmentVariables)
+            try await pullImage(resolvedImage, platform: service.platform)
+            imageToRun = resolvedImage
         } else {
             // Should not happen due to Service init validation, but as a fallback
             throw ComposeError.imageNotFound(serviceName)
@@ -904,7 +907,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         labels["com.docker.compose.project"] = projectName
         labels["com.docker.compose.service"] = serviceName
         for key in labels.keys.sorted() {
-            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(labels[key] ?? "")"])
+            let value = resolveVariable(labels[key] ?? "", with: environmentVariables)
+            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(value)"])
         }
 
         // REMOVED: Restart policy is not supported by `container run`
@@ -1339,7 +1343,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// - Returns: Image Name (`String`)
     private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
         // Determine image tag for built image
-        let imageToRun = service.image ?? "\(serviceName):latest"
+        let imageToRun = service.image
+            .map { resolveVariable($0, with: environmentVariables) }
+            ?? "\(serviceName):latest"
         let imageList = try await ClientImage.list()
         if !rebuild, imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageToRun }) {
             return imageToRun

@@ -1,0 +1,139 @@
+//===----------------------------------------------------------------------===//
+// Copyright © 2025 Morris Richman and the Container-Compose project authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//===----------------------------------------------------------------------===//
+
+import Testing
+import Foundation
+@testable import Yams
+@testable import ContainerComposeCore
+
+@Suite("Compose Value Interpolation")
+struct NetworkNameInterpolationTests {
+
+    /// The fields a compose file is allowed to parameterise are resolved one at a
+    /// time in this project rather than in a single pass after parsing, so each
+    /// new field is a chance to forget. This list is the record of which ones are
+    /// covered; extend it rather than adding a one-off test elsewhere.
+    ///
+    /// Measured against a real 23-service compose file: `image` appeared with a
+    /// variable in 19 services and `labels` in 2, and both reached `container`
+    /// verbatim before this was fixed ("invalid format for image reference").
+    /// Variable names here are deliberately implausible. `resolveVariable` gives
+    /// the process environment precedence over the map it is handed, which is the
+    /// Compose rule (a shell value beats a .env value) - so a test that picks a
+    /// name a developer might really export becomes environment-dependent and
+    /// fails only on some machines. This bit the author: an earlier draft used
+    /// LLDAP_VERSION, which was already exported, and the override case failed
+    /// while the identical network-name test passed.
+    @Test("image references are interpolated")
+    func imageInterpolates() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: """
+        image: docker.io/lldap/lldap:${CC_TEST_IMAGE_TAG:-2026-05-26-alpine}
+        """)
+        let image = try #require(svc.image)
+
+        let overridden = resolveVariable(image, with: ["CC_TEST_IMAGE_TAG": "2026-06-01"])
+        #expect(overridden == "docker.io/lldap/lldap:2026-06-01")
+
+        let defaulted = resolveVariable(image, with: [:])
+        #expect(defaulted == "docker.io/lldap/lldap:2026-05-26-alpine")
+        #expect(defaulted.contains("${") == false)
+    }
+
+    @Test("the process environment wins over the supplied map, as Compose specifies")
+    func processEnvironmentTakesPrecedence() throws {
+        // PATH is always set and never something a compose file would name, so it
+        // pins the precedence rule without depending on the developer's shell.
+        let fromProcess = ProcessInfo.processInfo.environment["PATH"]
+        let resolved = resolveVariable("${PATH}", with: ["PATH": "ignored-by-design"])
+        #expect(resolved == fromProcess)
+        #expect(resolved != "ignored-by-design")
+    }
+
+    @Test("label values are interpolated")
+    func labelsInterpolate() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: """
+        image: alpine
+        labels:
+          traefik.http.routers.app.rule: Host(`${CC_TEST_APP_HOST:-app.local}`)
+        """)
+        let raw = try #require(svc.labels?["traefik.http.routers.app.rule"])
+        #expect(resolveVariable(raw, with: ["CC_TEST_APP_HOST": "app.example.com"])
+            == "Host(`app.example.com`)")
+        #expect(resolveVariable(raw, with: [:]) == "Host(`app.local`)")
+    }
+
+
+    private func network(_ yaml: String) throws -> Network {
+        try YAMLDecoder().decode(Network.self, from: yaml)
+    }
+
+    @Test("an explicit name is interpolated")
+    func explicitNameInterpolates() throws {
+        let net = try network("name: ${CC_TEST_INGRESS_NET}")
+        let resolved = ComposeUp.resolvedNetworkName(
+            key: "reverse-proxy",
+            config: net,
+            environment: ["CC_TEST_INGRESS_NET": "prod-ingress"]
+        )
+        #expect(resolved == "prod-ingress")
+    }
+
+    @Test("a default value is used when the variable is unset")
+    func defaultValueIsHonoured() throws {
+        let net = try network("name: ${CC_TEST_INGRESS_NET:-local-ingress}")
+        let resolved = ComposeUp.resolvedNetworkName(
+            key: "reverse-proxy",
+            config: net,
+            environment: [:]
+        )
+        #expect(resolved == "local-ingress")
+    }
+
+    @Test("the environment wins over the default")
+    func environmentBeatsDefault() throws {
+        let net = try network("name: ${CC_TEST_INGRESS_NET:-local-ingress}")
+        let resolved = ComposeUp.resolvedNetworkName(
+            key: "reverse-proxy",
+            config: net,
+            environment: ["CC_TEST_INGRESS_NET": "dev-cluster-ingress"]
+        )
+        #expect(resolved == "dev-cluster-ingress")
+    }
+
+    @Test("without an explicit name the key is used, and is itself interpolated")
+    func keyFallbackAlsoInterpolates() throws {
+        #expect(
+            ComposeUp.resolvedNetworkName(key: "dcf-db", config: nil, environment: [:])
+                == "dcf-db"
+        )
+        #expect(
+            ComposeUp.resolvedNetworkName(
+                key: "${CC_TEST_NET_PREFIX}-db",
+                config: nil,
+                environment: ["CC_TEST_NET_PREFIX": "dcf"]
+            ) == "dcf-db"
+        )
+    }
+
+    @Test("a plain name is passed through unchanged")
+    func plainNameUnchanged() throws {
+        let net = try network("name: dcf-vpc")
+        #expect(
+            ComposeUp.resolvedNetworkName(key: "vpc", config: net, environment: ["X": "y"])
+                == "dcf-vpc"
+        )
+    }
+}
