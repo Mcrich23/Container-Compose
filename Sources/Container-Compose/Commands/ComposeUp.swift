@@ -478,6 +478,22 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// anything smaller with a confusing daemon error. Clamp sub-minimum values up
     /// to 200 MiB so common Docker values like `mem_limit: 128m` keep working.
     /// Returns the value to pass to `--memory` and whether it was raised.
+    /// The CPU count the image builder is given for a service.
+    ///
+    /// Separate from `clampCPULimit` because it also carries the default for a
+    /// service that declares no limit at all.
+    ///
+    /// Not `Int64(limit) ?? 2`: Int64 cannot parse "0.5", so that form silently
+    /// handed a service asking for half a CPU the fallback of two - four times
+    /// its request, with nothing printed. The run path rejected the same input
+    /// loudly, which is the only reason it was noticed.
+    ///
+    /// Pure so the mapping is testable; buildService has no seam.
+    static func builderCPUCount(for service: Service) -> Int64 {
+        guard let declared = service.deploy?.resources?.limits?.cpus else { return 2 }
+        return Int64(clampCPULimit(declared).value) ?? 2
+    }
+
     /// `container run --cpus` takes a whole number, while Compose allows a
     /// fraction. Any mapping is lossy, so this rounds up to the smallest
     /// expressible limit rather than down: 0.5 would otherwise become 0, which
@@ -1429,9 +1445,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         commands.append(contentsOf: ["--tag", imageToRun])
         
         // Add CPU & Memory
-        // Not `Int64(...) ?? 2`: that silently turns a fractional request such as
-        // "0.5" into 2, quadrupling it, because Int64 cannot parse it.
-        let cpuCount = Int64(Self.clampCPULimit(service.deploy?.resources?.limits?.cpus ?? "2").value) ?? 2
+        let cpuCount = Self.builderCPUCount(for: service)
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
         commands.append(contentsOf: ["--cpus", "\(cpuCount)"])
         commands.append(contentsOf: ["--memory", memoryLimit])

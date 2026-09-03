@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+@testable import Yams
 @testable import ContainerComposeCore
 
 /// Companion to the memory floor in `clampMemoryLimit`: `container run --cpus`
@@ -61,10 +62,39 @@ struct CPULimitClampTests {
     /// fractional request could not be parsed and silently became 2 - four times
     /// what a service asking for 0.5 wanted, with no message. The run path failed
     /// loudly instead, which is how this was noticed at all.
+    /// An earlier version of this test called clampCPULimit and asserted on its
+    /// result, which passes whether or not the build path uses it - confirmed by
+    /// mutation: reverting that line to `Int64(...) ?? 2` left the test green.
+    /// It now goes through the build path's own function.
     @Test("a fractional limit does not become the fallback on the build path")
-    func fractionalDoesNotBecomeFallback() {
-        let clamped = ComposeUp.clampCPULimit("0.5").value
-        #expect(Int64(clamped) == 1)
-        #expect(Int64(clamped) != 2)
+    func fractionalDoesNotBecomeFallback() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: """
+        image: alpine
+        deploy:
+          resources:
+            limits:
+              cpus: "0.5"
+        """)
+        let count = ComposeUp.builderCPUCount(for: svc)
+        #expect(count == 1)
+        #expect(count != 2, "0.5 must not silently become the fallback of 2")
+    }
+
+    @Test("a service with no cpu limit gets the builder default")
+    func noLimitUsesDefault() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: "image: alpine")
+        #expect(ComposeUp.builderCPUCount(for: svc) == 2)
+    }
+
+    @Test("a whole cpu limit reaches the builder unchanged")
+    func wholeLimitReachesBuilder() throws {
+        let svc = try YAMLDecoder().decode(Service.self, from: """
+        image: alpine
+        deploy:
+          resources:
+            limits:
+              cpus: "4"
+        """)
+        #expect(ComposeUp.builderCPUCount(for: svc) == 4)
     }
 }
