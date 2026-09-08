@@ -1042,9 +1042,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Connect to specified networks
         if let serviceNetworks = service.networks {
             for network in serviceNetworks {
-                let resolvedNetwork = resolveVariable(network, with: environmentVariables)
-                // Use the explicit network name from top-level definition if available, otherwise resolved name
-                let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
+                // Same mapping `setupNetwork` uses to create the network. Taking
+                // `.name` raw here connected to the literal `${VAR:-default}` while
+                // the network had been created under the interpolated name, so
+                // `container run` failed with "network ... not found".
+                let networkToConnect = Self.resolvedNetworkName(
+                    key: network,
+                    config: dockerCompose.networks?[network] ?? nil,
+                    environment: environmentVariables)
                 runCommandArgs.append("--network")
                 let networkTranslation = Self.networkRunArg(
                     network: networkToConnect,
@@ -1105,7 +1110,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // empty, silently producing "--add-host foo:" (now "foo:" in /etc/hosts).
             let resolvedEntries = extraHosts.map { resolveVariable($0, with: environmentVariables) }
             let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
-            let resolvedNetworkName = service.networks?.first.map { resolveVariable($0, with: environmentVariables) } ?? "default"
+            // Must be the name the network was actually created under: this feeds
+            // `container network inspect`, and a miss there falls back to the host's
+            // LAN gateway silently rather than failing.
+            let resolvedNetworkName = service.networks?.first.map {
+                Self.resolvedNetworkName(
+                    key: $0, config: dockerCompose.networks?[$0] ?? nil, environment: environmentVariables)
+            } ?? "default"
             let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
 
             var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
