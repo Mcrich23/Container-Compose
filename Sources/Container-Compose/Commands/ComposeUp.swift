@@ -291,13 +291,20 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // command config into a `let` the concurrent tasks can share.
         let launcher = self
 
+        // Which services a dependent waits out rather than merely starts. Needed
+        // by both paths: the sequential one has the same one-shot race, it just
+        // loses it far less often.
+        let mustComplete = Service.servicesRequiredToComplete(
+            project.services.map { ($0.serviceName, $0.service) })
+
         if sequential {
             // Explicit opt-out (`--sequential`): the original one-at-a-time
             // behavior, in topological order.
             for target in project.services {
                 try await configService(
                     target.service, serviceName: target.serviceName,
-                    from: dockerCompose, launchState: launchState)
+                    from: dockerCompose, launchState: launchState,
+                    awaitCompletion: mustComplete.contains(target.serviceName))
             }
         } else {
             // Launch each dependency WAVE concurrently. `dependencyLevels` groups
@@ -315,10 +322,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     for serviceName in wave {
                         guard let service = servicesByName[serviceName] else { continue }
                         let inputs = UncheckedSendable((service: service, name: serviceName))
+                        let awaitCompletion = mustComplete.contains(serviceName)
                         group.addTask {
                             try await launcher.configService(
                                 inputs.value.service, serviceName: inputs.value.name,
-                                from: composeBox.value, launchState: launchState)
+                                from: composeBox.value, launchState: launchState,
+                                awaitCompletion: awaitCompletion)
                         }
                     }
                     try await group.waitForAll()
@@ -675,6 +684,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         containerName: String,
         activity: ActivityClock,
         foregroundRun: ForegroundRunHandle? = nil,
+        awaitCompletion: Bool = false,
         idleTimeout: TimeInterval = 30,
         maxWait: TimeInterval = 300,
         interval: TimeInterval = 0.5
@@ -685,7 +695,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         while true {
             try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             let container = try? await client.get(id: containerName)
-            if container?.status == .running {
+            // A one-shot passes through `.running`; returning here would record
+            // that as its terminal state and refuse every dependent waiting for
+            // `service_completed_successfully`. Keep polling for `.stopped`
+            // instead. Launching a whole wave concurrently made this near
+            // certain — with six VMs booting at once a `chown -R` init is still
+            // running at the first 0.5s poll, where launched one at a time it
+            // had almost always already exited.
+            if container?.status == .running, !awaitCompletion {
                 return .running
             }
             if container?.status == .stopped {
@@ -914,7 +931,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     // MARK: Compose Service Level Functions
-    private func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose, launchState: LaunchState) async throws {
+    private func configService(
+        _ service: Service, serviceName: String, from dockerCompose: DockerCompose,
+        launchState: LaunchState, awaitCompletion: Bool = false
+    ) async throws {
         try await waitForDependencyConditions(serviceName: serviceName, service: service, launchState: launchState)
 
         var imageToRun: String
@@ -1304,7 +1324,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        let startState = try await waitUntilServiceStarted(serviceName, containerName: containerName, activity: activity, foregroundRun: foregroundRunHandle)
+        let startState = try await waitUntilServiceStarted(
+            serviceName, containerName: containerName, activity: activity,
+            foregroundRun: foregroundRunHandle, awaitCompletion: awaitCompletion)
         await launchState.recordStartState(startState, for: serviceName)
 
         switch startState {

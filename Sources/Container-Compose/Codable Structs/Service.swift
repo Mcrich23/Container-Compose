@@ -472,6 +472,29 @@ public struct Service: Codable, Hashable {
         return waves
     }
 
+    /// Names of services that some other service declares
+    /// `condition: service_completed_successfully` on.
+    ///
+    /// A one-shot only passes *through* `.running` on its way to `.stopped`, so
+    /// a readiness wait that returns on the first `.running` it observes records
+    /// the wrong terminal state and the dependent is refused. Which services must
+    /// be waited out is not visible on the service itself — it lives on whoever
+    /// depends on it, which is what this collects.
+    static func servicesRequiredToComplete(
+        _ services: [(serviceName: String, service: Service)]
+    ) -> Set<String> {
+        var required: Set<String> = []
+        for (_, service) in services {
+            for dependencyName in service.depends_on ?? [] {
+                let condition = service.dependencyConditions?[dependencyName] ?? ServiceDependency()
+                if condition.effectiveCondition == ServiceDependency.serviceCompletedSuccessfully {
+                    required.insert(dependencyName)
+                }
+            }
+        }
+        return required
+    }
+
     /// Validates that every explicitly requested service name exists among the
     /// services defined in the compose file. Mirrors `docker compose up <svc>`,
     /// which fails with "no such service: <svc>" rather than silently selecting
