@@ -599,6 +599,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return (args, warnings)
     }
 
+    /// Every environment value with its Compose variable references resolved.
+    ///
+    /// Pure so the call site is covered: the parser this replaced lived inline
+    /// in `configService`, where nothing could reach it.
+    static func interpolatedEnvironment(_ environment: [String: String]) -> [String: String] {
+        environment.mapValues { resolveVariable($0, with: environment) }
+    }
+
     /// The network whose gateway `host-gateway` resolves to: a service's first
     /// network, under the name it was actually created with.
     ///
@@ -1063,12 +1071,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Fill in variables
-        combinedEnv = combinedEnv.mapValues({ value in
-            guard value.contains("${") else { return value }
-
-            let variableName = String(value.replacingOccurrences(of: "${", with: "").dropLast())
-            return combinedEnv[variableName] ?? value
-        })
+        // `resolveVariable`, not a second hand-rolled parser: the previous one
+        // stripped a leading `${` and dropped the last character, so it only ever
+        // matched a value that was exactly `${NAME}`. `${NAME:-default}` and
+        // `${NAME:?message}` produced a "variable name" containing the whole
+        // modifier, missed the lookup, and were passed through to the container
+        // verbatim — lldap received the literal
+        // `${LLDAP_BASE_DN:?LLDAP_BASE_DN is required}` as its base DN.
+        // A value with surrounding text or two references was equally broken.
+        combinedEnv = Self.interpolatedEnvironment(combinedEnv)
 
         // Fill in IPs
         combinedEnv = combinedEnv.mapValues({ value in

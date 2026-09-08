@@ -278,3 +278,61 @@ struct NetworkRunArgsTests {
                 == "default")
     }
 }
+
+/// `configService` used to interpolate service environment values with its own
+/// parser: strip a leading `${`, drop the last character, look the remainder up.
+/// That only ever matched a value which was exactly `${NAME}` — every other
+/// Compose form reached the container verbatim.
+@Suite("Service Environment Interpolation")
+struct EnvironmentInterpolationTests {
+
+    @Test("a bare reference resolves")
+    func bareReference() {
+        #expect(
+            ComposeUp.interpolatedEnvironment(["CC_TEST_BASE": "dc=example", "DN": "${CC_TEST_BASE}"])["DN"]
+                == "dc=example")
+    }
+
+    @Test("a default is applied when the variable is unset")
+    func defaultApplied() {
+        #expect(ComposeUp.interpolatedEnvironment(["TZ": "${CC_TEST_TZ:-UTC}"])["TZ"] == "UTC")
+    }
+
+    @Test("a set variable beats its default")
+    func valueBeatsDefault() {
+        #expect(
+            ComposeUp.interpolatedEnvironment(["CC_TEST_TZ": "Asia/Taipei", "TZ": "${CC_TEST_TZ:-UTC}"])["TZ"]
+                == "Asia/Taipei")
+    }
+
+    /// The lldap failure: `${NAME:?message}` was passed through as its own value,
+    /// so the LDAP server started with a literal placeholder for its base DN.
+    @Test("the required-variable form resolves when the variable is set")
+    func requiredFormResolves() {
+        let out = ComposeUp.interpolatedEnvironment([
+            "CC_TEST_DN": "dc=local,dc=example",
+            "LLDAP_LDAP_BASE_DN": "${CC_TEST_DN:?CC_TEST_DN is required}",
+        ])
+        #expect(out["LLDAP_LDAP_BASE_DN"] == "dc=local,dc=example")
+    }
+
+    @Test("a reference embedded in surrounding text resolves")
+    func embeddedReference() {
+        #expect(
+            ComposeUp.interpolatedEnvironment(["CC_TEST_HOST": "db", "URL": "http://${CC_TEST_HOST}:5432/x"])["URL"]
+                == "http://db:5432/x")
+    }
+
+    @Test("two references in one value both resolve")
+    func twoReferences() {
+        #expect(
+            ComposeUp.interpolatedEnvironment([
+                "CC_TEST_H": "db", "CC_TEST_P": "5432", "URL": "${CC_TEST_H}:${CC_TEST_P}",
+            ])["URL"] == "db:5432")
+    }
+
+    @Test("a value with no reference is untouched")
+    func plainValueUnchanged() {
+        #expect(ComposeUp.interpolatedEnvironment(["A": "plain"])["A"] == "plain")
+    }
+}
