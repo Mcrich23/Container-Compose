@@ -188,3 +188,93 @@ struct NetworkNameInterpolationTests {
         )
     }
 }
+
+/// The suite above pins `resolvedNetworkName` itself. These pin its *consumers*.
+///
+/// Both consumers used to read the declared `name:` raw, so a compose file
+/// saying `name: ${VAR:-default}` had its network created under the resolved
+/// name and then asked `container run` to join the literal — and the
+/// host-gateway lookup to inspect it. Every test above stayed green throughout,
+/// because none of them went through the code `configService` actually calls.
+@Suite("Network Args Through A Compose Document")
+struct NetworkRunArgsTests {
+
+    private static let yaml = """
+    services:
+      web:
+        image: nginx
+        networks:
+          - ingress
+          - plain
+      loner:
+        image: nginx
+    networks:
+      ingress:
+        name: ${CC_TEST_INGRESS:-fallback-ingress}
+      plain: {}
+    """
+
+    private func compose() throws -> DockerCompose {
+        try YAMLDecoder().decode(DockerCompose.self, from: Self.yaml)
+    }
+
+    private func service(_ name: String) throws -> Service {
+        try #require(try compose().services[name] ?? nil)
+    }
+
+    /// `supportsAliases` is passed explicitly everywhere here: its default is
+    /// probed from the installed `container` CLI, which would make these depend
+    /// on the host.
+    @Test("the --network arg carries the created name, not the declared literal")
+    func connectsUnderCreatedName() throws {
+        let args = ComposeUp.networkRunArgs(
+            for: try service("web"), dockerCompose: try compose(),
+            serviceName: "web", environment: [:], supportsAliases: false
+        ).args
+        #expect(args == ["--network", "fallback-ingress", "--network", "plain"])
+    }
+
+    @Test("the environment wins over the declared default")
+    func environmentBeatsDefault() throws {
+        let args = ComposeUp.networkRunArgs(
+            for: try service("web"), dockerCompose: try compose(),
+            serviceName: "web", environment: ["CC_TEST_INGRESS": "prod-ingress"],
+            supportsAliases: false
+        ).args
+        #expect(args == ["--network", "prod-ingress", "--network", "plain"])
+    }
+
+    @Test("no placeholder ever reaches the command line")
+    func noPlaceholderSurvives() throws {
+        let args = ComposeUp.networkRunArgs(
+            for: try service("web"), dockerCompose: try compose(),
+            serviceName: "web", environment: [:], supportsAliases: false
+        ).args
+        #expect(!args.contains { $0.contains("${") })
+    }
+
+    @Test("a service with no networks contributes no args")
+    func noNetworksNoArgs() throws {
+        let result = ComposeUp.networkRunArgs(
+            for: try service("loner"), dockerCompose: try compose(),
+            serviceName: "loner", environment: [:], supportsAliases: false)
+        #expect(result.args.isEmpty)
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test("the host-gateway lookup uses the created name of the first network")
+    func gatewayUsesCreatedName() throws {
+        #expect(
+            ComposeUp.gatewayNetworkName(
+                for: try service("web"), dockerCompose: try compose(),
+                environment: ["CC_TEST_INGRESS": "prod-ingress"]) == "prod-ingress")
+    }
+
+    @Test("a service with no networks falls back to the default network")
+    func gatewayFallsBackToDefault() throws {
+        #expect(
+            ComposeUp.gatewayNetworkName(
+                for: try service("loner"), dockerCompose: try compose(), environment: [:])
+                == "default")
+    }
+}

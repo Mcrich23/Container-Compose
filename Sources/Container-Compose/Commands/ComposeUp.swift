@@ -564,6 +564,57 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         resolveVariable(config?.name ?? networkKey, with: environment)
     }
 
+    /// Every `--network` argument a service contributes, plus the warnings the
+    /// caller should print.
+    ///
+    /// Pure so the *call site* is covered: a test that calls
+    /// `resolvedNetworkName` directly passes whether or not `configService`
+    /// routes through it, which is exactly how the raw-`.name` connect bug
+    /// survived. Reverting this body to `networks?[key]??.name` turns the
+    /// document-level test red.
+    static func networkRunArgs(
+        for service: Service,
+        dockerCompose: DockerCompose,
+        serviceName: String,
+        environment: [String: String],
+        supportsAliases: Bool = networkAliasesSupported
+    ) -> (args: [String], warnings: [String]) {
+        var args: [String] = []
+        var warnings: [String] = []
+        for network in service.networks ?? [] {
+            let networkToConnect = resolvedNetworkName(
+                key: network,
+                config: dockerCompose.networks?[network] ?? nil,
+                environment: environment)
+            let translation = networkRunArg(
+                network: networkToConnect,
+                aliases: service.networkConfigurations?[network]?.aliases ?? [],
+                serviceName: serviceName,
+                environmentVariables: environment,
+                supportsAliases: supportsAliases)
+            args.append("--network")
+            args.append(translation.arg)
+            if let warning = translation.warning { warnings.append(warning) }
+        }
+        return (args, warnings)
+    }
+
+    /// The network whose gateway `host-gateway` resolves to: a service's first
+    /// network, under the name it was actually created with.
+    ///
+    /// Pure for the same reason as `networkRunArgs`: this feeds
+    /// `container network inspect`, and a miss there only warns before falling
+    /// back to the host's LAN default route, so getting it wrong is silent.
+    static func gatewayNetworkName(
+        for service: Service,
+        dockerCompose: DockerCompose,
+        environment: [String: String]
+    ) -> String {
+        guard let key = service.networks?.first else { return "default" }
+        return resolvedNetworkName(
+            key: key, config: dockerCompose.networks?[key] ?? nil, environment: environment)
+    }
+
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
         guard exitCode == 0 else {
             throw ComposeError.containerRunFailed(serviceName, exitCode)
@@ -1041,27 +1092,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Connect to specified networks
         if let serviceNetworks = service.networks {
-            for network in serviceNetworks {
-                // Same mapping `setupNetwork` uses to create the network. Taking
-                // `.name` raw here connected to the literal `${VAR:-default}` while
-                // the network had been created under the interpolated name, so
-                // `container run` failed with "network ... not found".
-                let networkToConnect = Self.resolvedNetworkName(
-                    key: network,
-                    config: dockerCompose.networks?[network] ?? nil,
-                    environment: environmentVariables)
-                runCommandArgs.append("--network")
-                let networkTranslation = Self.networkRunArg(
-                    network: networkToConnect,
-                    aliases: service.networkConfigurations?[network]?.aliases ?? [],
-                    serviceName: serviceName,
-                    environmentVariables: environmentVariables
-                )
-                runCommandArgs.append(networkTranslation.arg)
-                if let warning = networkTranslation.warning {
-                    print(warning)
-                }
-            }
+            let networkArgs = Self.networkRunArgs(
+                for: service, dockerCompose: dockerCompose,
+                serviceName: serviceName, environment: environmentVariables)
+            runCommandArgs.append(contentsOf: networkArgs.args)
+            for warning in networkArgs.warnings { print(warning) }
             print(
                 "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composePath)."
             )
@@ -1110,13 +1145,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // empty, silently producing "--add-host foo:" (now "foo:" in /etc/hosts).
             let resolvedEntries = extraHosts.map { resolveVariable($0, with: environmentVariables) }
             let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
-            // Must be the name the network was actually created under: this feeds
-            // `container network inspect`, and a miss there falls back to the host's
-            // LAN gateway silently rather than failing.
-            let resolvedNetworkName = service.networks?.first.map {
-                Self.resolvedNetworkName(
-                    key: $0, config: dockerCompose.networks?[$0] ?? nil, environment: environmentVariables)
-            } ?? "default"
+            let resolvedNetworkName = Self.gatewayNetworkName(
+                for: service, dockerCompose: dockerCompose, environment: environmentVariables)
             let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
 
             var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
