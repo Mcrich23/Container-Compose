@@ -1549,6 +1549,16 @@ extension ComposeUp {
                     DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak process] in
                         guard let process, process.isRunning else { return }
                         process.terminate()
+                        // `container exec` ignores SIGTERM while the process it
+                        // is proxying is stuck — measured: a probe that hangs
+                        // survives `timeout 25` and only dies to SIGKILL (137).
+                        // Without escalating, the termination handler never
+                        // fires, the continuation never resumes, and `up` stalls
+                        // forever instead of recording one failed attempt.
+                        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak process] in
+                            guard let process, process.isRunning else { return }
+                            kill(process.processIdentifier, SIGKILL)
+                        }
                     }
                 }
             } catch {
