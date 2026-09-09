@@ -930,6 +930,46 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
+    /// The name the daemon registers a container under when a DNS domain is
+    /// configured: the container name with the domain appended, unless it
+    /// already carries it (the no-`container_name` path builds a dotted name
+    /// itself). Matches the `hostname` `container inspect` reports.
+    static func dnsRegistrationName(containerName: String, dnsDomain: String) -> String {
+        containerName.hasSuffix(".\(dnsDomain)") ? containerName : "\(containerName).\(dnsDomain)"
+    }
+
+    /// Blocks until the daemon has published a DNS record for `name`, or the
+    /// budget runs out.
+    ///
+    /// A container reaching `.running` does not mean its name resolves yet:
+    /// Apple Container publishes the record a moment afterwards. Docker's
+    /// embedded DNS updates as the container joins the network, so `depends_on`
+    /// there implies resolvability and every compose file relies on it —
+    /// haproxy resolves all of its `server` lines while parsing its config and
+    /// aborts if one fails, which is how a proxy in the next wave died on
+    /// "could not resolve address 'patroni2'" with patroni2 up and healthy.
+    ///
+    /// Only advisory: on timeout it warns and proceeds, because a compose file
+    /// may legitimately name a container the daemon never registers.
+    private func waitUntilNameResolves(
+        _ name: String, timeout: TimeInterval = 20, interval: TimeInterval = 0.25
+    ) async {
+        let start = Date()
+        while Date().timeIntervalSince(start) < timeout {
+            var hints = addrinfo()
+            hints.ai_family = AF_UNSPEC
+            hints.ai_socktype = SOCK_STREAM
+            var result: UnsafeMutablePointer<addrinfo>?
+            let rc = getaddrinfo(name, nil, &hints, &result)
+            if let result { freeaddrinfo(result) }
+            if rc == 0 { return }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        print(
+            "Warning: '\(name)' still does not resolve after \(Int(timeout))s; "
+                + "a service that resolves its peers at startup may fail.")
+    }
+
     // MARK: Compose Service Level Functions
     private func configService(
         _ service: Service, serviceName: String, from dockerCompose: DockerCompose,
@@ -1332,6 +1372,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         switch startState {
         case .running:
             try await updateEnvironmentWithServiceIP(serviceName, containerName: containerName, launchState: launchState)
+            // Make the wave barrier a DNS barrier too: the next wave's services
+            // resolve this one's name while parsing their own config.
+            if dnsAvailable, let dnsDomain {
+                await waitUntilNameResolves(
+                    Self.dnsRegistrationName(containerName: containerName, dnsDomain: dnsDomain))
+            }
             if let healthcheck = service.healthcheck, !healthcheck.isDisabled {
                 try await waitUntilServiceIsHealthy(serviceName: serviceName, containerName: containerName, healthcheck: healthcheck)
                 await launchState.recordHealthy(serviceName)
