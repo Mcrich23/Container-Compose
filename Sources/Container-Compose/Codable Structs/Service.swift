@@ -369,17 +369,7 @@ public struct Service: Codable, Hashable {
     ///                                   the host doesn't define it, falls
     ///                                   back to an empty string)
     static func parseEnvironmentList(_ entries: [String]) -> [String: String] {
-        var dict: [String: String] = [:]
-        for entry in entries {
-            if let eqIdx = entry.firstIndex(of: "=") {
-                let key = String(entry[..<eqIdx])
-                let value = String(entry[entry.index(after: eqIdx)...])
-                dict[key] = value
-            } else {
-                dict[entry] = ProcessInfo.processInfo.environment[entry] ?? ""
-            }
-        }
-        return dict
+        parseComposeKeyValueList(entries)
     }
 
     /// Returns the services in topological order based on `depends_on` relationships.

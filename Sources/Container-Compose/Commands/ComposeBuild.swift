@@ -45,6 +45,12 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
     @Flag(name: .long, help: "Do not use cache when building")
     var noCache: Bool = false
 
+    @Option(
+        name: .customLong("build-arg"),
+        help: "Set a build-time variable (KEY=VALUE), repeatable. Overrides a matching arg from the compose file. A bare KEY takes its value from the environment."
+    )
+    var buildArgs: [String] = []
+
     @OptionGroup
     var logging: Flags.Logging
 
@@ -91,8 +97,12 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         let contextURL = URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory))
         var commands = [contextURL.path]
 
-        for (key, value) in buildConfig.args ?? [:] {
-            commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
+        // Compose-file args are interpolated against the env; CLI `--build-arg`
+        // values are passed through as-is (the shell already expanded them) and
+        // win on key conflicts.
+        let fileArgs = (buildConfig.args ?? [:]).mapValues { resolveVariable($0, with: environmentVariables) }
+        for (key, value) in mergedBuildArgs(fileArgs: fileArgs, cliArgs: buildArgs) {
+            commands.append(contentsOf: ["--build-arg", "\(key)=\(value)"])
         }
 
         commands.append(contentsOf: [
