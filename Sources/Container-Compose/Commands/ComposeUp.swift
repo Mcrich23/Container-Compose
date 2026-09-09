@@ -478,12 +478,149 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// anything smaller with a confusing daemon error. Clamp sub-minimum values up
     /// to 200 MiB so common Docker values like `mem_limit: 128m` keep working.
     /// Returns the value to pass to `--memory` and whether it was raised.
+    /// The CPU count the image builder is given for a service.
+    ///
+    /// Separate from `clampCPULimit` because it also carries the default for a
+    /// service that declares no limit at all.
+    ///
+    /// Not `Int64(limit) ?? 2`: Int64 cannot parse "0.5", so that form silently
+    /// handed a service asking for half a CPU the fallback of two - four times
+    /// its request, with nothing printed. The run path rejected the same input
+    /// loudly, which is the only reason it was noticed.
+    ///
+    /// Pure so the mapping is testable; buildService has no seam.
+    static func builderCPUCount(for service: Service) -> Int64 {
+        guard let declared = service.deploy?.resources?.limits?.cpus else { return 2 }
+        return Int64(clampCPULimit(declared).value) ?? 2
+    }
+
+    /// `container run --cpus` takes a whole number, while Compose allows a
+    /// fraction. Any mapping is lossy, so this rounds up to the smallest
+    /// expressible limit rather than down: 0.5 would otherwise become 0, which
+    /// container rejects, and a slightly loose cap fails less destructively than
+    /// none at all. Callers report the change, as with the memory floor.
+    static func clampCPULimit(_ value: String) -> (value: String, clamped: Bool) {
+        guard let cpus = Double(value) else { return (value, false) }
+        let whole = max(1, Int(cpus.rounded(.up)))
+        guard Double(whole) != cpus else { return (value, false) }
+        return (String(whole), true)
+    }
+
     static func clampMemoryLimit(_ value: String) -> (value: String, clamped: Bool) {
         let minimumBytes: Int64 = 200 * 1_024 * 1_024
         if let bytes = parseMemoryToBytes(value), bytes < minimumBytes {
             return ("200m", true)
         }
         return (value, false)
+    }
+
+    /// The image reference a service is actually pulled and run from.
+    ///
+    /// Interpolated: pinning an image per environment with
+    /// `image: repo/name:${TAG:-1.0}` is the common case, and container rejects
+    /// the raw form with "invalid format for image reference".
+    ///
+    /// Pure so the mapping is testable; the surrounding assembly has no seam.
+    static func resolvedImageReference(_ image: String, environment: [String: String]) -> String {
+        resolveVariable(image, with: environment)
+    }
+
+    /// The `--label` arguments for a service, including the two Compose adds.
+    ///
+    /// The compose labels are set first so the project/service labels take
+    /// precedence over a user value for the same key; keys are sorted for a
+    /// deterministic argv.
+    static func labelRunArgs(
+        for service: Service,
+        serviceName: String,
+        projectName: String,
+        environment: [String: String]
+    ) -> [String] {
+        var labels = service.labels ?? [:]
+        labels["com.docker.compose.project"] = projectName
+        labels["com.docker.compose.service"] = serviceName
+
+        var args: [String] = []
+        for key in labels.keys.sorted() {
+            let value = resolveVariable(labels[key] ?? "", with: environment)
+            args.append(contentsOf: ["--label", "\(key)=\(value)"])
+        }
+        return args
+    }
+
+    /// The name a top-level network is actually created under.
+    ///
+    /// Interpolated for the same reason the service-level network reference is:
+    /// a compose file that selects its ingress network per environment writes
+    /// `name: ${INGRESS_NET:-local}`, and passing that through raw makes
+    /// `container network create` reject it with "invalid network name".
+    ///
+    /// Pure so the mapping is testable; `setupNetwork` itself has no test seam.
+    static func resolvedNetworkName(
+        key networkKey: String,
+        config: Network?,
+        environment: [String: String]
+    ) -> String {
+        resolveVariable(config?.name ?? networkKey, with: environment)
+    }
+
+    /// Every `--network` argument a service contributes, plus the warnings the
+    /// caller should print.
+    ///
+    /// Pure so the *call site* is covered: a test that calls
+    /// `resolvedNetworkName` directly passes whether or not `configService`
+    /// routes through it, which is exactly how the raw-`.name` connect bug
+    /// survived. Reverting this body to `networks?[key]??.name` turns the
+    /// document-level test red.
+    static func networkRunArgs(
+        for service: Service,
+        dockerCompose: DockerCompose,
+        serviceName: String,
+        environment: [String: String],
+        supportsAliases: Bool = networkAliasesSupported
+    ) -> (args: [String], warnings: [String]) {
+        var args: [String] = []
+        var warnings: [String] = []
+        for network in service.networks ?? [] {
+            let networkToConnect = resolvedNetworkName(
+                key: network,
+                config: dockerCompose.networks?[network] ?? nil,
+                environment: environment)
+            let translation = networkRunArg(
+                network: networkToConnect,
+                aliases: service.networkConfigurations?[network]?.aliases ?? [],
+                serviceName: serviceName,
+                environmentVariables: environment,
+                supportsAliases: supportsAliases)
+            args.append("--network")
+            args.append(translation.arg)
+            if let warning = translation.warning { warnings.append(warning) }
+        }
+        return (args, warnings)
+    }
+
+    /// Every environment value with its Compose variable references resolved.
+    ///
+    /// Pure so the call site is covered: the parser this replaced lived inline
+    /// in `configService`, where nothing could reach it.
+    static func interpolatedEnvironment(_ environment: [String: String]) -> [String: String] {
+        environment.mapValues { resolveVariable($0, with: environment) }
+    }
+
+    /// The network whose gateway `host-gateway` resolves to: a service's first
+    /// network, under the name it was actually created with.
+    ///
+    /// Pure for the same reason as `networkRunArgs`: this feeds
+    /// `container network inspect`, and a miss there only warns before falling
+    /// back to the host's LAN default route, so getting it wrong is silent.
+    static func gatewayNetworkName(
+        for service: Service,
+        dockerCompose: DockerCompose,
+        environment: [String: String]
+    ) -> String {
+        guard let key = service.networks?.first else { return "default" }
+        return resolvedNetworkName(
+            key: key, config: dockerCompose.networks?[key] ?? nil, environment: environment)
     }
 
     static func validateStoppedServiceExitCode(_ exitCode: Int32, serviceName: String) throws {
@@ -749,7 +886,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
-        let actualNetworkName = networkConfig?.name ?? networkName  // Use explicit name or key as name
+        let actualNetworkName = Self.resolvedNetworkName(
+            key: networkName,
+            config: networkConfig,
+            environment: environmentVariables
+        )
 
         if let externalNetwork = networkConfig?.external, externalNetwork.isExternal {
             print("Info: Network '\(networkName)' is declared as external.")
@@ -821,10 +962,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if let buildConfig = service.build {
             imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
         } else if let img = service.image {
-            // Use specified image if no build config
-            // Pull image if necessary
-            try await pullImage(img, platform: service.platform)
-            imageToRun = img
+            // Use specified image if no build config.
+            // Interpolated: pinning an image per environment with
+            // `image: repo/name:${TAG:-1.0}` is the common case, and container
+            // rejects the raw form with "invalid format for image reference".
+            let resolvedImage = Self.resolvedImageReference(img, environment: environmentVariables)
+            try await pullImage(resolvedImage, platform: service.platform)
+            imageToRun = resolvedImage
         } else {
             // Should not happen due to Service init validation, but as a fallback
             throw ComposeError.imageNotFound(serviceName)
@@ -880,12 +1024,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // mis-groups unrelated containers that merely share a prefix). The compose labels are
         // set last so they take precedence over a user value for the same key; keys are sorted
         // for a deterministic `container run` argv.
-        var labels = service.labels ?? [:]
-        labels["com.docker.compose.project"] = projectName
-        labels["com.docker.compose.service"] = serviceName
-        for key in labels.keys.sorted() {
-            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(labels[key] ?? "")"])
-        }
+        runCommandArgs.append(contentsOf: Self.labelRunArgs(
+            for: service,
+            serviceName: serviceName,
+            projectName: projectName,
+            environment: environmentVariables
+        ))
 
         // REMOVED: Restart policy is not supported by `container run`
         // if let restart = service.restart {
@@ -927,12 +1071,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         // Fill in variables
-        combinedEnv = combinedEnv.mapValues({ value in
-            guard value.contains("${") else { return value }
-
-            let variableName = String(value.replacingOccurrences(of: "${", with: "").dropLast())
-            return combinedEnv[variableName] ?? value
-        })
+        // `resolveVariable`, not a second hand-rolled parser: the previous one
+        // stripped a leading `${` and dropped the last character, so it only ever
+        // matched a value that was exactly `${NAME}`. `${NAME:-default}` and
+        // `${NAME:?message}` produced a "variable name" containing the whole
+        // modifier, missed the lookup, and were passed through to the container
+        // verbatim — lldap received the literal
+        // `${LLDAP_BASE_DN:?LLDAP_BASE_DN is required}` as its base DN.
+        // A value with surrounding text or two references was equally broken.
+        combinedEnv = Self.interpolatedEnvironment(combinedEnv)
 
         // Fill in IPs
         combinedEnv = combinedEnv.mapValues({ value in
@@ -956,22 +1103,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Connect to specified networks
         if let serviceNetworks = service.networks {
-            for network in serviceNetworks {
-                let resolvedNetwork = resolveVariable(network, with: environmentVariables)
-                // Use the explicit network name from top-level definition if available, otherwise resolved name
-                let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
-                runCommandArgs.append("--network")
-                let networkTranslation = Self.networkRunArg(
-                    network: networkToConnect,
-                    aliases: service.networkConfigurations?[network]?.aliases ?? [],
-                    serviceName: serviceName,
-                    environmentVariables: environmentVariables
-                )
-                runCommandArgs.append(networkTranslation.arg)
-                if let warning = networkTranslation.warning {
-                    print(warning)
-                }
-            }
+            let networkArgs = Self.networkRunArgs(
+                for: service, dockerCompose: dockerCompose,
+                serviceName: serviceName, environment: environmentVariables)
+            runCommandArgs.append(contentsOf: networkArgs.args)
+            for warning in networkArgs.warnings { print(warning) }
             print(
                 "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composePath)."
             )
@@ -1020,7 +1156,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // empty, silently producing "--add-host foo:" (now "foo:" in /etc/hosts).
             let resolvedEntries = extraHosts.map { resolveVariable($0, with: environmentVariables) }
             let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
-            let resolvedNetworkName = service.networks?.first.map { resolveVariable($0, with: environmentVariables) } ?? "default"
+            let resolvedNetworkName = Self.gatewayNetworkName(
+                for: service, dockerCompose: dockerCompose, environment: environmentVariables)
             let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
 
             var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
@@ -1075,7 +1212,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // the structured form. Both map to `container run --memory`. `mem_limit` takes
         // precedence when both are set, matching Docker Compose CLI behaviour.
         if let cpus = service.deploy?.resources?.limits?.cpus {
-            runCommandArgs.append(contentsOf: ["--cpus", cpus])
+            let (cpuArg, didClamp) = Self.clampCPULimit(cpus)
+            if didClamp {
+                print("Note: Service '\(serviceName)' cpus '\(cpus)' is not a whole number; Apple Container needs one, rounding up to \(cpuArg).")
+            }
+            runCommandArgs.append(contentsOf: ["--cpus", cpuArg])
         }
         let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
         if let memory = effectiveMemoryLimit {
@@ -1319,7 +1460,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// - Returns: Image Name (`String`)
     private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
         // Determine image tag for built image
-        let imageToRun = service.image ?? "\(serviceName):latest"
+        let imageToRun = service.image
+            .map { Self.resolvedImageReference($0, environment: environmentVariables) }
+            ?? "\(serviceName):latest"
         let imageList = try await ClientImage.list()
         if !rebuild, imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageToRun }) {
             return imageToRun
@@ -1354,7 +1497,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         commands.append(contentsOf: ["--tag", imageToRun])
         
         // Add CPU & Memory
-        let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
+        let cpuCount = Self.builderCPUCount(for: service)
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
         commands.append(contentsOf: ["--cpus", "\(cpuCount)"])
         commands.append(contentsOf: ["--memory", memoryLimit])
