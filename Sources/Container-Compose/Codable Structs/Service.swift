@@ -422,6 +422,56 @@ public struct Service: Codable, Hashable {
         return sorted
     }
 
+    /// Groups the selected services into launch WAVES for a parallel `up`. Every
+    /// service in `levels[k]` has all of its in-set `depends_on` dependencies in
+    /// some earlier wave, so every service in one wave can be `container run`
+    /// launched concurrently (issue #128). Level 0 (no in-set dependencies)
+    /// comes first.
+    ///
+    /// - `depends_on` entries naming a service that is not in `services` are
+    ///   ignored — mirroring `topoSortConfiguredServices` and the way
+    ///   profile-excluded dependencies are tolerated.
+    /// - Throws (same `NSError`/"ComposeError" shape as `topoSortConfiguredServices`)
+    ///   on a dependency cycle, including a self-dependency, *before* returning —
+    ///   so a cyclic graph can never deadlock the concurrent launch.
+    /// - Order within a wave follows the caller's service order but is otherwise
+    ///   unspecified (the services in a wave are meant to start concurrently).
+    static func dependencyLevels(
+        _ services: [(serviceName: String, service: Service)]
+    ) throws -> [[String]] {
+        let byName = Dictionary(uniqueKeysWithValues: services.map { ($0.serviceName, $0.service) })
+
+        var level: [String: Int] = [:]
+        var visiting: Set<String> = []
+
+        func computeLevel(_ name: String) throws -> Int {
+            if let cached = level[name] { return cached }
+            guard let service = byName[name] else { return 0 }  // out-of-set dep → already satisfied
+            if visiting.contains(name) {
+                throw NSError(domain: "ComposeError", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Cyclic dependency detected involving '\(name)'"
+                ])
+            }
+            visiting.insert(name)
+            var maxDepLevel = -1
+            for dep in service.depends_on ?? [] where byName[dep] != nil {
+                maxDepLevel = max(maxDepLevel, try computeLevel(dep))
+            }
+            visiting.remove(name)
+            let resolved = maxDepLevel + 1
+            level[name] = resolved
+            return resolved
+        }
+
+        var waves: [[String]] = []
+        for (name, _) in services {
+            let lvl = try computeLevel(name)
+            while waves.count <= lvl { waves.append([]) }
+            waves[lvl].append(name)
+        }
+        return waves
+    }
+
     /// Validates that every explicitly requested service name exists among the
     /// services defined in the compose file. Mirrors `docker compose up <svc>`,
     /// which fails with "no such service: <svc>" rather than silently selecting
