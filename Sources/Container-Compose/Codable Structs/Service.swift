@@ -25,6 +25,41 @@ import Foundation
 
 
 /// Represents a single service definition within the `services` section.
+/// One `ulimits:` entry.
+///
+/// Compose accepts either a single value (`nofile: 65535`) or a soft/hard pair
+/// (`nofile: {soft: 20000, hard: 40000}`). `container run --ulimit` takes
+/// `<type>=<soft>[:<hard>]`, so both forms are normalised to that string here.
+///
+/// Decoding is deliberately throwing: an entry this cannot understand fails the
+/// whole file rather than nilling the map, which would drop the sibling entries
+/// with it and give no sign that anything was lost.
+private struct UlimitValue: Decodable {
+    let flagValue: String
+
+    private enum CodingKeys: String, CodingKey {
+        case soft, hard
+    }
+
+    init(from decoder: any Decoder) throws {
+        if let single = try? decoder.singleValueContainer() {
+            if let intValue = try? single.decode(Int.self) {
+                flagValue = "\(intValue)"
+                return
+            }
+            if let stringValue = try? single.decode(String.self) {
+                flagValue = stringValue
+                return
+            }
+        }
+
+        let keyed = try decoder.container(keyedBy: CodingKeys.self)
+        let soft = try keyed.decode(Int.self, forKey: .soft)
+        let hard = try keyed.decode(Int.self, forKey: .hard)
+        flagValue = "\(soft):\(hard)"
+    }
+}
+
 public struct Service: Codable, Hashable {
     /// Docker image name
     public let image: String?
@@ -92,6 +127,30 @@ public struct Service: Codable, Hashable {
     /// Mount container's root filesystem as read-only
     public let read_only: Bool?
 
+    /// Linux capabilities to add, e.g. `NET_BIND_SERVICE`
+    public let cap_add: [String]?
+
+    /// Linux capabilities to drop, e.g. `ALL`
+    public let cap_drop: [String]?
+
+    /// Size of `/dev/shm`, e.g. `256m`
+    public let shm_size: String?
+
+    /// Compose `init:` — run an init process that reaps zombies.
+    /// Named `runInit` because `init` is a Swift keyword; the wire name is
+    /// restored by the `init` CodingKey below.
+    public let runInit: Bool?
+
+    /// Resource limits, e.g. `["nofile": "65535"]`
+    public let ulimits: [String: String]?
+
+    /// tmpfs mounts, Compose list form: `["/run:noexec,nosuid", "/tmp"]`
+    public let tmpfs: [String]?
+
+    /// Compose `network_mode`. Parsed so it can be reported; `container run`
+    /// has no equivalent, see `ComposeUp.unsupportedOptionWarnings`.
+    public let network_mode: String?
+
     /// Working directory inside the container
     public let working_dir: String?
 
@@ -133,7 +192,8 @@ public struct Service: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
-             mem_limit, extra_hosts, profiles
+             mem_limit, extra_hosts, profiles, cap_add, cap_drop, shm_size, ulimits, tmpfs, network_mode
+        case runInit = "init"
     }
     
     /// Public memberwise initializer for testing
@@ -159,6 +219,13 @@ public struct Service: Codable, Hashable {
         entrypoint: [String]? = nil,
         privileged: Bool? = nil,
         read_only: Bool? = nil,
+        cap_add: [String]? = nil,
+        cap_drop: [String]? = nil,
+        shm_size: String? = nil,
+        runInit: Bool? = nil,
+        ulimits: [String: String]? = nil,
+        tmpfs: [String]? = nil,
+        network_mode: String? = nil,
         working_dir: String? = nil,
         platform: String? = nil,
         configs: [ServiceConfig]? = nil,
@@ -191,6 +258,13 @@ public struct Service: Codable, Hashable {
         self.entrypoint = entrypoint
         self.privileged = privileged
         self.read_only = read_only
+        self.cap_add = cap_add
+        self.cap_drop = cap_drop
+        self.shm_size = shm_size
+        self.runInit = runInit
+        self.ulimits = ulimits
+        self.tmpfs = tmpfs
+        self.network_mode = network_mode
         self.working_dir = working_dir
         self.platform = platform
         self.configs = configs
@@ -315,6 +389,24 @@ public struct Service: Codable, Hashable {
 
         privileged = try container.decodeIfPresent(Bool.self, forKey: .privileged)
         read_only = try container.decodeIfPresent(Bool.self, forKey: .read_only)
+        cap_add = try container.decodeIfPresent([String].self, forKey: .cap_add)
+        cap_drop = try container.decodeIfPresent([String].self, forKey: .cap_drop)
+        shm_size = try container.decodeIfPresent(String.self, forKey: .shm_size)
+        runInit = try container.decodeIfPresent(Bool.self, forKey: .runInit)
+        ulimits = try container
+            .decodeIfPresent([String: UlimitValue].self, forKey: .ulimits)?
+            .mapValues(\.flagValue)
+
+        // List form is the common one; a bare string is also legal. Anything else
+        // throws rather than silently becoming nil.
+        if !container.contains(.tmpfs) {
+            tmpfs = nil
+        } else if let list = try? container.decode([String].self, forKey: .tmpfs) {
+            tmpfs = list
+        } else {
+            tmpfs = [try container.decode(String.self, forKey: .tmpfs)]
+        }
+        network_mode = try container.decodeIfPresent(String.self, forKey: .network_mode)
         working_dir = try container.decodeIfPresent(String.self, forKey: .working_dir)
         configs = try container.decodeIfPresent([ServiceConfig].self, forKey: .configs)
         secrets = try container.decodeIfPresent([ServiceSecret].self, forKey: .secrets)
