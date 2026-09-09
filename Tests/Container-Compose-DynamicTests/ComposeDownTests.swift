@@ -84,6 +84,19 @@ struct ComposeDownTests {
                   - \(markerDirectory.path):/marker
             """
         let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+        // Failure-safe cleanup: `defer` cannot `await`, so force-delete via
+        // sync `Process` (covers running containers too). Uses the same
+        // candidate names `down` stops so a throw before/after `down`
+        // never leaks the infinite-loop container. Best-effort, never throws.
+        defer {
+            let ids = ComposeProject.candidateContainerNames(
+                serviceName: "app",
+                service: Service(image: "alpine:latest"),
+                projectName: project.name
+            )
+            forceDeleteContainers(ids: ids)
+            try? FileManager.default.removeItem(at: project.base)
+        }
 
         var composeUp = try ComposeUp.parse([
             "-d", "--cwd", project.base.path(percentEncoded: false),
@@ -149,6 +162,20 @@ struct ComposeDownTests {
             containers.filter({ $0.status == .stopped }).count == 1,
             "Expected container \(containerName) to be stopped, found status: \(containers.map(\.status))"
         )
+    }
+
+    /// Synchronously force-delete containers by ID. Sync so it can run in
+    /// `defer` (which cannot `await`); mirrors `ComposeUpDnsTests` cleanup.
+    private func forceDeleteContainers(ids: [String]) {
+        for id in ids {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["container", "delete", "-f", id]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            try? process.run()
+            process.waitUntilExit()
+        }
     }
 
     enum Errors: Error {
