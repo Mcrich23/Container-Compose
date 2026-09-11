@@ -51,6 +51,26 @@ struct StopGracePeriodTests {
         #expect(service.stopTimeoutInSeconds == 1)
     }
 
+    @Test("Accept a leading-decimal stop grace period")
+    func parseLeadingDecimalStopGracePeriod() throws {
+        let service = try decodeService("""
+            image: alpine:latest
+            stop_grace_period: .5s
+            """)
+
+        #expect(service.stopTimeoutInSeconds == 0)
+    }
+
+    @Test("Parse nanosecond stop grace periods")
+    func parseNanosecondStopGracePeriod() throws {
+        let service = try decodeService("""
+            image: alpine:latest
+            stop_grace_period: 1000000000ns
+            """)
+
+        #expect(service.stopTimeoutInSeconds == 1)
+    }
+
     @Test("Reject invalid stop grace periods")
     func rejectInvalidStopGracePeriods() {
         for value in ["1", "-1s", "1d", "1s-invalid", "2147483648s"] {

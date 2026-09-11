@@ -59,7 +59,8 @@ public struct StopGracePeriod: Codable, Hashable, Sendable {
             while index < value.endIndex, value[index].isNumber {
                 index = value.index(after: index)
             }
-            guard index > numberStart else { throw InvalidDurationError(value: value) }
+            let hasIntegerDigits = index > numberStart
+            var hasFractionDigits = false
 
             if index < value.endIndex, value[index] == "." {
                 index = value.index(after: index)
@@ -67,7 +68,12 @@ public struct StopGracePeriod: Codable, Hashable, Sendable {
                 while index < value.endIndex, value[index].isNumber {
                     index = value.index(after: index)
                 }
-                guard index > fractionStart else { throw InvalidDurationError(value: value) }
+                hasFractionDigits = index > fractionStart
+                guard hasFractionDigits else { throw InvalidDurationError(value: value) }
+            }
+
+            guard hasIntegerDigits || hasFractionDigits else {
+                throw InvalidDurationError(value: value)
             }
 
             let number = String(value[numberStart..<index])
@@ -76,7 +82,10 @@ public struct StopGracePeriod: Codable, Hashable, Sendable {
             }
 
             let unit: String
-            if value[index...].hasPrefix("us") || value[index...].hasPrefix("µs") {
+            if value[index...].hasPrefix("ns") {
+                unit = "ns"
+                index = value.index(index, offsetBy: 2)
+            } else if value[index...].hasPrefix("us") || value[index...].hasPrefix("µs") {
                 unit = String(value[index...].prefix(2))
                 index = value.index(index, offsetBy: 2)
             } else if value[index...].hasPrefix("ms") {
@@ -96,6 +105,7 @@ public struct StopGracePeriod: Codable, Hashable, Sendable {
             }
 
             let multiplier: Double = switch unit {
+            case "ns": 0.000000001
             case "us", "µs": 0.000001
             case "ms": 0.001
             case "s": 1
