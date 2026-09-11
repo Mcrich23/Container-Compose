@@ -264,11 +264,14 @@ public struct Service: Codable, Hashable {
 
         ports = try container.decodeIfPresent([String].self, forKey: .ports)
 
-        // Decode 'command' which can be either a single string or an array of strings.
+        // Decode 'command' which can be either a single string or an array of
+        // strings. Per the Compose spec, the string form is shorthand for the
+        // equivalent word-split list — not a single argv entry — so it's tokenized
+        // with ShellWords rather than kept as one element (see ShellWords.swift).
         if let cmdArray = try? container.decodeIfPresent([String].self, forKey: .command) {
             command = cmdArray
         } else if let cmdString = try? container.decodeIfPresent(String.self, forKey: .command) {
-            command = [cmdString]
+            command = ShellWords.split(cmdString)
         } else {
             command = nil
         }
@@ -304,11 +307,12 @@ public struct Service: Codable, Hashable {
         }
         hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         
-        // Decode 'entrypoint' which can be either a single string or an array of strings.
+        // Decode 'entrypoint' which can be either a single string or an array of
+        // strings; the string form is word-split the same way as 'command' above.
         if let entrypointArray = try? container.decodeIfPresent([String].self, forKey: .entrypoint) {
             entrypoint = entrypointArray
         } else if let entrypointString = try? container.decodeIfPresent(String.self, forKey: .entrypoint) {
-            entrypoint = [entrypointString]
+            entrypoint = ShellWords.split(entrypointString)
         } else {
             entrypoint = nil
         }
