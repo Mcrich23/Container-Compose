@@ -84,7 +84,10 @@ public struct ComposeDown: AsyncParsableCommand {
                 stoppedAny = true
                 print("Stopping container: \(name)")
                 do {
-                    try await client.stop(id: container.id)
+                    try await client.stop(
+                        id: container.id,
+                        opts: ComposeStopOptions.resolve(for: target.service)
+                    )
                     print("Successfully stopped container: \(name)")
                 } catch {
                     print("Error Stopping Container: \(error)")

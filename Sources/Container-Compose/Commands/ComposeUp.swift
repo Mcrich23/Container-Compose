@@ -72,6 +72,11 @@ private actor ForegroundRunHandle {
     func exitCodeIfCompleted() -> Int32? { exitCode }
 }
 
+struct ComposeContainerStopTarget: Sendable {
+    let containerName: String
+    let timeoutInSeconds: Int32
+}
+
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
 
@@ -189,7 +194,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Stop Services. Pass every name a previous run might have used (legacy
         // dashed, dotted DNS-mode, and explicit container_name) so the cleanup
         // catches whichever shape exists on disk.
-        try await stopExistingContainers(project.services.flatMap(\.candidateContainerNames), remove: true)
+        try await stopExistingContainers(project.services, remove: true)
 
         // Process top-level networks
         // This creates named networks defined in the docker-compose.yml
@@ -221,7 +226,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         if !detach {
-            await runForegroundUntilStopped(containerNames: project.services.map({ containerName(for: $0.serviceName) }))
+            let stopTargets = project.services.map {
+                ComposeContainerStopTarget(
+                    containerName: containerName(for: $0.serviceName),
+                    timeoutInSeconds: $0.service.stopTimeoutInSeconds
+                )
+            }
+            await runForegroundUntilStopped(containerTargets: stopTargets)
         }
     }
 
@@ -231,10 +242,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///   - If the containers stop on their own — or via `container compose down`
     ///     from another shell — `up` returns instead of hanging forever.
     ///
-    /// Takes resolved container names (not service names): a service's container
-    /// may be named via explicit `container_name` or the dotted
-    /// `<service>.<dnsDomain>` DNS convention, not just `<project>-<service>`.
-    func runForegroundUntilStopped(containerNames: [String]) async -> Never {
+    /// Takes resolved container names paired with their Compose stop timeouts:
+    /// a service's container may be named via explicit `container_name` or the
+    /// dotted `<service>.<dnsDomain>` DNS convention, not just `<project>-<service>`.
+    func runForegroundUntilStopped(containerTargets: [ComposeContainerStopTarget]) async -> Never {
+        let containerNames = containerTargets.map(\.containerName)
+
         // Exit once the containers stop by themselves or are stopped externally.
         if !containerNames.isEmpty {
             Task {
@@ -256,7 +269,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 stopping = true
                 print("\nGracefully stopping... (press Ctrl+C again to force)")
                 Task {
-                    await Self.stopContainers(containerNames)
+                    await Self.stopContainers(containerTargets)
                     Foundation.exit(0)
                 }
             } else {
@@ -289,15 +302,18 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     /// Gracefully stops (without removing) the named containers — the
     /// `docker compose up` Ctrl-C contract leaves stopped containers in place.
-    private static func stopContainers(_ containerNames: [String]) async {
+    private static func stopContainers(_ containerTargets: [ComposeContainerStopTarget]) async {
         let client = ContainerClient()
-        for name in containerNames {
-            guard let container = try? await client.get(id: name) else { continue }
-            print("Stopping container: \(name)")
+        for target in containerTargets {
+            guard let container = try? await client.get(id: target.containerName) else { continue }
+            print("Stopping container: \(target.containerName)")
             do {
-                try await client.stop(id: container.id)
+                try await client.stop(
+                    id: container.id,
+                    opts: ComposeStopOptions.resolve(timeoutInSeconds: target.timeoutInSeconds)
+                )
             } catch {
-                print("Error stopping container \(name): \(error)")
+                print("Error stopping container \(target.containerName): \(error)")
             }
         }
     }
@@ -651,26 +667,30 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return Int32(response.int64(key: .exitCode))
     }
 
-    /// Stops (and optionally removes) containers matching the given names.
-    /// Accepts pre-computed name strings so callers can pass all candidate
-    /// shapes (legacy dashed, dotted DNS, explicit `container_name`) and
-    /// teardown works regardless of which mode created them.
-    private func stopExistingContainers(_ names: [String], remove: Bool) async throws {
-        for container in names {
-            print("Stopping container: \(container)")
-            let client = ContainerClient()
-            guard let container = try? await client.get(id: container) else { continue }
+    /// Stops (and optionally removes) containers matching each service's
+    /// candidate names. This covers legacy dashed, dotted DNS, and explicit
+    /// `container_name` shapes from previous runs.
+    private func stopExistingContainers(_ targets: [ComposeProject.ServiceTarget], remove: Bool) async throws {
+        for target in targets {
+            for name in target.candidateContainerNames {
+                print("Stopping container: \(name)")
+                let client = ContainerClient()
+                guard let container = try? await client.get(id: name) else { continue }
 
-            do {
-                try await client.stop(id: container.id)
-            } catch {
-                print("Error Stopping Container: \(error)")
-            }
-            if remove {
                 do {
-                    try await client.delete(id: container.id)
+                    try await client.stop(
+                        id: container.id,
+                        opts: ComposeStopOptions.resolve(for: target.service)
+                    )
                 } catch {
-                    print("Error Removing Container: \(error)")
+                    print("Error Stopping Container: \(error)")
+                }
+                if remove {
+                    do {
+                        try await client.delete(id: container.id)
+                    } catch {
+                        print("Error Removing Container: \(error)")
+                    }
                 }
             }
         }

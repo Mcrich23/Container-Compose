@@ -61,6 +61,65 @@ struct ComposeDownTests {
         #expect(containers.filter({ $0.status == .stopped}).count == 2, "Expected 2 stopped containers for \(project.name), found \(containers.filter({ $0.status == .stopped }).count)")
     }
 
+    @Test("stop_grace_period controls the graceful stop deadline")
+    func testStopGracePeriod() async throws {
+        let markerDirectory = FileManager.default.temporaryDirectory
+            .appending(path: makeContainerName())
+        try FileManager.default.createDirectory(at: markerDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: markerDirectory) }
+
+        let yaml = """
+            services:
+              app:
+                image: alpine:latest
+                stop_grace_period: 1s
+                command:
+                  - sh
+                  - -c
+                  - |
+                    trap 'touch /marker/term; sleep 10; touch /marker/graceful' TERM
+                    touch /marker/ready
+                    while true; do sleep 1; done
+                volumes:
+                  - \(markerDirectory.path):/marker
+            """
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+        // Failure-safe cleanup: `defer` cannot `await`, so force-delete via
+        // sync `Process` (covers running containers too). Uses the same
+        // candidate names `down` stops so a throw before/after `down`
+        // never leaks the infinite-loop container. Best-effort, never throws.
+        defer {
+            let ids = ComposeProject.candidateContainerNames(
+                serviceName: "app",
+                service: Service(image: "alpine:latest"),
+                projectName: project.name
+            )
+            forceDeleteContainers(ids: ids)
+            try? FileManager.default.removeItem(at: project.base)
+        }
+
+        var composeUp = try ComposeUp.parse([
+            "-d", "--cwd", project.base.path(percentEncoded: false),
+        ])
+        try await composeUp.run()
+
+        let readyMarker = markerDirectory.appending(path: "ready")
+        let deadline = Date().addingTimeInterval(30)
+        while !FileManager.default.fileExists(atPath: readyMarker.path), Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        #expect(FileManager.default.fileExists(atPath: readyMarker.path))
+
+        let stopStarted = Date()
+        let composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
+        try await composeDown.run()
+        let stopElapsed = Date().timeIntervalSince(stopStarted)
+
+        #expect(stopElapsed < 4, "stop_grace_period was not applied; stop took \(stopElapsed)s")
+        #expect(FileManager.default.fileExists(atPath: markerDirectory.appending(path: "term").path))
+        #expect(!FileManager.default.fileExists(atPath: markerDirectory.appending(path: "graceful").path))
+    }
+
     @Test("What goes up must come down - container_name")
     func testUpAndDownContainerName() async throws {
         // Create a new temporary UUID to use as a container name, otherwise we might conflict with
@@ -103,6 +162,20 @@ struct ComposeDownTests {
             containers.filter({ $0.status == .stopped }).count == 1,
             "Expected container \(containerName) to be stopped, found status: \(containers.map(\.status))"
         )
+    }
+
+    /// Synchronously force-delete containers by ID. Sync so it can run in
+    /// `defer` (which cannot `await`); mirrors `ComposeUpDnsTests` cleanup.
+    private func forceDeleteContainers(ids: [String]) {
+        for id in ids {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["container", "delete", "-f", id]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            try? process.run()
+            process.waitUntilExit()
+        }
     }
 
     enum Errors: Error {
