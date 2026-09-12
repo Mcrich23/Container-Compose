@@ -361,18 +361,19 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// `-c` flag and the script as a single argument.
     static func entrypointAndCommandArgs(
         entrypoint: [String]?,
-        command: [String]?
+        command: [String]?,
+        environmentVariables: [String: String] = [:]
     ) -> (entrypointFlag: String?, positional: [String]) {
         var positional: [String] = []
         let entrypointFlag: String?
         if let entrypoint, !entrypoint.isEmpty {
-            entrypointFlag = entrypoint.first
-            positional.append(contentsOf: entrypoint.dropFirst())
+            entrypointFlag = entrypoint.first.map { resolveVariable($0, with: environmentVariables) }
+            positional.append(contentsOf: entrypoint.dropFirst().map { resolveVariable($0, with: environmentVariables) })
         } else {
             entrypointFlag = nil
         }
         if let command {
-            positional.append(contentsOf: command)
+            positional.append(contentsOf: command.map { resolveVariable($0, with: environmentVariables) })
         }
         return (entrypointFlag, positional)
     }
@@ -1127,7 +1128,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // the image. See the helper below for the full mapping.
         let argv = Self.entrypointAndCommandArgs(
             entrypoint: service.entrypoint,
-            command: service.command
+            command: service.command,
+            environmentVariables: environmentVariables
         )
         if let entrypointFlag = argv.entrypointFlag {
             runCommandArgs.append(contentsOf: ["--entrypoint", entrypointFlag])
