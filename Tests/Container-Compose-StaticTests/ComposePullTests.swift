@@ -14,29 +14,22 @@
 // limitations under the License.
 //===----------------------------------------------------------------------===//
 
-import Foundation
-import ArgumentParser
+import Testing
+@testable import ContainerComposeCore
 
-public struct Main: AsyncParsableCommand {
-    private static let commandName: String = "container-compose"
-    private static let version: String = "1.1.0"
-    public static var versionString: String {
-        "\(commandName) version \(version)"
+@Suite("Compose pull Tests")
+struct ComposePullTests {
+
+    @Test("pull accepts service arguments alongside the project option group")
+    func pullParsesArguments() throws {
+        let cmd = try ComposePull.parse(["web", "db"])
+        #expect(cmd.services == ["web", "db"])
     }
-    public static let configuration: CommandConfiguration = .init(
-        commandName: Self.commandName,
-        abstract: "A tool to use and manage Docker Compose files with Apple Container",
-        version: Self.versionString,
-        subcommands: [
-            ComposeUp.self,
-            ComposeDown.self,
-            ComposeBuild.self,
-            ComposePull.self,
-            Version.self
-        ])
-    
-    @OptionGroup
-    var composeFileOptions: ComposeFileOptions
 
-    public init() {}
+    @Test("pull accepts the shared -f/--cwd project options")
+    func pullParsesProjectOptions() throws {
+        let cmd = try ComposePull.parse(["-f", "my-compose.yaml", "--cwd", "/tmp"])
+        #expect(cmd.project.composeFileOptions.composeFilename == "my-compose.yaml")
+        #expect(cmd.project.cwd == "/tmp")
+    }
 }
