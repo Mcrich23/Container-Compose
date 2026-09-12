@@ -72,6 +72,71 @@ private actor ForegroundRunHandle {
     func exitCodeIfCompleted() -> Int32? { exitCode }
 }
 
+/// Owns every piece of cross-service mutable state touched while launching
+/// services. `up` used to keep these as `ComposeUp` (a value-type command)
+/// dictionaries and mutate them from a strictly serial loop; launching a whole
+/// dependency wave concurrently (issue #128) would race those dictionaries, and
+/// `@unchecked Sendable` hides that from the compiler. Routing all reads/writes
+/// through this actor makes concurrent launches data-race-free. Within a wave
+/// services are independent (they only depend on earlier, already-completed
+/// waves), so this actor is the only synchronization needed.
+private actor LaunchState {
+    var environmentVariables: [String: String]
+    private var containerIps: [String: String] = [:]
+    private var serviceStartStates: [String: ServiceStartState] = [:]
+    private var serviceHealth: [String: Bool] = [:]
+    private var serviceContainerNames: [String: String] = [:]
+    private var usedColors: Set<NamedColor> = []
+    private let palette: [NamedColor]
+
+    init(environmentVariables: [String: String], palette: [NamedColor]) {
+        self.environmentVariables = environmentVariables
+        self.palette = palette
+    }
+
+    // Container names
+    func recordContainerName(_ name: String, for service: String) { serviceContainerNames[service] = name }
+    func allContainerNames() -> [String: String] { serviceContainerNames }
+
+    // Start state
+    func recordStartState(_ state: ServiceStartState, for service: String) { serviceStartStates[service] = state }
+    func startState(of service: String) -> ServiceStartState? { serviceStartStates[service] }
+
+    // Health
+    func recordHealthy(_ service: String) { serviceHealth[service] = true }
+    func isHealthy(_ service: String) -> Bool { serviceHealth[service] == true }
+
+    // IPs + env (IP substitution mirrors the old updateEnvironmentWithServiceIP)
+    func recordIP(_ ip: String?, for service: String) {
+        containerIps[service] = ip
+        for (key, value) in environmentVariables where value == service {
+            environmentVariables[key] = ip ?? value
+        }
+    }
+    func allContainerIps() -> [String: String] { containerIps }
+    func environmentSnapshot() -> [String: String] { environmentVariables }
+
+    /// Atomically picks a console color, preferring one not yet used while the
+    /// palette isn't exhausted (was `ComposeUp`'s racy read-modify-write of
+    /// `containerConsoleColors`).
+    func pickColor(for service: String) -> NamedColor {
+        var color = palette.randomElement()!
+        if usedColors.count < palette.count {
+            while usedColors.contains(color) { color = palette.randomElement()! }
+        }
+        usedColors.insert(color)
+        return color
+    }
+}
+
+/// Carries the immutable compose model (a value type) into a concurrent launch
+/// task. Each task only reads it, so sending it across the isolation boundary is
+/// safe — the same reason the command structs are `@unchecked Sendable`.
+private struct UncheckedSendable<T>: @unchecked Sendable {
+    let value: T
+    init(_ value: T) { self.value = value }
+}
+
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     public init() {}
 
@@ -103,6 +168,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     @Flag(name: .long, help: "Do not use cache")
     var noCache: Bool = false
 
+    @Flag(
+        name: .customLong("sequential"),
+        help: "Launch services one at a time in dependency order (the pre-parallel behavior). By default, services with no pending dependency start concurrently.")
+    var sequential: Bool = false
+
     @OptionGroup
     var logging: Flags.Logging
 
@@ -119,15 +189,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// queries from inside containers. When true, services get a dotted `--name`
     /// + `--dns-domain` and the /etc/hosts cross-patcher is skipped.
     private var dnsAvailable: Bool = false
+    /// Seed environment loaded from the `.env` file. Copied into `LaunchState`
+    /// (which owns the live, IP-substituted copy) once launching begins.
     private var environmentVariables: [String: String] = [:]
-    private var containerIps: [String: String] = [:]
-    private var serviceStartStates: [String: ServiceStartState] = [:]
-    private var serviceHealth: [String: Bool] = [:]
-    /// Resolved container ID (i.e. the name on disk) per service.
-    /// Equal to `service.container_name` when set, otherwise either
-    /// `<serviceName>.<dnsDomain>` (DNS path) or `<projectName>-<serviceName>` (legacy).
-    private var serviceContainerNames: [String: String] = [:]
-    private var containerConsoleColors: [String: NamedColor] = [:]
 
     private static let availableContainerConsoleColors: Set<NamedColor> = [
         .blue, .cyan, .magenta, .lightBlack, .lightBlue, .lightCyan, .lightYellow, .yellow, .lightGreen, .green,
@@ -214,14 +278,60 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Process each service defined in the docker-compose.yml
         print("\n--- Processing Services ---")
-
         print(project.services.map(\.serviceName))
-        for target in project.services {
-            try await configService(target.service, serviceName: target.serviceName, from: dockerCompose)
+
+        // All cross-service launch state lives in this actor so a wave of
+        // services can be launched concurrently without racing.
+        let launchState = LaunchState(
+            environmentVariables: environmentVariables,
+            palette: Array(Self.availableContainerConsoleColors))
+
+        // `run()` is `mutating` (it set projectName/dnsDomain/... above), so an
+        // escaping task closure can't capture `self`. Snapshot the now-immutable
+        // command config into a `let` the concurrent tasks can share.
+        let launcher = self
+
+        if sequential {
+            // Explicit opt-out (`--sequential`): the original one-at-a-time
+            // behavior, in topological order.
+            for target in project.services {
+                try await configService(
+                    target.service, serviceName: target.serviceName,
+                    from: dockerCompose, launchState: launchState)
+            }
+        } else {
+            // Launch each dependency WAVE concurrently. `dependencyLevels` groups
+            // services so every service in a wave has all of its in-set
+            // dependencies in an earlier wave; a dependency cycle throws here,
+            // before anything is launched. The barrier between waves means a
+            // service's dependencies are always fully started before it begins.
+            let servicesByName = Dictionary(
+                uniqueKeysWithValues: project.services.map { ($0.serviceName, $0.service) })
+            let waves = try Service.dependencyLevels(
+                project.services.map { ($0.serviceName, $0.service) })
+            let composeBox = UncheckedSendable(dockerCompose)
+            for wave in waves {
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    for serviceName in wave {
+                        guard let service = servicesByName[serviceName] else { continue }
+                        let inputs = UncheckedSendable((service: service, name: serviceName))
+                        group.addTask {
+                            try await launcher.configService(
+                                inputs.value.service, serviceName: inputs.value.name,
+                                from: composeBox.value, launchState: launchState)
+                        }
+                    }
+                    try await group.waitForAll()
+                }
+            }
         }
 
         if !detach {
-            await runForegroundUntilStopped(containerNames: project.services.map({ containerName(for: $0.serviceName) }))
+            let names = await launchState.allContainerNames()
+            let containerNames = project.services.map {
+                names[$0.serviceName] ?? "\(projectName)-\($0.serviceName)"
+            }
+            await runForegroundUntilStopped(containerNames: containerNames)
         }
     }
 
@@ -492,9 +602,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
-    private func containerName(for serviceName: String) -> String {
-        serviceContainerNames[serviceName] ?? "\(projectName)-\(serviceName)"
-    }
 
     /// Pure parser for `container system dns list` output. Output looks like:
     ///     DOMAIN
@@ -527,9 +634,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         return Self.dnsListContainsDomain(text, domain: domain)
     }
 
-    private func getIPForRunningService(_ serviceName: String) async throws -> String? {
-        let name = containerName(for: serviceName)
-
+    private func getIPForRunningService(containerName name: String) async throws -> String? {
         let client = ContainerClient()
         let container = try await client.get(id: name)
         // Use the container's own address, not the network gateway — every
@@ -567,13 +672,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///   - interval: How often to poll (in seconds).
     private func waitUntilServiceStarted(
         _ serviceName: String,
+        containerName: String,
         activity: ActivityClock,
         foregroundRun: ForegroundRunHandle? = nil,
         idleTimeout: TimeInterval = 30,
         maxWait: TimeInterval = 300,
         interval: TimeInterval = 0.5
     ) async throws -> ServiceStartState {
-        let containerName = containerName(for: serviceName)
         let client = ContainerClient()
         let start = Date()
 
@@ -678,14 +783,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
     // MARK: Compose Top Level Functions
 
-    private mutating func updateEnvironmentWithServiceIP(_ serviceName: String) async throws {
-        let ip = try await getIPForRunningService(serviceName)
-        self.containerIps[serviceName] = ip
-        for (key, value) in environmentVariables.map({ ($0, $1) }) where value == serviceName {
-            self.environmentVariables[key] = ip ?? value
-        }
+    private func updateEnvironmentWithServiceIP(_ serviceName: String, containerName: String, launchState: LaunchState) async throws {
+        let ip = try await getIPForRunningService(containerName: containerName)
+        await launchState.recordIP(ip, for: serviceName)
         if !dnsAvailable {
-            await crossPatchHostsForService(serviceName)
+            await crossPatchHostsForService(serviceName, launchState: launchState)
         }
     }
 
@@ -694,12 +796,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// already-running peer to add `<thisIP> <thisService>`, and also add all the
     /// previously-known peers into the new container. This is best-effort — services
     /// that need DNS at startup time should still wait/retry.
-    private func crossPatchHostsForService(_ newServiceName: String) async {
-        guard let newIP = containerIps[newServiceName] else { return }
-        let newContainerID = containerName(for: newServiceName)
+    private func crossPatchHostsForService(_ newServiceName: String, launchState: LaunchState) async {
+        let ips = await launchState.allContainerIps()
+        let names = await launchState.allContainerNames()
+        guard let newIP = ips[newServiceName] else { return }
+        let newContainerID = names[newServiceName] ?? "\(projectName)-\(newServiceName)"
         // Add the new entry in every previously-running peer.
-        for (peerName, peerIP) in containerIps where peerName != newServiceName {
-            let peerContainerID = containerName(for: peerName)
+        for (peerName, peerIP) in ips where peerName != newServiceName {
+            let peerContainerID = names[peerName] ?? "\(projectName)-\(peerName)"
             await appendHostsEntry(in: peerContainerID, name: newServiceName, ip: newIP)
             // Also make the new container aware of this peer, in case it queries it later.
             await appendHostsEntry(in: newContainerID, name: peerName, ip: peerIP)
@@ -810,8 +914,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     // MARK: Compose Service Level Functions
-    private mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
-        try waitForDependencyConditions(serviceName: serviceName, service: service)
+    private func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose, launchState: LaunchState) async throws {
+        try await waitForDependencyConditions(serviceName: serviceName, service: service, launchState: launchState)
 
         var imageToRun: String
         
@@ -862,7 +966,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // Default container name based on project and service name
             containerName = "\(projectName)-\(serviceName)"
         }
-        serviceContainerNames[serviceName] = containerName
+        await launchState.recordContainerName(containerName, for: serviceName)
         runCommandArgs.append("--name")
         runCommandArgs.append(containerName)
 
@@ -907,8 +1011,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Combine environment variables from .env files and service environment
-        var combinedEnv: [String: String] = environmentVariables
+        // Combine environment variables from .env files and service environment.
+        // The base env is snapshotted from the actor so it includes the IP
+        // substitutions recorded by services in earlier (already-completed) waves.
+        let envSnapshot = await launchState.environmentSnapshot()
+        var combinedEnv: [String: String] = envSnapshot
 
         if let envFiles = service.env_file {
             for envFile in envFiles {
@@ -934,9 +1041,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             return combinedEnv[variableName] ?? value
         })
 
-        // Fill in IPs
+        // Fill in IPs (peer container addresses recorded by earlier waves).
+        let ipSnapshot = await launchState.allContainerIps()
         combinedEnv = combinedEnv.mapValues({ value in
-            containerIps[value] ?? value
+            ipSnapshot[value] ?? value
         })
 
         // MARK: Spinning Spot
@@ -948,7 +1056,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
          if let ports = service.ports {
              for port in ports {
-                 let resolvedPort = resolveVariable(port, with: environmentVariables)
+                 let resolvedPort = resolveVariable(port, with: envSnapshot)
                  runCommandArgs.append("-p")
                  runCommandArgs.append(composePortToRunArg(resolvedPort))
              }
@@ -957,7 +1065,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Connect to specified networks
         if let serviceNetworks = service.networks {
             for network in serviceNetworks {
-                let resolvedNetwork = resolveVariable(network, with: environmentVariables)
+                let resolvedNetwork = resolveVariable(network, with: envSnapshot)
                 // Use the explicit network name from top-level definition if available, otherwise resolved name
                 let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
                 runCommandArgs.append("--network")
@@ -1135,16 +1243,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         runCommandArgs.append(imageToRun)
         runCommandArgs.append(contentsOf: argv.positional)
 
-        var serviceColor: NamedColor = Self.availableContainerConsoleColors.randomElement()!
-
-        if Array(Set(containerConsoleColors.values)).sorted(by: { $0.rawValue < $1.rawValue }) != Self.availableContainerConsoleColors.sorted(by: { $0.rawValue < $1.rawValue }) {
-            while containerConsoleColors.values.contains(serviceColor) {
-                serviceColor = Self.availableContainerConsoleColors.randomElement()!
-            }
-        }
-
-        let selectedColor = serviceColor
-        self.containerConsoleColors[serviceName] = selectedColor
+        let selectedColor = await launchState.pickColor(for: serviceName)
 
         // Tracks output from the run subprocess so the readiness wait below can
         // tell an in-progress image pull from a stuck container.
@@ -1205,15 +1304,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        let startState = try await waitUntilServiceStarted(serviceName, activity: activity, foregroundRun: foregroundRunHandle)
-        serviceStartStates[serviceName] = startState
+        let startState = try await waitUntilServiceStarted(serviceName, containerName: containerName, activity: activity, foregroundRun: foregroundRunHandle)
+        await launchState.recordStartState(startState, for: serviceName)
 
         switch startState {
         case .running:
-            try await updateEnvironmentWithServiceIP(serviceName)
+            try await updateEnvironmentWithServiceIP(serviceName, containerName: containerName, launchState: launchState)
             if let healthcheck = service.healthcheck, !healthcheck.isDisabled {
-                try await waitUntilServiceIsHealthy(serviceName: serviceName, healthcheck: healthcheck)
-                serviceHealth[serviceName] = true
+                try await waitUntilServiceIsHealthy(serviceName: serviceName, containerName: containerName, healthcheck: healthcheck)
+                await launchState.recordHealthy(serviceName)
             }
         case .completed:
             if let healthcheck = service.healthcheck, !healthcheck.isDisabled {
@@ -1222,20 +1321,24 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
-    private func waitForDependencyConditions(serviceName: String, service: Service) throws {
+    /// Asserts that each of `service`'s dependencies has already reached its
+    /// required condition. Under both the serial path and the wave-parallel
+    /// path a service's dependencies are in an earlier wave that has fully
+    /// completed before this runs, so these are satisfied checks, not polls.
+    private func waitForDependencyConditions(serviceName: String, service: Service, launchState: LaunchState) async throws {
         for dependencyName in service.depends_on ?? [] {
             let dependency = service.dependencyConditions?[dependencyName] ?? ServiceDependency()
             switch dependency.effectiveCondition {
             case ServiceDependency.serviceStarted:
-                guard serviceStartStates[dependencyName] != nil else {
+                guard await launchState.startState(of: dependencyName) != nil else {
                     throw ComposeError.dependencyNotStarted(serviceName, dependencyName)
                 }
             case ServiceDependency.serviceHealthy:
-                guard serviceHealth[dependencyName] == true else {
+                guard await launchState.isHealthy(dependencyName) else {
                     throw ComposeError.dependencyNotHealthy(serviceName, dependencyName)
                 }
             case ServiceDependency.serviceCompletedSuccessfully:
-                guard serviceStartStates[dependencyName] == .completed else {
+                guard await launchState.startState(of: dependencyName) == .completed else {
                     throw ComposeError.dependencyNotCompleted(serviceName, dependencyName)
                 }
             default:
@@ -1244,12 +1347,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
-    private func waitUntilServiceIsHealthy(serviceName: String, healthcheck: Healthcheck) async throws {
+    private func waitUntilServiceIsHealthy(serviceName: String, containerName: String, healthcheck: Healthcheck) async throws {
         guard let execArguments = healthcheck.execArguments else {
             return
         }
 
-        let containerName = containerName(for: serviceName)
         let retries = max(healthcheck.retries ?? 3, 1)
         let interval = Healthcheck.parseDuration(healthcheck.interval, default: 30)
         let startPeriod = Healthcheck.parseDuration(healthcheck.start_period, default: 0)
