@@ -36,6 +36,9 @@ public struct ComposePull: AsyncParsableCommand {
     @Argument(help: "Services to pull (pulls all if omitted)")
     var services: [String] = []
 
+    @Flag(name: .long, help: "Also pull images for the services that requested services depend on")
+    var includeDeps: Bool = false
+
     @OptionGroup
     var project: ComposeProjectOptions
 
@@ -52,35 +55,45 @@ public struct ComposePull: AsyncParsableCommand {
         }
         try Service.validateRequestedServices(services, against: defined)
 
-        for target in resolved.services {
-            let service = target.service
-            guard let image = service.image else {
+        let environment = loadEnvFile(path: project.envFilePath)
+
+        for target in Self.pullTargets(in: resolved, requested: services, includeDeps: includeDeps) {
+            guard let image = Self.resolvedImage(for: target.service, environment: environment) else {
                 // Build-only services have no image to pull; compose builds these.
                 print("Skipping \(target.serviceName) (no image, built from a Dockerfile)")
                 continue
             }
 
             print("Pulling \(target.serviceName) (\(image))...")
-            try await pullImage(image, platform: service.platform)
+            try await pullImage(image, platform: target.service.platform)
         }
     }
 
-    private func pullImage(_ imageName: String, platform: String?) async throws {
-        // Skip the pull if the image is already present locally. Mirrors the
-        // match logic used by `up`: exact reference, registry-prefixed
-        // reference, or matching last path component (short references).
-        let imageList = try await ClientImage.list()
-        let exists = imageList.contains { ref in
-            let stored = ref.description.reference
-            return stored == imageName
-                || stored.hasSuffix("/\(imageName)")
-                || stored.components(separatedBy: "/").last == imageName
-        }
-        guard !exists else {
-            print("  Image \(imageName) already present, skipping.")
-            return
-        }
+    /// The services `pull` acts on. The shared selection expands `depends_on`
+    /// (which `up` needs to start dependencies), but `docker compose pull
+    /// <svc>` pulls only the named services unless `--include-deps` is passed —
+    /// so explicit requests are narrowed back to the requested names.
+    static func pullTargets(
+        in project: ComposeProject,
+        requested: [String],
+        includeDeps: Bool
+    ) -> [ComposeProject.ServiceTarget] {
+        guard !requested.isEmpty, !includeDeps else { return project.services }
+        return project.services.filter { requested.contains($0.serviceName) }
+    }
 
+    /// The image reference to pull for a service, with `${VAR}` /
+    /// `${VAR:-default}` placeholders resolved from the environment file —
+    /// a literal `${...}` is not a valid registry reference. `nil` for
+    /// build-only services (no `image:` key).
+    static func resolvedImage(for service: Service, environment: [String: String]) -> String? {
+        service.image.map { resolveVariable($0, with: environment) }
+    }
+
+    private func pullImage(_ imageName: String, platform: String?) async throws {
+        // Always pull, even when a matching image exists locally: refreshing a
+        // moving tag like `:latest` is the point of an explicit `pull`.
+        // (`up`'s implicit pull is the place for the already-present shortcut.)
         var commands = [imageName]
         if let platform {
             commands.append(contentsOf: ["--platform", platform])
