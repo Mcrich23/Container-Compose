@@ -54,21 +54,13 @@ public struct ComposePs: AsyncParsableCommand {
         let client = ContainerClient()
         let snapshots = try await client.list()
 
-        // A service's container is matched primarily by the compose labels
-        // `up` stamps (reliable regardless of naming mode), falling back to
-        // the candidate names for containers created before the labels
-        // existed. Dependency order from the resolved project is preserved;
-        // containers that don't exist yet simply don't appear.
-        let ordered = resolved.services.flatMap { target in
-            snapshots.filter { snapshot in
-                let labels = snapshot.configuration.labels
-                if labels["com.docker.compose.project"] == resolved.projectName {
-                    return labels["com.docker.compose.service"] == target.serviceName
-                }
-                return target.candidateContainerNames.contains(snapshot.id)
-            }
-        }
-        let visible = all ? ordered : ordered.filter { $0.status == .running }
+        let visible = Self.select(
+            snapshots,
+            for: resolved,
+            all: all,
+            id: { $0.id },
+            labels: { $0.configuration.labels },
+            isRunning: { $0.status == .running })
 
         let header = ["NAME", "IMAGE", "STATUS", "PORTS"]
         let rows = visible.map { snapshot in
@@ -97,5 +89,47 @@ extension ComposePs {
             service.map { (name, $0) }
         }
         try Service.validateRequestedServices(requested, against: defined)
+    }
+
+    /// Whether a container belongs to `target` within `projectName`.
+    ///
+    /// Labeled containers (anything created since the compose labels were
+    /// introduced in #126) are matched solely by their labels — a container
+    /// labeled for a different project is never included, even when its name
+    /// collides with one of our candidate names (e.g. our project `demo` +
+    /// service `web-x` produce the candidate `demo-web-x`, which is also the
+    /// name project `demo-web` gives its service `x`). The candidate-name
+    /// fallback applies only to unlabeled containers from older runs.
+    static func matches(
+        containerID: String,
+        labels: [String: String],
+        projectName: String,
+        target: ComposeProject.ServiceTarget
+    ) -> Bool {
+        if let labeledProject = labels["com.docker.compose.project"] {
+            return labeledProject == projectName
+                && labels["com.docker.compose.service"] == target.serviceName
+        }
+        return target.candidateContainerNames.contains(containerID)
+    }
+
+    /// Selects and orders the containers `ps` shows: each resolved service's
+    /// matches (per `matches`), in the project's dependency order, filtered to
+    /// running containers unless `all` is set. Generic over the container
+    /// representation so the selection is unit-testable without daemon types.
+    static func select<Container>(
+        _ containers: [Container],
+        for project: ComposeProject,
+        all: Bool,
+        id: (Container) -> String,
+        labels: (Container) -> [String: String],
+        isRunning: (Container) -> Bool
+    ) -> [Container] {
+        let ordered = project.services.flatMap { target in
+            containers.filter {
+                matches(containerID: id($0), labels: labels($0), projectName: project.projectName, target: target)
+            }
+        }
+        return all ? ordered : ordered.filter(isRunning)
     }
 }
