@@ -671,12 +671,23 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// candidate names. This covers legacy dashed, dotted DNS, and explicit
     /// `container_name` shapes from previous runs.
     private func stopExistingContainers(_ targets: [ComposeProject.ServiceTarget], remove: Bool) async throws {
+        let client = ContainerClient()
         for target in targets {
             for name in target.candidateContainerNames {
-                print("Stopping container: \(name)")
-                let client = ContainerClient()
                 guard let container = try? await client.get(id: name) else { continue }
 
+                // A candidate name can collide with a container that belongs to a
+                // different project; its labels are authoritative. Leave it alone —
+                // if this run then needs the same name, creation fails with a name
+                // conflict instead of us silently deleting another project's
+                // container.
+                guard ComposeProject.ownsContainer(labels: container.configuration.labels, projectName: projectName) else {
+                    let owner = container.configuration.labels["com.docker.compose.project"] ?? "?"
+                    print("Warning: not touching container '\(name)' — its labels identify it as project '\(owner)'.")
+                    continue
+                }
+
+                print("Stopping container: \(name)")
                 do {
                     try await client.stop(
                         id: container.id,
