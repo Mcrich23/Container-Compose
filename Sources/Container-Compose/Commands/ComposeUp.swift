@@ -835,15 +835,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append(contentsOf: ["--platform", "\(platform)"])
         }
 
-        // Handle 'deploy' configuration (note that this tool doesn't fully support it)
-        if service.deploy != nil {
-            print("Note: The 'deploy' configuration for service '\(serviceName)' was parsed successfully.")
-            print(
-                "However, this 'container-compose' tool does not currently support 'deploy' functionality (e.g., replicas, resources, update strategies) as it is primarily for orchestration platforms like Docker Swarm or Kubernetes, not direct 'container run' commands."
-            )
-            print("The service will be run as a single container based on other configurations.")
-        }
-
         // Add detach flag if specified on the CLI
         if detach {
             runCommandArgs.append("-d")
@@ -1070,21 +1061,16 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             runCommandArgs.append("--read-only")
         }
 
-        // Add resource limits.
-        // `mem_limit` is the top-level shorthand; `deploy.resources.limits.memory` is
-        // the structured form. Both map to `container run --memory`. `mem_limit` takes
-        // precedence when both are set, matching Docker Compose CLI behaviour.
-        if let cpus = service.deploy?.resources?.limits?.cpus {
-            runCommandArgs.append(contentsOf: ["--cpus", cpus])
-        }
-        let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
-        if let memory = effectiveMemoryLimit {
-            let resolved = resolveVariable(memory, with: environmentVariables)
-            let (memoryArg, didClamp) = Self.clampMemoryLimit(resolved)
-            if didClamp {
-                print("Note: Service '\(serviceName)' mem_limit '\(resolved)' is below Apple Container's 200 MiB minimum; clamping to \(memoryArg).")
-            }
-            runCommandArgs.append(contentsOf: ["--memory", memoryArg])
+        // Add resource limits: service-level shorthands and `deploy.resources`
+        // limits fold into the same `container run` flags. See ResourceArguments.
+        let resources = ResourceArguments.runArgs(
+            for: service,
+            serviceName: serviceName,
+            environmentVariables: environmentVariables
+        )
+        runCommandArgs.append(contentsOf: resources.args)
+        for note in resources.notes {
+            print(note)
         }
 
         // Handle service-level configs (note: still only parsing/logging, not attaching)
@@ -1354,7 +1340,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         commands.append(contentsOf: ["--tag", imageToRun])
         
         // Add CPU & Memory
-        let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
+        let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? service.cpus ?? "2") ?? 2
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
         commands.append(contentsOf: ["--cpus", "\(cpuCount)"])
         commands.append(contentsOf: ["--memory", memoryLimit])
