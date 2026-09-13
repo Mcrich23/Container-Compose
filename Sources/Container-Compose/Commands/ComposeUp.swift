@@ -1379,6 +1379,45 @@ extension ComposeUp {
     static func extraHostsFilePath(projectName: String, serviceName: String) -> String {
         NSTemporaryDirectory() + "container-compose-\(projectName)-\(serviceName)-hosts"
     }
+
+    /// Prefix shared by the generated /etc/hosts bind-mount sources for
+    /// one-off `run` containers of a project. `ComposeDown` sweeps files with
+    /// this prefix to collect stale ones.
+    static func runExtraHostsFilenamePrefix(projectName: String) -> String {
+        "container-compose-\(projectName)-run-"
+    }
+
+    /// Path for the generated /etc/hosts bind-mount source of a one-off `run`
+    /// container. Keyed by the resolved container name (unique per run unless
+    /// the user reuses `--name`), so concurrent one-off runs of the same
+    /// service never overwrite each other's hosts file. The name is sanitized
+    /// because it is interpolated into a path before Apple's own container
+    /// name validation runs.
+    static func runExtraHostsFilePath(projectName: String, containerName: String) -> String {
+        NSTemporaryDirectory()
+            + runExtraHostsFilenamePrefix(projectName: projectName)
+            + sanitizeFilenameComponent(containerName)
+            + "-hosts"
+    }
+
+    /// Extracts the container name from a filename created by
+    /// `runExtraHostsFilePath`. The name may itself contain `-`, so the
+    /// prefix/suffix are stripped rather than splitting on a separator.
+    /// Returns `nil` for unrelated files or an empty name.
+    static func runContainerName(fromHostsFilename filename: String, projectName: String) -> String? {
+        let prefix = runExtraHostsFilenamePrefix(projectName: projectName)
+        let suffix = "-hosts"
+        guard filename.hasPrefix(prefix), filename.hasSuffix(suffix) else { return nil }
+        let name = String(filename.dropFirst(prefix.count).dropLast(suffix.count))
+        return name.isEmpty ? nil : name
+    }
+
+    /// Restricts a value to characters that are safe in a filename, so an
+    /// unusual `--name` cannot escape the temporary directory.
+    static func sanitizeFilenameComponent(_ value: String) -> String {
+        let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
+        return String(value.map { allowed.contains($0) ? $0 : "_" })
+    }
 }
 
 // MARK: Host gateway resolution

@@ -64,6 +64,15 @@ container-compose up
 
 You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
 
+Run a one-off command on a service (similar to `docker compose run`):
+
+```sh
+container-compose run --rm web sh
+```
+
+The service's ports are not mapped unless `--service-ports` is given, and its `depends_on`
+services are started first unless `--no-deps` is given.
+
 ## Contributing
 
 Contributions are welcome! Please open issues or submit pull requests to help improve this project.
