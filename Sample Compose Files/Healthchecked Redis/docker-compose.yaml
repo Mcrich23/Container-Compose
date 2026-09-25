@@ -1,7 +1,21 @@
+# Explicit project name: the sample's directory name contains a space, which
+# Apple Container does not allow in generated container/volume names.
+name: healthchecked-redis
+
 services:
   redis:
     restart: always
     image: redis:7-alpine
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512m
+    shm_size: 256m
+    tmpfs:
+      - /tmp
+    ulimits:
+      nofile: 65535
     volumes:
       - redis-data:/data
     healthcheck:
@@ -10,3 +24,6 @@ services:
       retries: 20
     ports:
       - "6379:6379"
+
+volumes:
+  redis-data:
