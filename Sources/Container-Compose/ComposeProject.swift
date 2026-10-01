@@ -99,7 +99,8 @@ public struct ComposeProjectOptions: ParsableArguments {
             throw YamlError.composeFileNotFound(path)
         }
         let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        return try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        var resolver = try ComposeExtendsResolver(mainFile: URL(fileURLWithPath: composePath), yaml: dockerComposeString)
+        return try YAMLDecoder().decode(DockerCompose.self, from: resolver.resolve(dockerComposeString))
     }
 
     /// Project name used to namespace containers: the compose `name:` field if
