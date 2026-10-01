@@ -1181,14 +1181,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\nStarting service: \(serviceName)")
             print("Starting \(serviceName)")
             print("----------------------------------------\n")
-            let exitCode = try await streamCommand(
+            let outcome = try await streamCommand(
                 "container",
                 args: ["run"] + runCommandArgs,
                 onStdout: handleOutput,
                 onStderr: handleOutput
             )
-            guard exitCode == 0 else {
-                throw ComposeError.containerRunFailed(serviceName, exitCode)
+            guard outcome.status == 0 else {
+                throw ComposeError.containerRunFailed(serviceName, outcome.status)
             }
             let detachedContainerName = containerName
             await ServiceExitCodeRegistry.shared.set(Task {
@@ -1208,15 +1208,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 print("Starting \(serviceName)")
                 print("----------------------------------------\n")
                 do {
-                    let exitCode = try await streamCommand(
+                    let outcome = try await streamCommand(
                         "container",
                         args: ["run"] + runCommandArgs,
                         onStdout: handleOutput,
                         onStderr: handleOutput
                     )
-                    await runHandle.complete(exitCode)
-                    if exitCode != 0 {
-                        fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
+                    await runHandle.complete(outcome.status)
+                    if outcome.status != 0 {
+                        fputs("Error: Service '\(serviceName)' exited with status \(outcome.status).\n", stderr)
                     }
                 } catch {
                     await runHandle.complete(-1)
@@ -1273,28 +1273,68 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let retries = max(healthcheck.retries ?? 3, 1)
         let interval = Healthcheck.parseDuration(healthcheck.interval, default: 30)
         let startPeriod = Healthcheck.parseDuration(healthcheck.start_period, default: 0)
+        let timeout = Healthcheck.parseDuration(healthcheck.timeout, default: 30)
 
-        if startPeriod > 0 {
-            try await Task.sleep(nanoseconds: UInt64(startPeriod * 1_000_000_000))
-        }
-
-        for attempt in 1...retries {
-            let exitCode = try await streamCommand(
+        @Sendable func probeSucceeded() async throws -> Bool {
+            try await streamCommand(
                 "container",
                 args: ["exec", containerName] + execArguments,
+                timeout: timeout,
                 onStdout: { _ in },
                 onStderr: { _ in }
-            )
-            if exitCode == 0 {
-                return
-            }
+            ).succeeded
+        }
 
-            if attempt < retries {
-                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        let healthy = try await Self.awaitHealthy(
+            retries: retries,
+            interval: interval,
+            startPeriod: startPeriod,
+            probe: probeSucceeded,
+            sleep: { try await Task.sleep(for: .seconds($0)) })
+        if !healthy {
+            throw ComposeError.healthcheckFailed(serviceName)
+        }
+    }
+
+    /// The Compose healthcheck waiting policy, with the probe and the clock
+    /// injected so the policy can be exercised without a daemon.
+    ///
+    /// `start_period` is a grace window, not a delay: probes run during it, the
+    /// first success ends the wait immediately, and failures inside it do not
+    /// consume the retry budget. Only once the window has elapsed does each
+    /// failure count against `retries`.
+    ///
+    /// The window is wall clock, so a slow probe consumes it exactly as it does in
+    /// production; `now` is injected only so a test can drive that clock instead
+    /// of waiting out the real one.
+    static func awaitHealthy(
+        retries: Int,
+        interval: TimeInterval,
+        startPeriod: TimeInterval,
+        probe: () async throws -> Bool,
+        sleep: (TimeInterval) async throws -> Void,
+        now: () -> TimeInterval = { Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 }
+    ) async throws -> Bool {
+        if startPeriod > 0 {
+            let deadline = now() + startPeriod
+            while now() < deadline {
+                if try await probe() {
+                    return true
+                }
+                try await sleep(interval)
             }
         }
 
-        throw ComposeError.healthcheckFailed(serviceName)
+        for attempt in 1...max(retries, 1) {
+            if try await probe() {
+                return true
+            }
+            if attempt < max(retries, 1) {
+                try await sleep(interval)
+            }
+        }
+
+        return false
     }
 
     private func pullImage(_ imageName: String, platform: String?) async throws {
@@ -1501,10 +1541,12 @@ extension ComposeUp {
     func streamCommand(
         _ command: String,
         args: [String] = [],
+        timeout: TimeInterval? = nil,
         onStdout: @escaping (@Sendable (String) -> Void),
         onStderr: @escaping (@Sendable (String) -> Void)
-    ) async throws -> Int32 {
-        try await withCheckedThrowingContinuation { continuation in
+    ) async throws -> CommandOutcome {
+        let timedOut = TimeoutFlag()
+        return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
@@ -1541,11 +1583,36 @@ extension ComposeUp {
             process.terminationHandler = { proc in
                 stdoutHandle.readabilityHandler = nil
                 stderrHandle.readabilityHandler = nil
-                continuation.resume(returning: proc.terminationStatus)
+                continuation.resume(
+                    returning: CommandOutcome(status: proc.terminationStatus, timedOut: timedOut.isSet))
             }
 
             do {
                 try process.run()
+                if let timeout, timeout > 0 {
+                    // Docker treats a check that overruns `timeout` as one failed
+                    // attempt, not as a hang. Terminating the child makes the
+                    // termination handler fire with a non-zero status, so the
+                    // caller sees a normal failure.
+                    DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak process] in
+                        guard let process, process.isRunning else { return }
+                        // Recorded before the signal: a probe that traps the
+                        // signal and exits 0 would otherwise be indistinguishable
+                        // from one that genuinely passed.
+                        timedOut.set()
+                        process.terminate()
+                        // `container exec` ignores SIGTERM while the process it
+                        // is proxying is stuck — measured: a probe that hangs
+                        // survives `timeout 25` and only dies to SIGKILL (137).
+                        // Without escalating, the termination handler never
+                        // fires, the continuation never resumes, and `up` stalls
+                        // forever instead of recording one failed attempt.
+                        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak process] in
+                            guard let process, process.isRunning else { return }
+                            kill(process.processIdentifier, SIGKILL)
+                        }
+                    }
+                }
             } catch {
                 continuation.resume(throwing: error)
             }
