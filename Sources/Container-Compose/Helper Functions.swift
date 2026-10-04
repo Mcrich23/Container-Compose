@@ -135,6 +135,39 @@ public func resolveVariable(_ value: String, with envVars: [String: String]) -> 
     return resolvedValue
 }
 
+/// Parses the Compose "list form" of `KEY=VALUE` entries — shared by
+/// `environment:` and `build.args:` — into the same `[String: String]` shape the
+/// map form produces. Handles two cases:
+///   - `KEY=value`  → `KEY: value`  (split on the FIRST `=`; later `=` chars stay
+///                                   in the value, so values like
+///                                   `postgres://u:p@h/db?sslmode=require`
+///                                   round-trip correctly)
+///   - `KEY`        → `KEY: <process env value, or "">`  (Compose's
+///                                   "inherit from host" shorthand)
+public func parseComposeKeyValueList(_ entries: [String]) -> [String: String] {
+    var dict: [String: String] = [:]
+    for entry in entries {
+        if let eqIdx = entry.firstIndex(of: "=") {
+            let key = String(entry[..<eqIdx])
+            let value = String(entry[entry.index(after: eqIdx)...])
+            dict[key] = value
+        } else {
+            dict[entry] = ProcessInfo.processInfo.environment[entry] ?? ""
+        }
+    }
+    return dict
+}
+
+/// Merges compose-file `build.args` with CLI `--build-arg` entries. CLI values
+/// take precedence on key conflicts (parity with `docker compose build`).
+/// - Parameters:
+///   - fileArgs: args from the compose file (values already interpolated).
+///   - cliArgs: raw `--build-arg` entries (`KEY=VALUE`, or bare `KEY` inherited
+///              from the environment).
+func mergedBuildArgs(fileArgs: [String: String], cliArgs: [String]) -> [String: String] {
+    fileArgs.merging(parseComposeKeyValueList(cliArgs)) { _, cli in cli }
+}
+
 /// Derives a project name from the current working directory. It replaces any '.' characters with
 /// '_' to ensure compatibility with container naming conventions.
 ///

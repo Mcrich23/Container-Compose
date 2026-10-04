@@ -57,16 +57,72 @@ struct BuildConfigurationTests {
           NODE_VERSION: "18"
           ENV: "production"
         """
-        
+
         let decoder = YAMLDecoder()
         let build = try decoder.decode(Build.self, from: yaml)
-        
+
         #expect(build.context == ".")
         #expect(build.args?["NODE_VERSION"] == "18")
         #expect(build.args?["ENV"] == "production")
     }
+
+    // Compose allows `build.args` in list form (`- KEY=VALUE`), not only the
+    // map form above. Previously the list form threw
+    // `DecodingError.typeMismatch` and crashed the whole `up` (see #136).
+    @Test("Parse build args in list form (KEY=VALUE)")
+    func parseBuildArgsListForm() throws {
+        let yaml = """
+        context: nginx
+        args:
+          - DIR=development
+        """
+
+        let decoder = YAMLDecoder()
+        let build = try decoder.decode(Build.self, from: yaml)
+
+        #expect(build.context == "nginx")
+        #expect(build.args?["DIR"] == "development")
+    }
+
     
-    
+    // Exact repro from #136: a service using the list form of `build.args`
+    // (alongside other fields) used to crash the whole `up` at decode time.
+    @Test("Regression #136: full service with list-form build args decodes")
+    func regressionListFormBuildArgsInService() throws {
+        let yaml = """
+        services:
+          nginx:
+            container_name: proxy
+            build:
+              context: nginx
+              args:
+                - DIR=development
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+        let build = try #require(compose.services["nginx"]??.build)
+
+        #expect(build.context == "nginx")
+        #expect(build.args?["DIR"] == "development")
+    }
+
+    // A build-arg value that itself contains `=` must split on the FIRST `=` only,
+    // so the remainder is preserved verbatim.
+    @Test("List-form build arg value keeps internal '=' characters")
+    func listFormBuildArgValueKeepsEquals() throws {
+        let yaml = """
+        context: .
+        args:
+          - DATABASE_URL=postgres://u:p@h/db?sslmode=require
+        """
+
+        let decoder = YAMLDecoder()
+        let build = try decoder.decode(Build.self, from: yaml)
+
+        #expect(build.args?["DATABASE_URL"] == "postgres://u:p@h/db?sslmode=require")
+    }
+
     @Test("Service with build configuration")
     func serviceWithBuildConfiguration() throws {
         let yaml = """
