@@ -267,7 +267,7 @@ struct DockerComposeParsingTests {
         #expect(compose.services["app"]??.command?.first == "sh")
     }
     
-    @Test("Parse compose with command as string")
+    @Test("Parse compose with command as string — word-split per Compose spec shorthand")
     func parseComposeWithCommandString() throws {
         let yaml = """
         version: '3.8'
@@ -276,12 +276,46 @@ struct DockerComposeParsingTests {
             image: alpine:latest
             command: "echo hello"
         """
-        
+
         let decoder = YAMLDecoder()
         let compose = try decoder.decode(DockerCompose.self, from: yaml)
-        
-        #expect(compose.services["app"]??.command?.count == 1)
-        #expect(compose.services["app"]??.command?.first == "echo hello")
+
+        // Per the Compose spec, `command: echo hello` is shorthand for
+        // `command: ["echo", "hello"]` — not a single opaque argv entry.
+        #expect(compose.services["app"]??.command?.count == 2)
+        #expect(compose.services["app"]??.command == ["echo", "hello"])
+    }
+
+    @Test("Parse compose with command as string containing a quoted argument")
+    func parseComposeWithCommandStringQuoted() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            command: "sh -c 'echo hello world'"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.command == ["sh", "-c", "echo hello world"])
+    }
+
+    @Test("Parse compose with entrypoint as string — word-split per Compose spec shorthand")
+    func parseComposeWithEntrypointString() throws {
+        let yaml = """
+        version: '3.8'
+        services:
+          app:
+            image: alpine:latest
+            entrypoint: "/code/entrypoint.sh --verbose"
+        """
+
+        let decoder = YAMLDecoder()
+        let compose = try decoder.decode(DockerCompose.self, from: yaml)
+
+        #expect(compose.services["app"]??.entrypoint == ["/code/entrypoint.sh", "--verbose"])
     }
     
     @Test("Parse compose with restart policy")
