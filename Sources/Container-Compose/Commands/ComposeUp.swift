@@ -27,6 +27,7 @@ import ContainerAPIClient
 import ContainerXPC
 import ContainerizationExtras
 import Foundation
+import Darwin
 @preconcurrency import Rainbow
 import Yams
 
@@ -70,6 +71,125 @@ private actor ForegroundRunHandle {
 
     /// The run subprocess's exit code, or `nil` while it is still running.
     func exitCodeIfCompleted() -> Int32? { exitCode }
+}
+
+/// Tracks active child processes spawned by container-compose (e.g. attached `container run`
+/// subprocesses) so they can be explicitly signaled and verified stopped on external interrupts.
+final class ActiveProcessRegistry: @unchecked Sendable {
+    static let shared = ActiveProcessRegistry()
+    private let lock = NSLock()
+    private var activePids: Set<pid_t> = []
+
+    func register(_ pid: pid_t) {
+        lock.lock()
+        defer { lock.unlock() }
+        activePids.insert(pid)
+    }
+
+    func unregister(_ pid: pid_t) {
+        lock.lock()
+        defer { lock.unlock() }
+        activePids.remove(pid)
+    }
+
+    func signalAll(_ sig: Int32) {
+        lock.lock()
+        let pids = activePids
+        lock.unlock()
+        for pid in pids {
+            kill(pid, sig)
+        }
+    }
+
+    func count() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return activePids.count
+    }
+
+    func waitUntilEmpty(timeoutSeconds: Double) async {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if count() == 0 { return }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        signalAll(SIGKILL)
+    }
+}
+
+/// Coordinates signal interception across the entire lifecycle of `up`, managing
+/// graceful teardown, concurrent container stopping, process cleanup, and verification.
+actor SignalCoordinator {
+    static let shared = SignalCoordinator()
+
+    private var isStarted = false
+    private var isStopping = false
+    private var containerTargets: [ComposeContainerStopTarget] = []
+    private var signalTask: Task<Void, Never>?
+
+    func setStopTargets(_ targets: [ComposeContainerStopTarget]) {
+        self.containerTargets = targets
+    }
+
+    func addStopTarget(_ target: ComposeContainerStopTarget) {
+        if !containerTargets.contains(where: { $0.containerName == target.containerName }) {
+            containerTargets.append(target)
+        }
+    }
+
+    func ensureStarted() {
+        guard !isStarted else { return }
+        isStarted = true
+        let signals = ComposeUp.makeSignalStream([SIGINT, SIGTERM])
+        signalTask = Task {
+            for await sig in signals {
+                await self.handleSignal(sig)
+            }
+        }
+    }
+
+    func stopMonitoring() {
+        signalTask?.cancel()
+        signalTask = nil
+        isStarted = false
+    }
+
+    func handleSignal(_ sig: Int32) async {
+        if !isStopping {
+            isStopping = true
+            print("\nGracefully stopping... (press Ctrl+C again to force)")
+            fflush(stdout)
+
+            // Step 1: Forward signal to tracked child processes immediately
+            ActiveProcessRegistry.shared.signalAll(SIGINT)
+
+            let targets = containerTargets
+
+            // Step 2: Concurrently request graceful container stop via daemon
+            await ComposeUp.stopContainers(targets)
+
+            // Step 3: Verify and enforce that all child processes and containers are stopped
+            await ComposeUp.verifyAndEnforceStopped(
+                targets.map(\.containerName),
+                graceTimeoutSeconds: 5.0
+            )
+
+            fflush(stdout)
+            Foundation.exit(130)
+        } else {
+            print("\nForcing stop.")
+            fflush(stdout)
+
+            // Step 1: Force kill all child processes immediately
+            ActiveProcessRegistry.shared.signalAll(SIGKILL)
+
+            // Step 2: Force kill all containers
+            await ComposeUp.killContainers(containerTargets.map(\.containerName))
+
+            fflush(stdout)
+            Foundation.exit(130)
+        }
+    }
 }
 
 struct ComposeContainerStopTarget: Sendable {
@@ -139,12 +259,27 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
+        // Start signal stream at the very beginning of the command lifecycle so
+        // signals sent from external processes (or terminal Ctrl-C) are caught
+        // during image pulls, builds, network setup, and container execution.
+        await SignalCoordinator.shared.ensureStarted()
+
         // Load, decode, and resolve the compose project (shared resolution:
         // topologically ordered services, filtered by explicit names and
         // active Compose profiles).
         let project = try projectOptions.resolve(filteringBy: services)
         let dockerCompose = project.compose
         projectName = project.projectName
+
+        // Register container stop targets early so interruptions during build
+        // or network setup will stop whichever containers have been launched.
+        let stopTargets = project.services.map {
+            ComposeContainerStopTarget(
+                containerName: containerName(for: $0.serviceName),
+                timeoutInSeconds: $0.service.stopTimeoutInSeconds
+            )
+        }
+        await SignalCoordinator.shared.setStopTargets(stopTargets)
 
         // Load environment variables from .env file
         environmentVariables = loadEnvFile(path: projectOptions.envFilePath)
@@ -226,13 +361,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         if !detach {
-            let stopTargets = project.services.map {
-                ComposeContainerStopTarget(
-                    containerName: containerName(for: $0.serviceName),
-                    timeoutInSeconds: $0.service.stopTimeoutInSeconds
-                )
-            }
             await runForegroundUntilStopped(containerTargets: stopTargets)
+        } else {
+            await SignalCoordinator.shared.stopMonitoring()
         }
     }
 
@@ -248,44 +379,27 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     func runForegroundUntilStopped(containerTargets: [ComposeContainerStopTarget]) async -> Never {
         let containerNames = containerTargets.map(\.containerName)
 
+        await SignalCoordinator.shared.setStopTargets(containerTargets)
+        await SignalCoordinator.shared.ensureStarted()
+
         // Exit once the containers stop by themselves or are stopped externally.
         if !containerNames.isEmpty {
-            Task {
-                await Self.waitUntilAllContainersStopped(containerNames)
-                print("\nAll containers have stopped.")
-                Foundation.exit(0)
+            await Self.waitUntilAllContainersStopped(containerNames)
+            print("\nAll containers have stopped.")
+            fflush(stdout)
+            Foundation.exit(0)
+        } else {
+            // Idle wait for empty targets (e.g. ForegroundWaitCpuTests)
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_600_000_000_000)
             }
+            Foundation.exit(0)
         }
-
-        // Bridge SIGINT/SIGTERM into an async stream. The `ContainerCommands`
-        // invoked during `up` leave these signals neutered (SIG_IGN) via
-        // ContainerAPIService's async signal machinery, so a foreground `up`
-        // previously ignored Ctrl-C. A `DispatchSource` signal source observes
-        // them regardless of disposition.
-        let signals = Self.makeSignalStream([SIGINT, SIGTERM])
-        var stopping = false
-        for await _ in signals {
-            if !stopping {
-                stopping = true
-                print("\nGracefully stopping... (press Ctrl+C again to force)")
-                Task {
-                    await Self.stopContainers(containerTargets)
-                    Foundation.exit(0)
-                }
-            } else {
-                print("\nForcing stop.")
-                Task {
-                    await Self.killContainers(containerNames)
-                    Foundation.exit(130)
-                }
-            }
-        }
-        Foundation.exit(0)
     }
 
     /// An `AsyncStream` of the given signals, delivered via `DispatchSource` so
     /// they're received even after the disposition has been set to `SIG_IGN`.
-    private static func makeSignalStream(_ signals: [Int32]) -> AsyncStream<Int32> {
+    static func makeSignalStream(_ signals: [Int32]) -> AsyncStream<Int32> {
         AsyncStream { continuation in
             let queue = DispatchQueue(label: "container-compose.signals")
             let sources: [DispatchSourceSignal] = signals.map { sig in
@@ -300,32 +414,74 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
-    /// Gracefully stops (without removing) the named containers — the
+    /// Gracefully stops (without removing) the named containers concurrently — the
     /// `docker compose up` Ctrl-C contract leaves stopped containers in place.
-    private static func stopContainers(_ containerTargets: [ComposeContainerStopTarget]) async {
+    static func stopContainers(_ containerTargets: [ComposeContainerStopTarget]) async {
         let client = ContainerClient()
-        for target in containerTargets {
-            guard let container = try? await client.get(id: target.containerName) else { continue }
-            print("Stopping container: \(target.containerName)")
-            do {
-                try await client.stop(
-                    id: container.id,
-                    opts: ComposeStopOptions.resolve(timeoutInSeconds: target.timeoutInSeconds)
-                )
-            } catch {
-                print("Error stopping container \(target.containerName): \(error)")
+        await withTaskGroup(of: Void.self) { group in
+            for target in containerTargets {
+                group.addTask {
+                    guard let container = try? await client.get(id: target.containerName) else { return }
+                    print("Stopping container: \(target.containerName)")
+                    fflush(stdout)
+                    do {
+                        try await client.stop(
+                            id: container.id,
+                            opts: ComposeStopOptions.resolve(timeoutInSeconds: target.timeoutInSeconds)
+                        )
+                    } catch {
+                        print("Error stopping container \(target.containerName): \(error)")
+                        fflush(stdout)
+                    }
+                }
             }
         }
     }
 
-    /// Force-stops the named containers with SIGKILL — the second-Ctrl-C
+    /// Force-stops the named containers concurrently with SIGKILL — the second-Ctrl-C
     /// contract, matching `docker compose up`'s "press Ctrl+C again to force".
-    private static func killContainers(_ containerNames: [String]) async {
+    static func killContainers(_ containerNames: [String]) async {
         let client = ContainerClient()
-        for name in containerNames {
-            guard let container = try? await client.get(id: name) else { continue }
-            print("Killing container: \(name)")
-            try? await client.kill(id: container.id, signal: "SIGKILL")
+        await withTaskGroup(of: Void.self) { group in
+            for name in containerNames {
+                group.addTask {
+                    guard let container = try? await client.get(id: name) else { return }
+                    print("Killing container: \(name)")
+                    fflush(stdout)
+                    try? await client.kill(id: container.id, signal: "SIGKILL")
+                }
+            }
+        }
+    }
+
+    /// Verifies that all tracked child processes have exited and containers have reached
+    /// `.stopped` state. If any containers remain running after the grace timeout, escalates
+    /// to SIGKILL to ensure no dangling resources remain.
+    static func verifyAndEnforceStopped(_ containerNames: [String], graceTimeoutSeconds: Double = 5.0) async {
+        // Wait for active child processes (attached container run CLI) to terminate
+        await ActiveProcessRegistry.shared.waitUntilEmpty(timeoutSeconds: graceTimeoutSeconds)
+
+        let client = ContainerClient()
+        let deadline = Date().addingTimeInterval(graceTimeoutSeconds)
+        var unstopped: [String] = []
+
+        while Date() < deadline {
+            var running: [String] = []
+            for name in containerNames {
+                if let container = try? await client.get(id: name), container.status == .running {
+                    running.append(name)
+                }
+            }
+            if running.isEmpty {
+                return
+            }
+            unstopped = running
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+        }
+
+        // Force kill any containers that did not stop within the grace period
+        if !unstopped.isEmpty {
+            await killContainers(unstopped)
         }
     }
 
@@ -736,8 +892,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         process.arguments = ["container", "exec", containerID, "sh", "-c", cmd]
         process.standardOutput = Pipe()
         process.standardError = Pipe()
-        do { try process.run() } catch { return }
+        do {
+            try process.run()
+            ActiveProcessRegistry.shared.register(process.processIdentifier)
+        } catch { return }
         process.waitUntilExit()
+        ActiveProcessRegistry.shared.unregister(process.processIdentifier)
     }
 
     private func createVolume(name volumeName: String, config volumeConfig: Volume) async throws {
@@ -1541,11 +1701,13 @@ extension ComposeUp {
             process.terminationHandler = { proc in
                 stdoutHandle.readabilityHandler = nil
                 stderrHandle.readabilityHandler = nil
+                ActiveProcessRegistry.shared.unregister(proc.processIdentifier)
                 continuation.resume(returning: proc.terminationStatus)
             }
 
             do {
                 try process.run()
+                ActiveProcessRegistry.shared.register(process.processIdentifier)
             } catch {
                 continuation.resume(throwing: error)
             }
