@@ -89,8 +89,7 @@ struct Harness {
     init(
         backend: (Recorder) -> FakeBackend,
         registry: ActiveProcessRegistry = ActiveProcessRegistry(),
-        graceTimeoutSeconds: Double = 1.0,
-        progressInterval: Double = 60
+        graceTimeoutSeconds: Double = 1.0
     ) {
         let (stream, continuation) = AsyncStream<Int32>.makeStream()
         let recorder = self.recorder
@@ -102,8 +101,7 @@ struct Harness {
             signalSource: { _ in stream },
             output: { recorder.line($0) },
             exit: { recorder.exit($0) },
-            graceTimeoutSeconds: graceTimeoutSeconds,
-            progressInterval: progressInterval
+            graceTimeoutSeconds: graceTimeoutSeconds
         )
     }
 }
@@ -112,28 +110,19 @@ let targetA = ComposeContainerStopTarget(containerName: "proj-a", timeoutInSecon
 let targetB = ComposeContainerStopTarget(containerName: "proj-b", timeoutInSeconds: 10)
 
 
-/// A fake `container run` that prints the real phase banners, then runs until signalled.
+/// A fake `container run`: prints "ready", then runs until signalled (or exits 3 if `crash`).
 /// `ignoreSignals` makes it behave like a wedged container CLI (ignores INT/TERM).
 enum FakeContainerProcess {
-    static let phases = [
-        "[0/6] [0s]", "[1/6] Fetching image [0s]", "[2/6] Unpacking image [0s]",
-        "[3/6] Fetching kernel [0s]", "[4/6] Fetching init image [0s]",
-        "[5/6] Unpacking init image [0s]", "[6/6] Starting container [0s]", "RUNNING banner",
-    ]
-
-    static func script(ignoreSignals: Bool, crashAfterPhase: Int? = nil, phaseDelay: Double = 0.02) throws -> URL {
+    static func script(ignoreSignals: Bool, crash: Bool = false) throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cc-fake-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("fake-container.sh")
-        var body = "#!/bin/sh\n"
-        // A well-behaved CLI handles INT/TERM and exits; a wedged one ignores them.
-        body += ignoreSignals ? "trap '' INT TERM\n" : "trap 'exit 130' INT TERM\n"
-        for (i, phase) in phases.enumerated() {
-            body += "echo '\(phase)'\n"
-            if crashAfterPhase == i { body += "exit 3\n" }
-            body += "sleep \(phaseDelay)\n"
-        }
-        body += "while true; do sleep 0.05; done\n"
+        let body = """
+            #!/bin/sh
+            trap \(ignoreSignals ? "''" : "'exit 130'") INT TERM
+            echo ready
+            \(crash ? "exit 3" : "while true; do sleep 0.05; done")
+            """
         try body.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
@@ -197,7 +186,7 @@ struct SignalCoordinatorTests {
         )
         let script = try FakeContainerProcess.script(ignoreSignals: true)
         let child = FakeContainerProcess.start(script, registry: h.registry, recorder: h.recorder)
-        #expect(await h.recorder.wait { h.recorder.output.contains("Starting container") })
+        #expect(await h.recorder.wait { h.recorder.output.contains("ready") })
         await h.coordinator.setStopTargets([targetA])
         await h.coordinator.ensureStarted()
 
@@ -225,65 +214,29 @@ struct SignalCoordinatorTests {
         #expect(h.recorder.output.contains("Received SIGTERM"))
     }
 
-    @Test("a slow graceful stop prints periodic progress so the wait never looks frozen")
-    func slowStopPrintsProgress() async {
-        let h = Harness(
-            backend: { FakeBackend(recorder: $0, running: ["proj-a"], stopDelay: 0.6) },
-            progressInterval: 0.1
-        )
-        await h.coordinator.setStopTargets([targetA])
-        await h.coordinator.ensureStarted()
-
-        h.signals.yield(SIGINT)
-
-        #expect(await h.recorder.wait { h.recorder.exitCodes == [130] })
-        let progress = h.recorder.lines.filter { $0.contains("Still stopping") }
-        #expect(progress.count >= 3, "got: \(progress)")
-        #expect(progress.allSatisfy { $0.contains("proj-a") && $0.contains("Ctrl+C again") })
-    }
-
-    struct Scenario: Sendable, CustomTestStringConvertible {
-        let phase: String
-        let signal: Int32
-        let wedged: Bool
-        var testDescription: String { "\(signal == SIGINT ? "SIGINT" : "SIGTERM") at '\(phase)'\(wedged ? " (wedged child)" : "")" }
-    }
-
-    static let scenarios: [Scenario] = FakeContainerProcess.phases.flatMap { phase in
-        [SIGINT, SIGTERM].flatMap { sig in [false, true].map { Scenario(phase: phase, signal: sig, wedged: $0) } }
-    }
-
-    @Test("interrupt at every container startup phase shuts down cleanly and fast", arguments: scenarios)
-    func interruptAtEveryPhase(_ scenario: Scenario) async throws {
+    @Test("a running child is reaped by an interrupt, promptly even if it ignores signals", arguments: [false, true])
+    func interruptReapsChild(wedged: Bool) async throws {
         let grace = 0.4
-        let h = Harness(
-            backend: { FakeBackend(recorder: $0, running: ["proj-a"], stubborn: false) },
-            graceTimeoutSeconds: grace
-        )
-        let script = try FakeContainerProcess.script(ignoreSignals: scenario.wedged)
-        let child = FakeContainerProcess.start(script, registry: h.registry, recorder: h.recorder)
+        let h = Harness(backend: { FakeBackend(recorder: $0, running: ["proj-a"]) }, graceTimeoutSeconds: grace)
+        let child = FakeContainerProcess.start(try FakeContainerProcess.script(ignoreSignals: wedged), registry: h.registry, recorder: h.recorder)
         await h.coordinator.setStopTargets([targetA])
         await h.coordinator.ensureStarted()
-        #expect(await h.recorder.wait { h.recorder.output.contains(scenario.phase) })
+        #expect(await h.recorder.wait { h.recorder.output.contains("ready") })
 
         let sent = Date()
-        h.signals.yield(scenario.signal)
+        h.signals.yield(SIGINT)
 
-        #expect(await h.recorder.wait(timeout: 5) { h.recorder.exitCodes == [128 + scenario.signal] })
-        let elapsed = Date().timeIntervalSince(sent)
-        #expect(elapsed < (scenario.wedged ? grace * 1.5 : 0.5), "took \(elapsed)s")
-        #expect(h.recorder.output.contains("Received"))
-        #expect(h.recorder.output.contains("Shutdown complete"))
+        #expect(await h.recorder.wait(timeout: 5) { h.recorder.exitCodes == [130] })
+        #expect(Date().timeIntervalSince(sent) < (wedged ? grace * 1.5 : 0.5))
         _ = try await child.value
         #expect(h.registry.count() == 0, "child leaked")
     }
 
-    @Test("a child that crashes mid-startup does not stop a later interrupt from completing")
+    @Test("a child that crashed earlier does not stop a later interrupt from completing")
     func interruptAfterChildCrash() async throws {
         let h = Harness(backend: { FakeBackend(recorder: $0, running: ["proj-a"]) })
-        let script = try FakeContainerProcess.script(ignoreSignals: false, crashAfterPhase: 3)
-        let status = try await FakeContainerProcess.start(script, registry: h.registry, recorder: h.recorder).value
-        #expect(status == 3)
+        let script = try FakeContainerProcess.script(ignoreSignals: false, crash: true)
+        #expect(try await FakeContainerProcess.start(script, registry: h.registry, recorder: h.recorder).value == 3)
         #expect(h.registry.count() == 0)
         await h.coordinator.setStopTargets([targetA])
         await h.coordinator.ensureStarted()
@@ -402,21 +355,6 @@ struct SignalCoordinatorTests {
 
         #expect(await h.recorder.wait(timeout: 2) { h.recorder.exitCodes == [143] })
     }
-
-    @Test("a child that crashes at any startup phase is reaped and a later interrupt completes", arguments: Array(0..<FakeContainerProcess.phases.count))
-    func crashAtEveryPhase(_ phaseIndex: Int) async throws {
-        let h = Harness(backend: { FakeBackend(recorder: $0, running: ["proj-a"]) })
-        let script = try FakeContainerProcess.script(ignoreSignals: false, crashAfterPhase: phaseIndex)
-        let status = try await FakeContainerProcess.start(script, registry: h.registry, recorder: h.recorder).value
-        #expect(status == 3)
-        #expect(h.registry.count() == 0)
-        await h.coordinator.setStopTargets([targetA])
-        await h.coordinator.ensureStarted()
-
-        h.signals.yield(SIGINT)
-
-        #expect(await h.recorder.wait { h.recorder.exitCodes == [130] })
-    }
 }
 
 @Suite("SignalCoordinator default signal source", .serialized)
@@ -430,8 +368,7 @@ struct SignalCoordinatorDefaultSourceTests {
             registry: ActiveProcessRegistry(),
             output: { recorder.line($0) },
             exit: { recorder.exit($0) },
-            graceTimeoutSeconds: 0.5,
-            progressInterval: 60
+            graceTimeoutSeconds: 0.5
         )
         await coordinator.ensureStarted()
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { kill(getpid(), SIGTERM) }

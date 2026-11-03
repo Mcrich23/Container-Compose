@@ -29,11 +29,6 @@ protocol ContainerBackend: Sendable {
     func runningContainers(among names: [String]) async -> [String]
 }
 
-struct ComposeContainerStopTarget: Sendable {
-    let containerName: String
-    let timeoutInSeconds: Int32
-}
-
 /// ContainerBackend backed by the Apple Container XPC daemon.
 struct LiveContainerBackend: ContainerBackend {
     func stop(_ targets: [ComposeContainerStopTarget]) async {

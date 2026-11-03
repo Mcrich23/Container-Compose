@@ -28,7 +28,6 @@ actor SignalCoordinator {
     private let output: @Sendable (String) -> Void
     private let exit: @Sendable (Int32) -> Void
     private let graceTimeoutSeconds: Double
-    private let progressInterval: Double
 
     /// Lifecycle of interrupt handling; only ever moves forward, except `listening` ⇄ `idle`.
     private enum Phase {
@@ -53,8 +52,7 @@ actor SignalCoordinator {
         signalSource: @escaping @Sendable ([Int32]) -> AsyncStream<Int32> = { SignalCoordinator.makeSignalStream($0) },
         output: @escaping @Sendable (String) -> Void = { print($0); fflush(stdout) },
         exit: @escaping @Sendable (Int32) -> Void = { Foundation.exit($0) },
-        graceTimeoutSeconds: Double = 5.0,
-        progressInterval: Double = 3.0
+        graceTimeoutSeconds: Double = 5.0
     ) {
         self.backend = backend
         self.registry = registry
@@ -62,7 +60,6 @@ actor SignalCoordinator {
         self.output = output
         self.exit = exit
         self.graceTimeoutSeconds = graceTimeoutSeconds
-        self.progressInterval = progressInterval
     }
 
     /// An `AsyncStream` of the given signals, delivered via `DispatchSource` so
@@ -136,10 +133,8 @@ actor SignalCoordinator {
         output("⚠️  Send another Ctrl+C to force kill immediately (SIGKILL).")
 
         // Step 1: Forward signal to tracked child processes immediately
-        let alivePids = registry.activeProcesses()
-        if !alivePids.isEmpty {
-            output("Stopping \(alivePids.count) active child process\(alivePids.count == 1 ? "" : "es")...")
-        }
+        let alive = registry.count()
+        if alive > 0 { output("Stopping \(alive) active child process\(alive == 1 ? "" : "es")...") }
         registry.closeAllHeldStdin()
         registry.signalAll(SIGINT)
 
@@ -148,9 +143,7 @@ actor SignalCoordinator {
         // Step 2: Concurrently request graceful container stop via daemon
         if !targets.isEmpty {
             output("Stopping containers...")
-            let heartbeat = startProgressHeartbeat(for: targets)
             await backend.stop(targets)
-            heartbeat.cancel()
         }
 
         // Step 3: Verify and enforce that all child processes and containers are stopped
@@ -175,22 +168,6 @@ actor SignalCoordinator {
 
         output("Forced stop complete.")
         exit(128 + firstSignal)
-    }
-
-    /// Prints "Still stopping ..." every `progressInterval` seconds until cancelled.
-    private func startProgressHeartbeat(for targets: [ComposeContainerStopTarget]) -> Task<Void, Never> {
-        let names = targets.map(\.containerName).joined(separator: ", ")
-        let interval = progressInterval
-        let output = self.output
-        let started = Date()
-        return Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                if Task.isCancelled { return }
-                let elapsed = Int(Date().timeIntervalSince(started).rounded())
-                output("⏳ Still stopping \(names) (\(elapsed)s elapsed). Press Ctrl+C again to force kill.")
-            }
-        }
     }
 
     /// Waits (against one shared deadline) for tracked child processes to exit and

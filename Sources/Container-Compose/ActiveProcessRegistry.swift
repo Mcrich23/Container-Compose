@@ -15,10 +15,10 @@
 //===----------------------------------------------------------------------===//
 
 import Foundation
-import Darwin
 
-/// Tracks active child processes spawned by container-compose (e.g. attached `container run`
-/// subprocesses) so they can be explicitly signaled and verified stopped on external interrupts.
+/// Tracks child processes spawned by container-compose so an interrupt can signal them,
+/// close their held-open stdin, and verify they are gone. ``ChildProcessRunner`` is the
+/// only place that registers/unregisters, and always unregisters on exit.
 final class ActiveProcessRegistry: @unchecked Sendable {
     static let shared = ActiveProcessRegistry()
     private let lock = NSLock()
@@ -28,95 +28,39 @@ final class ActiveProcessRegistry: @unchecked Sendable {
 
     /// Once set, ``ChildProcessRunner`` refuses to spawn: a child launched after the
     /// interrupt began would never be signalled and would stall the shutdown.
-    var isShuttingDown: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return shuttingDown
-    }
+    var isShuttingDown: Bool { lock.withLock { shuttingDown } }
 
-    func beginShutdown() {
-        lock.lock()
-        defer { lock.unlock() }
-        shuttingDown = true
-    }
+    func beginShutdown() { lock.withLock { shuttingDown = true } }
 
-    /// - Parameter closeStdin: closes a held-open stdin pipe for this child (see
-    ///   ``ChildProcessRunner/Stdin/heldOpen``), if it has one.
+    /// - Parameter closeStdin: closes this child's held-open stdin, if it has one.
     func register(_ pid: pid_t, closeStdin: (() -> Void)? = nil) {
-        lock.lock()
-        defer { lock.unlock() }
-        pruneDeadLocked()
-        activePids.insert(pid)
-        if let closeStdin { stdinClosers[pid] = closeStdin }
+        lock.withLock {
+            activePids.insert(pid)
+            stdinClosers[pid] = closeStdin
+        }
     }
 
     func unregister(_ pid: pid_t) {
-        lock.lock()
-        defer { lock.unlock() }
-        activePids.remove(pid)
-        stdinClosers[pid] = nil
+        lock.withLock {
+            activePids.remove(pid)
+            stdinClosers[pid] = nil
+        }
     }
 
     /// Closes every held-open child stdin: interactive children (`CMD bash`) see EOF and
     /// exit on their own, the equivalent of Ctrl-D, long before a stop grace period ends.
     func closeAllHeldStdin() {
-        lock.lock()
-        let closers = Array(stdinClosers.values)
-        stdinClosers = [:]
-        lock.unlock()
+        let closers = lock.withLock { () -> [() -> Void] in
+            defer { stdinClosers = [:] }
+            return Array(stdinClosers.values)
+        }
         closers.forEach { $0() }
     }
 
-    /// Checks whether a given PID is still running.
-    static func isProcessAlive(_ pid: pid_t) -> Bool {
-        guard pid > 0 else { return false }
-        var status: Int32 = 0
-        let waitResult = waitpid(pid, &status, WNOHANG)
-        if waitResult == pid {
-            return false
-        }
-        // Not our child (ECHILD) or still running: fall back to probing for existence.
-        if kill(pid, 0) == -1 && errno == ESRCH {
-            return false
-        }
-        return true
-    }
-
-    private func pruneDeadLocked() {
-        activePids = activePids.filter { Self.isProcessAlive($0) }
-        stdinClosers = stdinClosers.filter { activePids.contains($0.key) }
-    }
-
-    /// Prunes any completed processes and returns the list of currently alive PIDs.
-    func activeProcesses() -> [pid_t] {
-        lock.lock()
-        defer { lock.unlock() }
-        pruneDeadLocked()
-        return Array(activePids)
-    }
-
     func signalAll(_ sig: Int32) {
-        lock.lock()
-        pruneDeadLocked()
-        let pids = activePids
-        lock.unlock()
-        for pid in pids {
-            kill(pid, sig)
-        }
+        let pids = lock.withLock { activePids }
+        for pid in pids { kill(pid, sig) }
     }
 
-    /// Number of PIDs currently tracked, WITHOUT pruning dead ones. Lets tests detect
-    /// stale entries (which would be dangerous once the OS reuses the PID).
-    var trackedPidCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return activePids.count
-    }
-
-    func count() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        pruneDeadLocked()
-        return activePids.count
-    }
+    func count() -> Int { lock.withLock { activePids.count } }
 }

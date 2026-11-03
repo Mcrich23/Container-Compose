@@ -102,16 +102,15 @@ enum ChildProcessRunner {
             let stdoutHandle = stdoutPipe.fileHandleForReading
             let stderrHandle = stderrPipe.fileHandleForReading
 
-            stdoutHandle.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                if let string = String(data: data, encoding: .utf8) { onStdout(string) }
+            func stream(_ handle: FileHandle, to sink: @escaping @Sendable (String) -> Void) {
+                handle.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    guard !data.isEmpty, let string = String(data: data, encoding: .utf8) else { return }
+                    sink(string)
+                }
             }
-            stderrHandle.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                if let string = String(data: data, encoding: .utf8) { onStderr(string) }
-            }
+            stream(stdoutHandle, to: onStdout)
+            stream(stderrHandle, to: onStderr)
 
             process.terminationHandler = { proc in
                 stdoutHandle.readabilityHandler = nil

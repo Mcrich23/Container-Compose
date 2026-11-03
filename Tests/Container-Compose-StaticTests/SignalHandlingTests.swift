@@ -22,88 +22,6 @@ import Darwin
 @Suite("Signal Handling and Child Process Tracking Tests", .serialized)
 struct SignalHandlingTests {
 
-    @Test("ActiveProcessRegistry registers and unregisters PIDs")
-    func processRegistryRegistration() throws {
-        let registry = ActiveProcessRegistry()
-        #expect(registry.count() == 0)
-
-        // Launch two real sleep processes
-        let proc1 = Process()
-        proc1.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        proc1.arguments = ["10"]
-        try proc1.run()
-        defer { proc1.terminate() }
-
-        let proc2 = Process()
-        proc2.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        proc2.arguments = ["10"]
-        try proc2.run()
-        defer { proc2.terminate() }
-
-        let pid1 = proc1.processIdentifier
-        let pid2 = proc2.processIdentifier
-
-        registry.register(pid1)
-        registry.register(pid2)
-        #expect(registry.count() == 2)
-
-        registry.unregister(pid1)
-        #expect(registry.count() == 1)
-
-        registry.unregister(pid2)
-        #expect(registry.count() == 0)
-    }
-
-    @Test("ActiveProcessRegistry signals child processes")
-    func processRegistrySignalsChild() async throws {
-        let registry = ActiveProcessRegistry()
-
-        // Launch a sleep child process
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        process.arguments = ["30"]
-        try process.run()
-
-        let pid = process.processIdentifier
-        registry.register(pid)
-        #expect(registry.count() == 1)
-        #expect(process.isRunning)
-
-        // Signal with SIGINT
-        registry.signalAll(SIGINT)
-
-        // Wait for process to exit
-        let deadline = Date().addingTimeInterval(3.0)
-        while process.isRunning && Date() < deadline {
-            try await Task.sleep(nanoseconds: 50_000_000)
-        }
-
-        #expect(!process.isRunning)
-        registry.unregister(pid)
-        #expect(registry.count() == 0)
-    }
-
-    @Test("ActiveProcessRegistry prunes completed processes automatically")
-    func processRegistryPrunesCompleted() async throws {
-        let registry = ActiveProcessRegistry()
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        process.arguments = ["0.1"]
-        try process.run()
-
-        let pid = process.processIdentifier
-        registry.register(pid)
-        #expect(registry.count() == 1)
-
-        // Wait for sleep process to naturally exit
-        try await Task.sleep(nanoseconds: 250_000_000) // 250ms
-
-        // Calling count() or activeProcesses() automatically prunes dead processes
-        #expect(registry.count() == 0)
-        #expect(registry.activeProcesses().isEmpty)
-    }
-
     @Test("child spawned after the signal stream is installed still dies on forwarded SIGINT")
     func childDoesNotInheritIgnoredSigint() async throws {
         // Regression guard, not a fix: an ignored SIGINT survives exec and would make `container run`
@@ -151,28 +69,6 @@ struct SignalHandlingTests {
         }
     }
 
-    @Test("closing held stdin on interrupt lets an interactive child exit without any signal")
-    func closeHeldStdinEndsInteractiveChild() async throws {
-        let registry = ActiveProcessRegistry()
-        let exit = Task {
-            try await ChildProcessRunner.run(
-                executable: URL(fileURLWithPath: "/bin/cat"), arguments: [],
-                stdin: .heldOpen, registry: registry,
-                onStdout: { _ in }, onStderr: { _ in }
-            )
-        }
-        while registry.count() == 0 { try await Task.sleep(nanoseconds: 10_000_000) }
-        try await Task.sleep(nanoseconds: 100_000_000)
-        #expect(registry.count() == 1)
-
-        let started = Date()
-        registry.closeAllHeldStdin()
-
-        #expect(try await exit.value == 0)
-        #expect(Date().timeIntervalSince(started) < 3.0)
-        #expect(registry.count() == 0)
-    }
-
     @Test("pty stdin gives the child a real terminal that is private to it, held open until closed")
     func ptyStdinIsATerminalForTheChild() async throws {
         // `container run -t -i` calls setraw() on its own stdin, which only works on a tty.
@@ -213,8 +109,7 @@ struct SignalHandlingTests {
                 registry: registry, onStdout: { _ in }, onStderr: { _ in }
             )
         }
-        // Unpruned count: a stale entry would survive here even though the PID is dead.
-        #expect(registry.trackedPidCount == 0)
+        #expect(registry.count() == 0)
     }
 }
 

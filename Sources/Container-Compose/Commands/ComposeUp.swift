@@ -27,7 +27,6 @@ import ContainerAPIClient
 import ContainerXPC
 import ContainerizationExtras
 import Foundation
-import Darwin
 @preconcurrency import Rainbow
 import Yams
 
@@ -71,6 +70,11 @@ private actor ForegroundRunHandle {
 
     /// The run subprocess's exit code, or `nil` while it is still running.
     func exitCodeIfCompleted() -> Int32? { exitCode }
+}
+
+struct ComposeContainerStopTarget: Sendable {
+    let containerName: String
+    let timeoutInSeconds: Int32
 }
 
 public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
