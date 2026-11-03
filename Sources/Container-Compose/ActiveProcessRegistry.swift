@@ -75,11 +75,8 @@ final class ActiveProcessRegistry: @unchecked Sendable {
         if waitResult == pid {
             return false
         }
-        if waitResult == -1 && errno == ECHILD {
-            if kill(pid, 0) == -1 && errno == ESRCH {
-                return false
-            }
-        } else if kill(pid, 0) == -1 && errno == ESRCH {
+        // Not our child (ECHILD) or still running: fall back to probing for existence.
+        if kill(pid, 0) == -1 && errno == ESRCH {
             return false
         }
         return true
@@ -121,14 +118,5 @@ final class ActiveProcessRegistry: @unchecked Sendable {
         defer { lock.unlock() }
         pruneDeadLocked()
         return activePids.count
-    }
-
-    func waitUntilEmpty(timeoutSeconds: Double) async {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while Date() < deadline {
-            if count() == 0 { return }
-            try? await Task.sleep(nanoseconds: 50_000_000)
-        }
-        signalAll(SIGKILL)
     }
 }

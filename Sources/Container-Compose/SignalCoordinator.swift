@@ -59,12 +59,6 @@ actor SignalCoordinator {
         self.containerTargets = targets
     }
 
-    func addStopTarget(_ target: ComposeContainerStopTarget) {
-        if !containerTargets.contains(where: { $0.containerName == target.containerName }) {
-            containerTargets.append(target)
-        }
-    }
-
     func ensureStarted() {
         guard !isStarted else { return }
         isStarted = true

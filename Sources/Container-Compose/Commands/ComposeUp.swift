@@ -265,14 +265,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             await Self.waitUntilAllContainersStopped(containerNames)
             // A Ctrl-C/SIGTERM shutdown (which itself stops the containers) owns the exit.
             await SignalCoordinator.shared.exitNormally(0, message: "\nAll containers have stopped.")
-            while true { try? await Task.sleep(nanoseconds: 3_600_000_000_000) }
-        } else {
-            // Idle wait for empty targets (e.g. ForegroundWaitCpuTests)
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_600_000_000_000)
-            }
-            Foundation.exit(0)
         }
+        // Either no containers to watch (e.g. ForegroundWaitCpuTests) or a shutdown owns the
+        // exit: idle until it terminates the process.
+        while true { try? await Task.sleep(nanoseconds: 3_600_000_000_000) }
     }
 
     /// An `AsyncStream` of the given signals, delivered via `DispatchSource` so
@@ -1104,12 +1100,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if service.stdin_open == true {
             runCommandArgs.append("-i")  // --interactive
         }
-        if service.tty == true {
-            // Note: Apple Container's `--tty` (`-t`) flag requires an attached host terminal on stdin
-            // and sets the host terminal discipline to raw mode (clearing ISIG, which suppresses
-            // Ctrl-C signal delivery to Container-Compose). Because `up` streams container output via pipes,
-            // omit `-t` to preserve host terminal signal discipline.
-        }
+        // `tty` is deliberately not forwarded as `-t`: Apple Container's `--tty` needs an attached
+        // host terminal on stdin and puts it in raw mode (clearing ISIG), which suppresses Ctrl-C
+        // delivery to Container-Compose. `up` streams output via pipes, so omit it.
 
         // Translate `entrypoint` + `command` into the right shape for
         // `container run`. Both can be set together — they are NOT mutually

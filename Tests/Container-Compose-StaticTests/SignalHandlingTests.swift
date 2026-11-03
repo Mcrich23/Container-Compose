@@ -83,29 +83,6 @@ struct SignalHandlingTests {
         #expect(registry.count() == 0)
     }
 
-    @Test("ActiveProcessRegistry waitUntilEmpty waits and cleans up")
-    func processRegistryWaitUntilEmpty() async throws {
-        let registry = ActiveProcessRegistry()
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        process.arguments = ["30"]
-        try process.run()
-
-        let pid = process.processIdentifier
-        registry.register(pid)
-
-        // Signal with SIGTERM and wait until empty
-        registry.signalAll(SIGTERM)
-        process.terminationHandler = { proc in
-            registry.unregister(proc.processIdentifier)
-        }
-
-        await registry.waitUntilEmpty(timeoutSeconds: 3.0)
-        #expect(registry.count() == 0)
-        #expect(!process.isRunning)
-    }
-
     @Test("ActiveProcessRegistry prunes completed processes automatically")
     func processRegistryPrunesCompleted() async throws {
         let registry = ActiveProcessRegistry()
