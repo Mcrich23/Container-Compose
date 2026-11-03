@@ -191,6 +191,37 @@ struct SignalHandlingTests {
         #expect(registry.count() == 0)
     }
 
+    @Test("pty stdin gives the child a real terminal that is private to it, held open until closed")
+    func ptyStdinIsATerminalForTheChild() async throws {
+        // `container run -t -i` calls setraw() on its own stdin, which only works on a tty.
+        // A pty keeps that raw mode off the host terminal, so Ctrl-C still reaches us.
+        let registry = ActiveProcessRegistry()
+        let output = LockedBuffer()
+        let exit = Task {
+            try await ChildProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "test -t 0 && echo is-a-tty; cat"],
+                stdin: .pty, registry: registry,
+                onStdout: { output.append($0) }, onStderr: { _ in }
+            )
+        }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        #expect(output.value.contains("is-a-tty"))
+        #expect(registry.count() == 1, "a pty stdin stays open like heldOpen")
+
+        registry.closeAllHeldStdin()  // EOF-equivalent (hangup) ends the child
+        _ = try await exit.value
+        #expect(registry.count() == 0)
+    }
+
+    @Test("stdin mode follows stdin_open and tty")
+    func stdinModeMapping() {
+        #expect(ChildProcessRunner.Stdin(stdinOpen: nil, tty: nil) == .null)
+        #expect(ChildProcessRunner.Stdin(stdinOpen: false, tty: true) == .null)
+        #expect(ChildProcessRunner.Stdin(stdinOpen: true, tty: nil) == .heldOpen)
+        #expect(ChildProcessRunner.Stdin(stdinOpen: true, tty: true) == .pty)
+    }
+
     @Test("fast-exiting children never leave stale PIDs tracked (PID-reuse safety)")
     func fastChildrenLeaveNoStalePids() async throws {
         let registry = ActiveProcessRegistry()
@@ -203,11 +234,11 @@ struct SignalHandlingTests {
         // Unpruned count: a stale entry would survive here even though the PID is dead.
         #expect(registry.trackedPidCount == 0)
     }
+}
 
-    @Test("only services with stdin_open get a held-open stdin")
-    func stdinModeFollowsStdinOpen() {
-        #expect(ChildProcessRunner.Stdin(stdinOpen: true) == .heldOpen)
-        #expect(ChildProcessRunner.Stdin(stdinOpen: false) == .null)
-        #expect(ChildProcessRunner.Stdin(stdinOpen: nil) == .null)
-    }
+private final class LockedBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var text = ""
+    func append(_ s: String) { lock.lock(); text += s; lock.unlock() }
+    var value: String { lock.lock(); defer { lock.unlock() }; return text }
 }

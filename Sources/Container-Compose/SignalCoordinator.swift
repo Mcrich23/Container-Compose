@@ -30,9 +30,19 @@ actor SignalCoordinator {
     private let graceTimeoutSeconds: Double
     private let progressInterval: Double
 
-    private var isStarted = false
-    private var isStopping = false
-    private var isForcing = false
+    /// Lifecycle of interrupt handling; only ever moves forward, except `listening` ⇄ `idle`.
+    private enum Phase {
+        /// Not listening for signals.
+        case idle
+        /// Listening; no interrupt received yet.
+        case listening
+        /// First interrupt received: graceful stop and verification in flight.
+        case stopping
+        /// Second interrupt received: SIGKILLing everything.
+        case forcing
+    }
+
+    private var phase: Phase = .idle
     private var firstSignal: Int32 = SIGINT
     private var containerTargets: [ComposeContainerStopTarget] = []
     private var signalTask: Task<Void, Never>?
@@ -60,8 +70,8 @@ actor SignalCoordinator {
     }
 
     func ensureStarted() {
-        guard !isStarted else { return }
-        isStarted = true
+        guard phase == .idle else { return }
+        phase = .listening
         let signals = signalSource([SIGINT, SIGTERM])
         signalTask = Task {
             for await sig in signals {
@@ -76,69 +86,78 @@ actor SignalCoordinator {
     /// shutdown owns the exit (and its exit code). Returns whether it exited.
     @discardableResult
     func exitNormally(_ code: Int32, message: String? = nil) -> Bool {
-        guard !isStopping else { return false }
+        guard phase == .idle || phase == .listening else { return false }
         if let message { output(message) }
         exit(code)
         return true
     }
 
     func stopMonitoring() {
+        // A shutdown already in flight keeps running and keeps listening for the force signal.
+        guard phase == .listening else { return }
         signalTask?.cancel()
         signalTask = nil
-        isStarted = false
+        phase = .idle
     }
 
     func handleSignal(_ sig: Int32) async {
-        // Cancelling the listener task doesn't recall a signal already delivered to it.
-        guard isStarted else { return }
-        if !isStopping {
-            isStopping = true
-            firstSignal = sig
-            registry.beginShutdown()
-            let signalName = sig == SIGTERM ? "SIGTERM" : "SIGINT (Ctrl+C)"
-            output("\n⚠️  Received \(signalName). Initiating graceful shutdown...")
-            output("⚠️  Send another Ctrl+C to force kill immediately (SIGKILL).")
-
-            // Step 1: Forward signal to tracked child processes immediately
-            let alivePids = registry.activeProcesses()
-            if !alivePids.isEmpty {
-                output("Stopping \(alivePids.count) active child process\(alivePids.count == 1 ? "" : "es")...")
-            }
-            registry.closeAllHeldStdin()
-            registry.signalAll(SIGINT)
-
-            let targets = containerTargets
-
-            // Step 2: Concurrently request graceful container stop via daemon
-            if !targets.isEmpty {
-                output("Stopping containers...")
-                let heartbeat = startProgressHeartbeat(for: targets)
-                await backend.stop(targets)
-                heartbeat.cancel()
-            }
-
-            // Step 3: Verify and enforce that all child processes and containers are stopped
-            guard !isForcing else { return }
-            output("Verifying all containers and child processes have stopped...")
-            await verifyAndEnforceStopped(targets.map(\.containerName))
-
-            guard !isForcing else { return }
-            output("Shutdown complete.")
-            exit(128 + sig)
-        } else {
-            guard !isForcing else { return }
-            isForcing = true
-            output("\n🛑 Second interrupt received! Forcing immediate stop with SIGKILL...")
-
-            // Step 1: Force kill all child processes immediately
-            registry.signalAll(SIGKILL)
-
-            // Step 2: Force kill all containers
-            await backend.kill(containerTargets.map(\.containerName))
-
-            output("Forced stop complete.")
-            exit(128 + firstSignal)
+        // Cancelling the listener task doesn't recall a signal already delivered to it,
+        // hence `.idle` is ignored; `.forcing` has nothing left to escalate to.
+        switch phase {
+        case .idle, .forcing: return
+        case .listening: await gracefulShutdown(sig)
+        case .stopping: await forceStop()
         }
+    }
+
+    private func gracefulShutdown(_ sig: Int32) async {
+        phase = .stopping
+        firstSignal = sig
+        registry.beginShutdown()
+        let signalName = sig == SIGTERM ? "SIGTERM" : "SIGINT (Ctrl+C)"
+        output("\n⚠️  Received \(signalName). Initiating graceful shutdown...")
+        output("⚠️  Send another Ctrl+C to force kill immediately (SIGKILL).")
+
+        // Step 1: Forward signal to tracked child processes immediately
+        let alivePids = registry.activeProcesses()
+        if !alivePids.isEmpty {
+            output("Stopping \(alivePids.count) active child process\(alivePids.count == 1 ? "" : "es")...")
+        }
+        registry.closeAllHeldStdin()
+        registry.signalAll(SIGINT)
+
+        let targets = containerTargets
+
+        // Step 2: Concurrently request graceful container stop via daemon
+        if !targets.isEmpty {
+            output("Stopping containers...")
+            let heartbeat = startProgressHeartbeat(for: targets)
+            await backend.stop(targets)
+            heartbeat.cancel()
+        }
+
+        // Step 3: Verify and enforce that all child processes and containers are stopped
+        guard phase == .stopping else { return }
+        output("Verifying all containers and child processes have stopped...")
+        await verifyAndEnforceStopped(targets.map(\.containerName))
+
+        guard phase == .stopping else { return }
+        output("Shutdown complete.")
+        exit(128 + sig)
+    }
+
+    private func forceStop() async {
+        phase = .forcing
+        output("\n🛑 Second interrupt received! Forcing immediate stop with SIGKILL...")
+
+        // Step 1: Force kill all child processes immediately
+        registry.signalAll(SIGKILL)
+
+        // Step 2: Force kill all containers
+        await backend.kill(containerTargets.map(\.containerName))
+
+        output("Forced stop complete.")
+        exit(128 + firstSignal)
     }
 
     /// Prints "Still stopping ..." every `progressInterval` seconds until cancelled.

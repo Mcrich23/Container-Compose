@@ -257,9 +257,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     func runForegroundUntilStopped(containerTargets: [ComposeContainerStopTarget]) async -> Never {
         let containerNames = containerTargets.map(\.containerName)
 
-        await SignalCoordinator.shared.setStopTargets(containerTargets)
-        await SignalCoordinator.shared.ensureStarted()
-
         // Exit once the containers stop by themselves or are stopped externally.
         if !containerNames.isEmpty {
             await Self.waitUntilAllContainersStopped(containerNames)
@@ -1096,13 +1093,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Add interactive flag
+        // Add interactive and TTY flags. With `-t -i`, `container run` puts its stdin in raw mode;
+        // `streamCommand` gives it a private pty (see `ChildProcessRunner.Stdin.pty`) so the host
+        // terminal stays untouched and Ctrl-C keeps reaching us.
         if service.stdin_open == true {
             runCommandArgs.append("-i")  // --interactive
         }
-        // `tty` is deliberately not forwarded as `-t`: Apple Container's `--tty` needs an attached
-        // host terminal on stdin and puts it in raw mode (clearing ISIG), which suppresses Ctrl-C
-        // delivery to Container-Compose. `up` streams output via pipes, so omit it.
+        if service.tty == true {
+            runCommandArgs.append("-t")  // --tty
+        }
 
         // Translate `entrypoint` + `command` into the right shape for
         // `container run`. Both can be set together — they are NOT mutually
@@ -1139,7 +1138,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\(serviceName): \(output)".applyingColor(selectedColor))
         }
 
-        let keepStdinOpen = service.stdin_open == true
+        let stdinMode = ChildProcessRunner.Stdin(stdinOpen: service.stdin_open, tty: service.tty)
         var foregroundRunHandle: ForegroundRunHandle? = nil
         if detach {
             print("\nStarting service: \(serviceName)")
@@ -1148,7 +1147,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             let exitCode = try await streamCommand(
                 "container",
                 args: ["run"] + runCommandArgs,
-                keepStdinOpen: keepStdinOpen,
+                stdin: stdinMode,
                 onStdout: handleOutput,
                 onStderr: handleOutput
             )
@@ -1176,7 +1175,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     let exitCode = try await streamCommand(
                         "container",
                         args: ["run"] + runCommandArgs,
-                        keepStdinOpen: keepStdinOpen,
+                        stdin: stdinMode,
                         onStdout: handleOutput,
                         onStderr: handleOutput
                     )
@@ -1469,7 +1468,7 @@ extension ComposeUp {
     func streamCommand(
         _ command: String,
         args: [String] = [],
-        keepStdinOpen: Bool = false,
+        stdin: ChildProcessRunner.Stdin = .null,
         onStdout: @escaping (@Sendable (String) -> Void),
         onStderr: @escaping (@Sendable (String) -> Void)
     ) async throws -> Int32 {
@@ -1480,7 +1479,7 @@ extension ComposeUp {
             arguments: [command] + args,
             workingDirectory: URL(fileURLWithPath: cwd),
             environment: childEnvironment,
-            stdin: ChildProcessRunner.Stdin(stdinOpen: keepStdinOpen),
+            stdin: stdin,
             onStdout: onStdout,
             onStderr: onStderr
         )

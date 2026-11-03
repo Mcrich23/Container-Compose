@@ -29,8 +29,22 @@ enum ChildProcessRunner {
         /// are never shared with the child.
         case heldOpen
 
-        /// `stdin_open: true` services keep stdin open; everything else gets EOF.
-        init(stdinOpen: Bool?) { self = stdinOpen == true ? .heldOpen : .null }
+        /// Like `heldOpen`, but the child's stdin is the slave side of a private pty, so the
+        /// child sees a real terminal. `container run -t -i` puts its stdin in raw mode, which
+        /// requires a tty; doing that on this pty (never the host terminal) keeps the host's
+        /// ISIG intact so Ctrl-C still reaches container-compose.
+        case pty
+
+        /// `stdin_open: true` services keep stdin open (on a pty when `tty: true`); everything
+        /// else gets EOF. `tty` without `stdin_open` needs no stdin: `container run -t` alone
+        /// never touches terminal modes.
+        init(stdinOpen: Bool?, tty: Bool?) {
+            switch (stdinOpen == true, tty == true) {
+            case (false, _): self = .null
+            case (true, false): self = .heldOpen
+            case (true, true): self = .pty
+            }
+        }
     }
 
     /// Runs `executable`, streams stdout/stderr through the closures, and returns
@@ -58,14 +72,30 @@ enum ChildProcessRunner {
             process.currentDirectoryURL = workingDirectory
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
-            let stdinPipe: Pipe?
+            // `heldWriter` keeps the child's stdin open until closed; `childEnd` is our copy of
+            // the end the child inherits, which we must close after spawning or it leaks.
+            let heldWriter: FileHandle?
+            let childEnd: FileHandle?
             switch stdin {
             case .null:
-                stdinPipe = nil
+                heldWriter = nil
+                childEnd = nil
                 process.standardInput = FileHandle.nullDevice
             case .heldOpen:
-                stdinPipe = Pipe()
-                process.standardInput = stdinPipe
+                let pipe = Pipe()
+                heldWriter = pipe.fileHandleForWriting
+                childEnd = pipe.fileHandleForReading
+                process.standardInput = pipe
+            case .pty:
+                var master: Int32 = -1
+                var slave: Int32 = -1
+                guard openpty(&master, &slave, nil, nil, nil) == 0 else {
+                    continuation.resume(throwing: POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO))
+                    return
+                }
+                heldWriter = FileHandle(fileDescriptor: master, closeOnDealloc: true)
+                childEnd = FileHandle(fileDescriptor: slave, closeOnDealloc: true)
+                process.standardInput = childEnd
             }
             if let environment { process.environment = environment }
 
@@ -86,7 +116,7 @@ enum ChildProcessRunner {
             process.terminationHandler = { proc in
                 stdoutHandle.readabilityHandler = nil
                 stderrHandle.readabilityHandler = nil
-                try? stdinPipe?.fileHandleForWriting.close()  // no-op if already closed
+                try? heldWriter?.close()  // no-op if already closed
                 registry.unregister(proc.processIdentifier)
                 continuation.resume(returning: proc.terminationStatus)
             }
@@ -94,9 +124,9 @@ enum ChildProcessRunner {
             do {
                 try process.run()
                 // The child owns the read end now; keeping ours open leaks one fd per child.
-                try? stdinPipe?.fileHandleForReading.close()
-                registry.register(process.processIdentifier, closeStdin: stdinPipe.map { pipe in
-                    { try? pipe.fileHandleForWriting.close() }
+                try? childEnd?.close()
+                registry.register(process.processIdentifier, closeStdin: heldWriter.map { writer in
+                    { try? writer.close() }
                 })
                 // Shutdown began between the check above and the spawn: reap it now.
                 if registry.isShuttingDown { kill(process.processIdentifier, SIGKILL) }
@@ -106,8 +136,8 @@ enum ChildProcessRunner {
             } catch {
                 stdoutHandle.readabilityHandler = nil
                 stderrHandle.readabilityHandler = nil
-                try? stdinPipe?.fileHandleForReading.close()
-                try? stdinPipe?.fileHandleForWriting.close()
+                try? childEnd?.close()
+                try? heldWriter?.close()
                 continuation.resume(throwing: error)
             }
         }

@@ -37,38 +37,27 @@ struct ComposeContainerStopTarget: Sendable {
 /// ContainerBackend backed by the Apple Container XPC daemon.
 struct LiveContainerBackend: ContainerBackend {
     func stop(_ targets: [ComposeContainerStopTarget]) async {
-        let client = ContainerClient()
-        await withTaskGroup(of: Void.self) { group in
-            for target in targets {
-                group.addTask {
-                    guard let container = try? await client.get(id: target.containerName) else { return }
-                    print("Stopping container: \(target.containerName)")
-                    fflush(stdout)
-                    do {
-                        try await client.stop(
-                            id: container.id,
-                            opts: ComposeStopOptions.resolve(timeoutInSeconds: target.timeoutInSeconds)
-                        )
-                    } catch {
-                        print("Error stopping container \(target.containerName): \(error)")
-                        fflush(stdout)
-                    }
-                }
+        let timeouts = Dictionary(targets.map { ($0.containerName, $0.timeoutInSeconds) }, uniquingKeysWith: { first, _ in first })
+        await forEachExistingContainer(Array(timeouts.keys)) { client, name, id in
+            print("Stopping container: \(name)")
+            fflush(stdout)
+            do {
+                try await client.stop(
+                    id: id,
+                    opts: ComposeStopOptions.resolve(timeoutInSeconds: timeouts[name] ?? 0)
+                )
+            } catch {
+                print("Error stopping container \(name): \(error)")
+                fflush(stdout)
             }
         }
     }
 
     func kill(_ names: [String]) async {
-        let client = ContainerClient()
-        await withTaskGroup(of: Void.self) { group in
-            for name in names {
-                group.addTask {
-                    guard let container = try? await client.get(id: name) else { return }
-                    print("Killing container: \(name)")
-                    fflush(stdout)
-                    try? await client.kill(id: container.id, signal: "SIGKILL")
-                }
-            }
+        await forEachExistingContainer(names) { client, name, id in
+            print("Killing container: \(name)")
+            fflush(stdout)
+            try? await client.kill(id: id, signal: "SIGKILL")
         }
     }
 
@@ -81,5 +70,21 @@ struct LiveContainerBackend: ContainerBackend {
             }
         }
         return running
+    }
+
+    /// Runs `body` concurrently for each named container that exists, skipping the rest.
+    private func forEachExistingContainer(
+        _ names: [String],
+        _ body: @escaping @Sendable (ContainerClient, _ name: String, _ id: String) async -> Void
+    ) async {
+        let client = ContainerClient()
+        await withTaskGroup(of: Void.self) { group in
+            for name in names {
+                group.addTask {
+                    guard let container = try? await client.get(id: name) else { return }
+                    await body(client, name, container.id)
+                }
+            }
+        }
     }
 }
