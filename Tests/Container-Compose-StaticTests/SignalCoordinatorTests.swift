@@ -418,3 +418,25 @@ struct SignalCoordinatorTests {
         #expect(await h.recorder.wait { h.recorder.exitCodes == [130] })
     }
 }
+
+@Suite("SignalCoordinator default signal source", .serialized)
+struct SignalCoordinatorDefaultSourceTests {
+    @Test("delivers SIGTERM to the shutdown handler even when it was set to SIG_IGN")
+    func defaultSourceReceivesIgnoredSignal() async throws {
+        signal(SIGTERM, SIG_IGN)
+        let recorder = Recorder()
+        let coordinator = SignalCoordinator(
+            backend: FakeBackend(recorder: recorder, running: []),
+            registry: ActiveProcessRegistry(),
+            output: { recorder.line($0) },
+            exit: { recorder.exit($0) },
+            graceTimeoutSeconds: 0.5,
+            progressInterval: 60
+        )
+        await coordinator.ensureStarted()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { kill(getpid(), SIGTERM) }
+
+        #expect(await recorder.wait { recorder.exitCodes == [128 + SIGTERM] })
+        await coordinator.stopMonitoring()
+    }
+}

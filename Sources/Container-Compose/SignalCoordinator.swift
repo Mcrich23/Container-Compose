@@ -50,7 +50,7 @@ actor SignalCoordinator {
     init(
         backend: ContainerBackend = LiveContainerBackend(),
         registry: ActiveProcessRegistry = .shared,
-        signalSource: @escaping @Sendable ([Int32]) -> AsyncStream<Int32> = { ComposeUp.makeSignalStream($0) },
+        signalSource: @escaping @Sendable ([Int32]) -> AsyncStream<Int32> = { SignalCoordinator.makeSignalStream($0) },
         output: @escaping @Sendable (String) -> Void = { print($0); fflush(stdout) },
         exit: @escaping @Sendable (Int32) -> Void = { Foundation.exit($0) },
         graceTimeoutSeconds: Double = 5.0,
@@ -63,6 +63,23 @@ actor SignalCoordinator {
         self.exit = exit
         self.graceTimeoutSeconds = graceTimeoutSeconds
         self.progressInterval = progressInterval
+    }
+
+    /// An `AsyncStream` of the given signals, delivered via `DispatchSource` so
+    /// they're received even after the disposition has been set to `SIG_IGN`.
+    private static func makeSignalStream(_ signals: [Int32]) -> AsyncStream<Int32> {
+        AsyncStream { continuation in
+            let queue = DispatchQueue(label: "container-compose.signals")
+            let sources: [DispatchSourceSignal] = signals.map { sig in
+                // Ignore the default action so the DispatchSource alone handles it.
+                signal(sig, SIG_IGN)
+                let source = DispatchSource.makeSignalSource(signal: sig, queue: queue)
+                source.setEventHandler { continuation.yield(sig) }
+                source.resume()
+                return source
+            }
+            continuation.onTermination = { _ in sources.forEach { $0.cancel() } }
+        }
     }
 
     func setStopTargets(_ targets: [ComposeContainerStopTarget]) {

@@ -104,30 +104,12 @@ struct SignalHandlingTests {
         #expect(registry.activeProcesses().isEmpty)
     }
 
-    @Test("makeSignalStream yields signal despite SIG_IGN")
-    func signalStreamYieldsSignal() async throws {
-        // Explicitly set SIGUSR1 to SIG_IGN beforehand
-        signal(SIGUSR1, SIG_IGN)
-
-        let stream = ComposeUp.makeSignalStream([SIGUSR1])
-        var iterator = stream.makeAsyncIterator()
-
-        // Send SIGUSR1 to self
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
-            kill(getpid(), SIGUSR1)
-        }
-
-        let received = await iterator.next()
-        #expect(received == SIGUSR1)
-    }
-
     @Test("child spawned after the signal stream is installed still dies on forwarded SIGINT")
     func childDoesNotInheritIgnoredSigint() async throws {
         // Regression guard, not a fix: an ignored SIGINT survives exec and would make `container run`
         // immune to the SIGINT we forward. Foundation's Process currently resets dispositions for
         // children (verified empirically); this fails if that ever stops being true.
-        let stream = ComposeUp.makeSignalStream([SIGINT])
-        _ = stream.makeAsyncIterator()
+        signal(SIGINT, SIG_IGN)
 
         let registry = ActiveProcessRegistry()
         let started = Date()

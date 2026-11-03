@@ -268,23 +268,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         while true { try? await Task.sleep(nanoseconds: 3_600_000_000_000) }
     }
 
-    /// An `AsyncStream` of the given signals, delivered via `DispatchSource` so
-    /// they're received even after the disposition has been set to `SIG_IGN`.
-    static func makeSignalStream(_ signals: [Int32]) -> AsyncStream<Int32> {
-        AsyncStream { continuation in
-            let queue = DispatchQueue(label: "container-compose.signals")
-            let sources: [DispatchSourceSignal] = signals.map { sig in
-                // Ignore the default action so the DispatchSource alone handles it.
-                signal(sig, SIG_IGN)
-                let source = DispatchSource.makeSignalSource(signal: sig, queue: queue)
-                source.setEventHandler { continuation.yield(sig) }
-                source.resume()
-                return source
-            }
-            continuation.onTermination = { _ in sources.forEach { $0.cancel() } }
-        }
-    }
-
     /// Polls until every named container has been observed running at least once
     /// and then none remain running (stopped naturally or via `down`). Requiring
     /// "seen running first" avoids returning before the containers have started.
