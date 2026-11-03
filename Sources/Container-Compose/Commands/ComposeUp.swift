@@ -83,6 +83,7 @@ final class ActiveProcessRegistry: @unchecked Sendable {
     func register(_ pid: pid_t) {
         lock.lock()
         defer { lock.unlock() }
+        pruneDeadLocked()
         activePids.insert(pid)
     }
 
@@ -92,8 +93,39 @@ final class ActiveProcessRegistry: @unchecked Sendable {
         activePids.remove(pid)
     }
 
+    /// Checks whether a given PID is still running.
+    static func isProcessAlive(_ pid: pid_t) -> Bool {
+        guard pid > 0 else { return false }
+        var status: Int32 = 0
+        let waitResult = waitpid(pid, &status, WNOHANG)
+        if waitResult == pid {
+            return false
+        }
+        if waitResult == -1 && errno == ECHILD {
+            if kill(pid, 0) == -1 && errno == ESRCH {
+                return false
+            }
+        } else if kill(pid, 0) == -1 && errno == ESRCH {
+            return false
+        }
+        return true
+    }
+
+    private func pruneDeadLocked() {
+        activePids = activePids.filter { Self.isProcessAlive($0) }
+    }
+
+    /// Prunes any completed processes and returns the list of currently alive PIDs.
+    func activeProcesses() -> [pid_t] {
+        lock.lock()
+        defer { lock.unlock() }
+        pruneDeadLocked()
+        return Array(activePids)
+    }
+
     func signalAll(_ sig: Int32) {
         lock.lock()
+        pruneDeadLocked()
         let pids = activePids
         lock.unlock()
         for pid in pids {
@@ -104,6 +136,7 @@ final class ActiveProcessRegistry: @unchecked Sendable {
     func count() -> Int {
         lock.lock()
         defer { lock.unlock() }
+        pruneDeadLocked()
         return activePids.count
     }
 
@@ -157,27 +190,41 @@ actor SignalCoordinator {
     func handleSignal(_ sig: Int32) async {
         if !isStopping {
             isStopping = true
-            print("\nGracefully stopping... (press Ctrl+C again to force)")
+            let signalName = sig == SIGTERM ? "SIGTERM" : "SIGINT (Ctrl+C)"
+            print("\n⚠️  Received \(signalName). Initiating graceful shutdown...")
+            print("⚠️  Send another Ctrl+C to force kill immediately (SIGKILL).")
             fflush(stdout)
 
             // Step 1: Forward signal to tracked child processes immediately
-            ActiveProcessRegistry.shared.signalAll(SIGINT)
+            let alivePids = ActiveProcessRegistry.shared.activeProcesses()
+            if !alivePids.isEmpty {
+                print("Stopping \(alivePids.count) active child process\(alivePids.count == 1 ? "" : "es")...")
+                fflush(stdout)
+                ActiveProcessRegistry.shared.signalAll(SIGINT)
+            }
 
             let targets = containerTargets
 
             // Step 2: Concurrently request graceful container stop via daemon
-            await ComposeUp.stopContainers(targets)
+            if !targets.isEmpty {
+                print("Stopping containers...")
+                fflush(stdout)
+                await ComposeUp.stopContainers(targets)
+            }
 
             // Step 3: Verify and enforce that all child processes and containers are stopped
+            print("Verifying all containers and child processes have stopped...")
+            fflush(stdout)
             await ComposeUp.verifyAndEnforceStopped(
                 targets.map(\.containerName),
                 graceTimeoutSeconds: 5.0
             )
 
+            print("Shutdown complete.")
             fflush(stdout)
             Foundation.exit(130)
         } else {
-            print("\nForcing stop.")
+            print("\n🛑 Second interrupt received! Forcing immediate stop with SIGKILL...")
             fflush(stdout)
 
             // Step 1: Force kill all child processes immediately
@@ -186,6 +233,7 @@ actor SignalCoordinator {
             // Step 2: Force kill all containers
             await ComposeUp.killContainers(containerTargets.map(\.containerName))
 
+            print("Forced stop complete.")
             fflush(stdout)
             Foundation.exit(130)
         }

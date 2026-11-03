@@ -23,18 +23,34 @@ import Darwin
 struct SignalHandlingTests {
 
     @Test("ActiveProcessRegistry registers and unregisters PIDs")
-    func processRegistryRegistration() {
+    func processRegistryRegistration() throws {
         let registry = ActiveProcessRegistry()
         #expect(registry.count() == 0)
 
-        registry.register(12345)
-        registry.register(67890)
+        // Launch two real sleep processes
+        let proc1 = Process()
+        proc1.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        proc1.arguments = ["10"]
+        try proc1.run()
+        defer { proc1.terminate() }
+
+        let proc2 = Process()
+        proc2.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        proc2.arguments = ["10"]
+        try proc2.run()
+        defer { proc2.terminate() }
+
+        let pid1 = proc1.processIdentifier
+        let pid2 = proc2.processIdentifier
+
+        registry.register(pid1)
+        registry.register(pid2)
         #expect(registry.count() == 2)
 
-        registry.unregister(12345)
+        registry.unregister(pid1)
         #expect(registry.count() == 1)
 
-        registry.unregister(67890)
+        registry.unregister(pid2)
         #expect(registry.count() == 0)
     }
 
@@ -90,20 +106,41 @@ struct SignalHandlingTests {
         #expect(!process.isRunning)
     }
 
+    @Test("ActiveProcessRegistry prunes completed processes automatically")
+    func processRegistryPrunesCompleted() async throws {
+        let registry = ActiveProcessRegistry()
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["0.1"]
+        try process.run()
+
+        let pid = process.processIdentifier
+        registry.register(pid)
+        #expect(registry.count() == 1)
+
+        // Wait for sleep process to naturally exit
+        try await Task.sleep(nanoseconds: 250_000_000) // 250ms
+
+        // Calling count() or activeProcesses() automatically prunes dead processes
+        #expect(registry.count() == 0)
+        #expect(registry.activeProcesses().isEmpty)
+    }
+
     @Test("makeSignalStream yields signal despite SIG_IGN")
     func signalStreamYieldsSignal() async throws {
-        // Explicitly set SIGINT to SIG_IGN beforehand
-        signal(SIGINT, SIG_IGN)
+        // Explicitly set SIGUSR1 to SIG_IGN beforehand
+        signal(SIGUSR1, SIG_IGN)
 
-        let stream = ComposeUp.makeSignalStream([SIGINT])
+        let stream = ComposeUp.makeSignalStream([SIGUSR1])
         var iterator = stream.makeAsyncIterator()
 
-        // Send SIGINT to self
+        // Send SIGUSR1 to self
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
-            kill(getpid(), SIGINT)
+            kill(getpid(), SIGUSR1)
         }
 
         let received = await iterator.next()
-        #expect(received == SIGINT)
+        #expect(received == SIGUSR1)
     }
 }
