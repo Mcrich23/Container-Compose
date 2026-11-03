@@ -143,4 +143,94 @@ struct SignalHandlingTests {
         let received = await iterator.next()
         #expect(received == SIGUSR1)
     }
+
+    @Test("child spawned after the signal stream is installed still dies on forwarded SIGINT")
+    func childDoesNotInheritIgnoredSigint() async throws {
+        // Regression guard, not a fix: an ignored SIGINT survives exec and would make `container run`
+        // immune to the SIGINT we forward. Foundation's Process currently resets dispositions for
+        // children (verified empirically); this fails if that ever stops being true.
+        let stream = ComposeUp.makeSignalStream([SIGINT])
+        _ = stream.makeAsyncIterator()
+
+        let registry = ActiveProcessRegistry()
+        let started = Date()
+        let exit = Task {
+            try await ChildProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/sleep"),
+                arguments: ["30"],
+                registry: registry,
+                onStdout: { _ in }, onStderr: { _ in }
+            )
+        }
+        while registry.count() == 0 { try await Task.sleep(nanoseconds: 10_000_000) }
+        registry.signalAll(SIGINT)
+        _ = try await exit.value
+        #expect(Date().timeIntervalSince(started) < 2.0)
+        #expect(registry.count() == 0)
+    }
+
+    @Test("child with held-open stdin does not see EOF; null stdin does")
+    func heldOpenStdinKeepsInteractiveChildAlive() async throws {
+        // `cat` exits immediately on EOF. A service with `stdin_open: true` (e.g. CMD bash)
+        // must stay alive like under `docker compose up`, so stdin has to stay open.
+        for (mode, shouldStayAlive) in [(ChildProcessRunner.Stdin.heldOpen, true), (.null, false)] {
+            let registry = ActiveProcessRegistry()
+            let exit = Task {
+                try await ChildProcessRunner.run(
+                    executable: URL(fileURLWithPath: "/bin/cat"),
+                    arguments: [],
+                    stdin: mode,
+                    registry: registry,
+                    onStdout: { _ in }, onStderr: { _ in }
+                )
+            }
+            try await Task.sleep(nanoseconds: 500_000_000)
+            #expect((registry.count() == 1) == shouldStayAlive, "mode \(mode)")
+            registry.signalAll(SIGTERM)
+            _ = try await exit.value
+            #expect(registry.count() == 0)
+        }
+    }
+
+    @Test("closing held stdin on interrupt lets an interactive child exit without any signal")
+    func closeHeldStdinEndsInteractiveChild() async throws {
+        let registry = ActiveProcessRegistry()
+        let exit = Task {
+            try await ChildProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/cat"), arguments: [],
+                stdin: .heldOpen, registry: registry,
+                onStdout: { _ in }, onStderr: { _ in }
+            )
+        }
+        while registry.count() == 0 { try await Task.sleep(nanoseconds: 10_000_000) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(registry.count() == 1)
+
+        let started = Date()
+        registry.closeAllHeldStdin()
+
+        #expect(try await exit.value == 0)
+        #expect(Date().timeIntervalSince(started) < 3.0)
+        #expect(registry.count() == 0)
+    }
+
+    @Test("fast-exiting children never leave stale PIDs tracked (PID-reuse safety)")
+    func fastChildrenLeaveNoStalePids() async throws {
+        let registry = ActiveProcessRegistry()
+        for _ in 0..<100 {
+            _ = try await ChildProcessRunner.run(
+                executable: URL(fileURLWithPath: "/usr/bin/true"), arguments: [],
+                registry: registry, onStdout: { _ in }, onStderr: { _ in }
+            )
+        }
+        // Unpruned count: a stale entry would survive here even though the PID is dead.
+        #expect(registry.trackedPidCount == 0)
+    }
+
+    @Test("only services with stdin_open get a held-open stdin")
+    func stdinModeFollowsStdinOpen() {
+        #expect(ChildProcessRunner.Stdin(stdinOpen: true) == .heldOpen)
+        #expect(ChildProcessRunner.Stdin(stdinOpen: false) == .null)
+        #expect(ChildProcessRunner.Stdin(stdinOpen: nil) == .null)
+    }
 }

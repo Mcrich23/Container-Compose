@@ -1,0 +1,182 @@
+//===----------------------------------------------------------------------===//
+// Copyright © 2025 Morris Richman and the Container-Compose project authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//===----------------------------------------------------------------------===//
+
+import Foundation
+import Darwin
+
+/// Coordinates signal interception across the entire lifecycle of `up`, managing
+/// graceful teardown, concurrent container stopping, process cleanup, and verification.
+actor SignalCoordinator {
+    static let shared = SignalCoordinator()
+
+    private let backend: ContainerBackend
+    private let registry: ActiveProcessRegistry
+    private let signalSource: @Sendable ([Int32]) -> AsyncStream<Int32>
+    private let output: @Sendable (String) -> Void
+    private let exit: @Sendable (Int32) -> Void
+    private let graceTimeoutSeconds: Double
+    private let progressInterval: Double
+
+    private var isStarted = false
+    private var isStopping = false
+    private var isForcing = false
+    private var firstSignal: Int32 = SIGINT
+    private var containerTargets: [ComposeContainerStopTarget] = []
+    private var signalTask: Task<Void, Never>?
+
+    init(
+        backend: ContainerBackend = LiveContainerBackend(),
+        registry: ActiveProcessRegistry = .shared,
+        signalSource: @escaping @Sendable ([Int32]) -> AsyncStream<Int32> = { ComposeUp.makeSignalStream($0) },
+        output: @escaping @Sendable (String) -> Void = { print($0); fflush(stdout) },
+        exit: @escaping @Sendable (Int32) -> Void = { Foundation.exit($0) },
+        graceTimeoutSeconds: Double = 5.0,
+        progressInterval: Double = 3.0
+    ) {
+        self.backend = backend
+        self.registry = registry
+        self.signalSource = signalSource
+        self.output = output
+        self.exit = exit
+        self.graceTimeoutSeconds = graceTimeoutSeconds
+        self.progressInterval = progressInterval
+    }
+
+    func setStopTargets(_ targets: [ComposeContainerStopTarget]) {
+        self.containerTargets = targets
+    }
+
+    func addStopTarget(_ target: ComposeContainerStopTarget) {
+        if !containerTargets.contains(where: { $0.containerName == target.containerName }) {
+            containerTargets.append(target)
+        }
+    }
+
+    func ensureStarted() {
+        guard !isStarted else { return }
+        isStarted = true
+        let signals = signalSource([SIGINT, SIGTERM])
+        signalTask = Task {
+            for await sig in signals {
+                // Each signal is handled in its own task: the first handler can sit in a
+                // long graceful stop, and a second Ctrl-C must still be serviced meanwhile.
+                Task { await self.handleSignal(sig) }
+            }
+        }
+    }
+
+    /// Exits with `code` unless an interrupt shutdown is in flight, in which case the
+    /// shutdown owns the exit (and its exit code). Returns whether it exited.
+    @discardableResult
+    func exitNormally(_ code: Int32, message: String? = nil) -> Bool {
+        guard !isStopping else { return false }
+        if let message { output(message) }
+        exit(code)
+        return true
+    }
+
+    func stopMonitoring() {
+        signalTask?.cancel()
+        signalTask = nil
+        isStarted = false
+    }
+
+    func handleSignal(_ sig: Int32) async {
+        // Cancelling the listener task doesn't recall a signal already delivered to it.
+        guard isStarted else { return }
+        if !isStopping {
+            isStopping = true
+            firstSignal = sig
+            registry.beginShutdown()
+            let signalName = sig == SIGTERM ? "SIGTERM" : "SIGINT (Ctrl+C)"
+            output("\n⚠️  Received \(signalName). Initiating graceful shutdown...")
+            output("⚠️  Send another Ctrl+C to force kill immediately (SIGKILL).")
+
+            // Step 1: Forward signal to tracked child processes immediately
+            let alivePids = registry.activeProcesses()
+            if !alivePids.isEmpty {
+                output("Stopping \(alivePids.count) active child process\(alivePids.count == 1 ? "" : "es")...")
+            }
+            registry.closeAllHeldStdin()
+            registry.signalAll(SIGINT)
+
+            let targets = containerTargets
+
+            // Step 2: Concurrently request graceful container stop via daemon
+            if !targets.isEmpty {
+                output("Stopping containers...")
+                let heartbeat = startProgressHeartbeat(for: targets)
+                await backend.stop(targets)
+                heartbeat.cancel()
+            }
+
+            // Step 3: Verify and enforce that all child processes and containers are stopped
+            guard !isForcing else { return }
+            output("Verifying all containers and child processes have stopped...")
+            await verifyAndEnforceStopped(targets.map(\.containerName))
+
+            guard !isForcing else { return }
+            output("Shutdown complete.")
+            exit(128 + sig)
+        } else {
+            guard !isForcing else { return }
+            isForcing = true
+            output("\n🛑 Second interrupt received! Forcing immediate stop with SIGKILL...")
+
+            // Step 1: Force kill all child processes immediately
+            registry.signalAll(SIGKILL)
+
+            // Step 2: Force kill all containers
+            await backend.kill(containerTargets.map(\.containerName))
+
+            output("Forced stop complete.")
+            exit(128 + firstSignal)
+        }
+    }
+
+    /// Prints "Still stopping ..." every `progressInterval` seconds until cancelled.
+    private func startProgressHeartbeat(for targets: [ComposeContainerStopTarget]) -> Task<Void, Never> {
+        let names = targets.map(\.containerName).joined(separator: ", ")
+        let interval = progressInterval
+        let output = self.output
+        let started = Date()
+        return Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                if Task.isCancelled { return }
+                let elapsed = Int(Date().timeIntervalSince(started).rounded())
+                output("⏳ Still stopping \(names) (\(elapsed)s elapsed). Press Ctrl+C again to force kill.")
+            }
+        }
+    }
+
+    /// Waits (against one shared deadline) for tracked child processes to exit and
+    /// containers to stop, then SIGKILLs whatever is still alive.
+    private func verifyAndEnforceStopped(_ containerNames: [String]) async {
+        let deadline = Date().addingTimeInterval(graceTimeoutSeconds)
+        var unstopped: [String] = []
+        while true {
+            unstopped = await backend.runningContainers(among: containerNames)
+            if unstopped.isEmpty && registry.count() == 0 { return }
+            if Date() >= deadline { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        registry.signalAll(SIGKILL)
+        if !unstopped.isEmpty {
+            await backend.kill(unstopped)
+        }
+    }
+}
