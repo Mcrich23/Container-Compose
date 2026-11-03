@@ -321,11 +321,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Register container stop targets early so interruptions during build
         // or network setup will stop whichever containers have been launched.
-        let stopTargets = project.services.map {
-            ComposeContainerStopTarget(
-                containerName: containerName(for: $0.serviceName),
-                timeoutInSeconds: $0.service.stopTimeoutInSeconds
-            )
+        let stopTargets = project.services.flatMap { target in
+            target.candidateContainerNames.map { name in
+                ComposeContainerStopTarget(
+                    containerName: name,
+                    timeoutInSeconds: target.service.stopTimeoutInSeconds
+                )
+            }
         }
         await SignalCoordinator.shared.setStopTargets(stopTargets)
 
@@ -1341,12 +1343,15 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Add interactive and TTY flags
+        // Add interactive flag
         if service.stdin_open == true {
             runCommandArgs.append("-i")  // --interactive
         }
         if service.tty == true {
-            runCommandArgs.append("-t")  // --tty
+            // Note: Apple Container's `--tty` (`-t`) flag requires an attached host terminal on stdin
+            // and sets the host terminal discipline to raw mode (clearing ISIG, which suppresses
+            // Ctrl-C signal delivery to Container-Compose). Because `up` streams container output via pipes,
+            // omit `-t` to preserve host terminal signal discipline.
         }
 
         // Translate `entrypoint` + `command` into the right shape for
@@ -1722,6 +1727,7 @@ extension ComposeUp {
             process.currentDirectoryURL = URL(fileURLWithPath: cwd)
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
+            process.standardInput = FileHandle.nullDevice
 
             var childEnvironment = ProcessInfo.processInfo.environment
             childEnvironment["PATH"] = mergedExecutablePath(existing: childEnvironment["PATH"])
