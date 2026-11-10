@@ -165,4 +165,28 @@ struct ComposeBuildParsingTests {
         let cmd = try ComposeBuild.parse(["-f", "my-compose.yaml"])
         #expect(cmd.projectOptions.composeFileOptions.composeFilename == "my-compose.yaml")
     }
+
+    @Test("ComposeBuild command accepts repeated --build-arg flags")
+    func composeBuildCommandAcceptsBuildArgFlags() throws {
+        let cmd = try ComposeBuild.parse(["--build-arg", "A=1", "--build-arg", "B=2"])
+        #expect(cmd.buildArgs == ["A=1", "B=2"])
+    }
+
+    @Test("ComposeBuild command defaults build-args to empty")
+    func composeBuildCommandDefaultsBuildArgsToEmpty() throws {
+        let cmd = try ComposeBuild.parse([])
+        #expect(cmd.buildArgs.isEmpty)
+    }
+
+    @Test("CLI --build-arg overrides a matching compose-file arg")
+    func cliBuildArgOverridesFileArg() {
+        let merged = mergedBuildArgs(fileArgs: ["TOKEN": "from-file"], cliArgs: ["TOKEN=from-cli"])
+        #expect(merged["TOKEN"] == "from-cli")
+    }
+
+    @Test("CLI and file build-args that don't collide are both kept")
+    func cliAndFileBuildArgsMerge() {
+        let merged = mergedBuildArgs(fileArgs: ["ENV": "production"], cliArgs: ["TOKEN=abc123"])
+        #expect(merged == ["ENV": "production", "TOKEN": "abc123"])
+    }
 }
