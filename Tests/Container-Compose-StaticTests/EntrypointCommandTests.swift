@@ -38,6 +38,39 @@ struct EntrypointCommandTests {
         #expect(r.positional == ["nginx", "-g", "daemon off;"])
     }
 
+    @Test("command arguments interpolate project environment")
+    func commandArgumentsInterpolateProjectEnvironment() {
+        let r = ComposeUp.entrypointAndCommandArgs(
+            entrypoint: nil,
+            command: [
+                "-database=postgres://${CC_TEST_MIGRATE_USER:-compose-user}:${CC_TEST_MIGRATE_PASSWORD:-compose-password}@${CC_TEST_MIGRATE_HOST:-postgres}:5432/app?sslmode=disable",
+                "up",
+            ],
+            environmentVariables: [
+                "CC_TEST_MIGRATE_USER": "env-file-user",
+                "CC_TEST_MIGRATE_PASSWORD": "env-file-password",
+                "CC_TEST_MIGRATE_HOST": "env-file-host",
+            ]
+        )
+
+        #expect(r.positional == [
+            "-database=postgres://env-file-user:env-file-password@env-file-host:5432/app?sslmode=disable",
+            "up",
+        ])
+    }
+
+    @Test("entrypoint arguments interpolate project environment")
+    func entrypointArgumentsInterpolateProjectEnvironment() {
+        let r = ComposeUp.entrypointAndCommandArgs(
+            entrypoint: ["${CC_TEST_MIGRATE_EXECUTABLE}", "${CC_TEST_MIGRATE_FLAG:-default-flag}"],
+            command: ["up"],
+            environmentVariables: ["CC_TEST_MIGRATE_EXECUTABLE": "/usr/local/bin/migrate"]
+        )
+
+        #expect(r.entrypointFlag == "/usr/local/bin/migrate")
+        #expect(r.positional == ["default-flag", "up"])
+    }
+
     @Test("single-element entrypoint, no command → flag set, no positional")
     func singleEntrypointNoCommand() {
         let r = ComposeUp.entrypointAndCommandArgs(
