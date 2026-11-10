@@ -142,6 +142,37 @@ struct ComposeBuildParsingTests {
         #expect(build.args?["ENV"] == "production")
     }
 
+    @Test("Build target is passed through from compose file")
+    func buildTargetIsPassedThrough() throws {
+        let yaml = """
+        services:
+          app:
+            build:
+              context: .
+              target: production
+        """
+
+        let compose = try YAMLDecoder().decode(DockerCompose.self, from: yaml)
+        let build = try #require(compose.services["app"]??.build)
+
+        #expect(build.target == "production")
+    }
+
+    @Test("Build without target leaves it nil, matching pre-target-support compose files")
+    func buildWithoutTargetIsNil() throws {
+        let yaml = """
+        services:
+          app:
+            build:
+              context: .
+        """
+
+        let compose = try YAMLDecoder().decode(DockerCompose.self, from: yaml)
+        let build = try #require(compose.services["app"]??.build)
+
+        #expect(build.target == nil)
+    }
+
     @Test("ComposeBuild command parses --no-cache flag")
     func composeBuildCommandParsesNoCacheFlag() throws {
         let cmd = try ComposeBuild.parse(["--no-cache"])

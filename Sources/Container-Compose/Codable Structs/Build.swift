@@ -30,7 +30,9 @@ public struct Build: Codable, Hashable {
     public let dockerfile: String?
     /// Build arguments
     public let args: [String: String]?
-    
+    /// Optional target build stage, for multi-stage Dockerfiles
+    public let target: String?
+
     /// Custom initializer to handle `build: .` (string) or `build: { context: . }` (object)
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -38,15 +40,17 @@ public struct Build: Codable, Hashable {
             self.context = contextString
             self.dockerfile = nil
             self.args = nil
+            self.target = nil
         } else {
             let keyedContainer = try decoder.container(keyedBy: CodingKeys.self)
             self.context = try keyedContainer.decode(String.self, forKey: .context)
             self.dockerfile = try keyedContainer.decodeIfPresent(String.self, forKey: .dockerfile)
             self.args = try keyedContainer.decodeIfPresent([String: String].self, forKey: .args)
+            self.target = try keyedContainer.decodeIfPresent(String.self, forKey: .target)
         }
     }
 
     enum CodingKeys: String, CodingKey {
-        case context, dockerfile, args
+        case context, dockerfile, args, target
     }
 }

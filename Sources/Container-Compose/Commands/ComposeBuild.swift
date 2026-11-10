@@ -100,6 +100,10 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
             "--tag", imageTag,
         ])
 
+        if let target = buildConfig.target, !target.isEmpty {
+            commands.append(contentsOf: ["--target", target])
+        }
+
         if noCache {
             commands.append("--no-cache")
         }

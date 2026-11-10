@@ -57,16 +57,54 @@ struct BuildConfigurationTests {
           NODE_VERSION: "18"
           ENV: "production"
         """
-        
+
         let decoder = YAMLDecoder()
         let build = try decoder.decode(Build.self, from: yaml)
-        
+
         #expect(build.context == ".")
         #expect(build.args?["NODE_VERSION"] == "18")
         #expect(build.args?["ENV"] == "production")
     }
-    
-    
+
+    @Test("Parse build with target")
+    func parseBuildWithTarget() throws {
+        let yaml = """
+        context: .
+        target: production
+        """
+
+        let decoder = YAMLDecoder()
+        let build = try decoder.decode(Build.self, from: yaml)
+
+        #expect(build.context == ".")
+        #expect(build.target == "production")
+    }
+
+    @Test("Build with no target defaults to nil")
+    func parseBuildWithoutTarget() throws {
+        let yaml = """
+        context: .
+        dockerfile: Dockerfile
+        """
+
+        let decoder = YAMLDecoder()
+        let build = try decoder.decode(Build.self, from: yaml)
+
+        #expect(build.target == nil)
+    }
+
+    @Test("Shorthand build: <context> form has no target")
+    func shorthandBuildHasNoTarget() throws {
+        let yaml = "."
+
+        let decoder = YAMLDecoder()
+        let build = try decoder.decode(Build.self, from: yaml)
+
+        #expect(build.context == ".")
+        #expect(build.target == nil)
+    }
+
+
     @Test("Service with build configuration")
     func serviceWithBuildConfiguration() throws {
         let yaml = """
