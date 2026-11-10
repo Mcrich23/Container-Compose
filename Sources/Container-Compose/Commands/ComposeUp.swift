@@ -139,12 +139,29 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public mutating func run() async throws {
+        // Start signal stream at the very beginning of the command lifecycle so
+        // signals sent from external processes (or terminal Ctrl-C) are caught
+        // during image pulls, builds, network setup, and container execution.
+        await SignalCoordinator.shared.ensureStarted()
+
         // Load, decode, and resolve the compose project (shared resolution:
         // topologically ordered services, filtered by explicit names and
         // active Compose profiles).
         let project = try projectOptions.resolve(filteringBy: services)
         let dockerCompose = project.compose
         projectName = project.projectName
+
+        // Register container stop targets early so interruptions during build
+        // or network setup will stop whichever containers have been launched.
+        let stopTargets = project.services.flatMap { target in
+            target.candidateContainerNames.map { name in
+                ComposeContainerStopTarget(
+                    containerName: name,
+                    timeoutInSeconds: target.service.stopTimeoutInSeconds
+                )
+            }
+        }
+        await SignalCoordinator.shared.setStopTargets(stopTargets)
 
         // Load environment variables from .env file
         environmentVariables = loadEnvFile(path: projectOptions.envFilePath)
@@ -226,13 +243,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
 
         if !detach {
-            let stopTargets = project.services.map {
-                ComposeContainerStopTarget(
-                    containerName: containerName(for: $0.serviceName),
-                    timeoutInSeconds: $0.service.stopTimeoutInSeconds
-                )
-            }
             await runForegroundUntilStopped(containerTargets: stopTargets)
+        } else {
+            await SignalCoordinator.shared.stopMonitoring()
         }
     }
 
@@ -250,83 +263,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Exit once the containers stop by themselves or are stopped externally.
         if !containerNames.isEmpty {
-            Task {
-                await Self.waitUntilAllContainersStopped(containerNames)
-                print("\nAll containers have stopped.")
-                Foundation.exit(0)
-            }
+            await Self.waitUntilAllContainersStopped(containerNames)
+            // A Ctrl-C/SIGTERM shutdown (which itself stops the containers) owns the exit.
+            await SignalCoordinator.shared.exitNormally(0, message: "\nAll containers have stopped.")
         }
-
-        // Bridge SIGINT/SIGTERM into an async stream. The `ContainerCommands`
-        // invoked during `up` leave these signals neutered (SIG_IGN) via
-        // ContainerAPIService's async signal machinery, so a foreground `up`
-        // previously ignored Ctrl-C. A `DispatchSource` signal source observes
-        // them regardless of disposition.
-        let signals = Self.makeSignalStream([SIGINT, SIGTERM])
-        var stopping = false
-        for await _ in signals {
-            if !stopping {
-                stopping = true
-                print("\nGracefully stopping... (press Ctrl+C again to force)")
-                Task {
-                    await Self.stopContainers(containerTargets)
-                    Foundation.exit(0)
-                }
-            } else {
-                print("\nForcing stop.")
-                Task {
-                    await Self.killContainers(containerNames)
-                    Foundation.exit(130)
-                }
-            }
-        }
-        Foundation.exit(0)
-    }
-
-    /// An `AsyncStream` of the given signals, delivered via `DispatchSource` so
-    /// they're received even after the disposition has been set to `SIG_IGN`.
-    private static func makeSignalStream(_ signals: [Int32]) -> AsyncStream<Int32> {
-        AsyncStream { continuation in
-            let queue = DispatchQueue(label: "container-compose.signals")
-            let sources: [DispatchSourceSignal] = signals.map { sig in
-                // Ignore the default action so the DispatchSource alone handles it.
-                signal(sig, SIG_IGN)
-                let source = DispatchSource.makeSignalSource(signal: sig, queue: queue)
-                source.setEventHandler { continuation.yield(sig) }
-                source.resume()
-                return source
-            }
-            continuation.onTermination = { _ in sources.forEach { $0.cancel() } }
-        }
-    }
-
-    /// Gracefully stops (without removing) the named containers — the
-    /// `docker compose up` Ctrl-C contract leaves stopped containers in place.
-    private static func stopContainers(_ containerTargets: [ComposeContainerStopTarget]) async {
-        let client = ContainerClient()
-        for target in containerTargets {
-            guard let container = try? await client.get(id: target.containerName) else { continue }
-            print("Stopping container: \(target.containerName)")
-            do {
-                try await client.stop(
-                    id: container.id,
-                    opts: ComposeStopOptions.resolve(timeoutInSeconds: target.timeoutInSeconds)
-                )
-            } catch {
-                print("Error stopping container \(target.containerName): \(error)")
-            }
-        }
-    }
-
-    /// Force-stops the named containers with SIGKILL — the second-Ctrl-C
-    /// contract, matching `docker compose up`'s "press Ctrl+C again to force".
-    private static func killContainers(_ containerNames: [String]) async {
-        let client = ContainerClient()
-        for name in containerNames {
-            guard let container = try? await client.get(id: name) else { continue }
-            print("Killing container: \(name)")
-            try? await client.kill(id: container.id, signal: "SIGKILL")
-        }
+        // Either no containers to watch (e.g. ForegroundWaitCpuTests) or a shutdown owns the
+        // exit: idle until it terminates the process.
+        while true { try? await Task.sleep(nanoseconds: 3_600_000_000_000) }
     }
 
     /// Polls until every named container has been observed running at least once
@@ -736,8 +679,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         process.arguments = ["container", "exec", containerID, "sh", "-c", cmd]
         process.standardOutput = Pipe()
         process.standardError = Pipe()
-        do { try process.run() } catch { return }
+        do {
+            try process.run()
+            ActiveProcessRegistry.shared.register(process.processIdentifier)
+        } catch { return }
         process.waitUntilExit()
+        ActiveProcessRegistry.shared.unregister(process.processIdentifier)
     }
 
     private func createVolume(name volumeName: String, config volumeConfig: Volume) async throws {
@@ -1133,7 +1080,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Add interactive and TTY flags
+        // Add interactive and TTY flags. With `-t -i`, `container run` puts its stdin in raw mode;
+        // `streamCommand` gives it a private pty (see `ChildProcessRunner.Stdin.pty`) so the host
+        // terminal stays untouched and Ctrl-C keeps reaching us.
         if service.stdin_open == true {
             runCommandArgs.append("-i")  // --interactive
         }
@@ -1176,6 +1125,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("\(serviceName): \(output)".applyingColor(selectedColor))
         }
 
+        let stdinMode = ChildProcessRunner.Stdin(stdinOpen: service.stdin_open, tty: service.tty)
         var foregroundRunHandle: ForegroundRunHandle? = nil
         if detach {
             print("\nStarting service: \(serviceName)")
@@ -1184,6 +1134,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             let exitCode = try await streamCommand(
                 "container",
                 args: ["run"] + runCommandArgs,
+                stdin: stdinMode,
                 onStdout: handleOutput,
                 onStderr: handleOutput
             )
@@ -1211,6 +1162,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     let exitCode = try await streamCommand(
                         "container",
                         args: ["run"] + runCommandArgs,
+                        stdin: stdinMode,
                         onStdout: handleOutput,
                         onStderr: handleOutput
                     )
@@ -1218,6 +1170,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     if exitCode != 0 {
                         fputs("Error: Service '\(serviceName)' exited with status \(exitCode).\n", stderr)
                     }
+                } catch is CancellationError {
+                    await runHandle.complete(-1)  // interrupted before launch; shutdown is reporting
                 } catch {
                     await runHandle.complete(-1)
                     fputs("Error starting service '\(serviceName)': \(error)\n", stderr)
@@ -1501,54 +1455,20 @@ extension ComposeUp {
     func streamCommand(
         _ command: String,
         args: [String] = [],
+        stdin: ChildProcessRunner.Stdin = .null,
         onStdout: @escaping (@Sendable (String) -> Void),
         onStderr: @escaping (@Sendable (String) -> Void)
     ) async throws -> Int32 {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [command] + args
-            process.currentDirectoryURL = URL(fileURLWithPath: cwd)
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
-
-            var childEnvironment = ProcessInfo.processInfo.environment
-            childEnvironment["PATH"] = mergedExecutablePath(existing: childEnvironment["PATH"])
-            process.environment = childEnvironment
-
-            let stdoutHandle = stdoutPipe.fileHandleForReading
-            let stderrHandle = stderrPipe.fileHandleForReading
-
-            stdoutHandle.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                if let string = String(data: data, encoding: .utf8) {
-                    onStdout(string)
-                }
-            }
-
-            stderrHandle.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                if let string = String(data: data, encoding: .utf8) {
-                    onStderr(string)
-                }
-            }
-
-            process.terminationHandler = { proc in
-                stdoutHandle.readabilityHandler = nil
-                stderrHandle.readabilityHandler = nil
-                continuation.resume(returning: proc.terminationStatus)
-            }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        var childEnvironment = ProcessInfo.processInfo.environment
+        childEnvironment["PATH"] = mergedExecutablePath(existing: childEnvironment["PATH"])
+        return try await ChildProcessRunner.run(
+            executable: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [command] + args,
+            workingDirectory: URL(fileURLWithPath: cwd),
+            environment: childEnvironment,
+            stdin: stdin,
+            onStdout: onStdout,
+            onStderr: onStderr
+        )
     }
 }
