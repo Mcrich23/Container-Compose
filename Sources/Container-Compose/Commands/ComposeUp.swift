@@ -494,6 +494,42 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// anything smaller with a confusing daemon error. Clamp sub-minimum values up
     /// to 200 MiB so common Docker values like `mem_limit: 128m` keep working.
     /// Returns the value to pass to `--memory` and whether it was raised.
+    /// The CPU count the image builder is given for a service.
+    ///
+    /// Separate from `clampCPULimit` because it also carries the default for a
+    /// service that declares no limit at all.
+    ///
+    /// Not `Int64(limit) ?? 2`: Int64 cannot parse "0.5", so that form silently
+    /// handed a service asking for half a CPU the fallback of two - four times
+    /// its request, with nothing printed. The run path rejected the same input
+    /// loudly, which is the only reason it was noticed.
+    ///
+    /// Pure so the mapping is testable; buildService has no seam.
+    static func builderCPUCount(for service: Service) -> Int64 {
+        guard let declared = service.deploy?.resources?.limits?.cpus else { return 2 }
+        return Int64(clampCPULimit(declared).value) ?? 2
+    }
+
+    /// `container run --cpus` takes a whole number, while Compose allows a
+    /// fraction. Any mapping is lossy, so this rounds up to the smallest
+    /// expressible limit rather than down: 0.5 would otherwise become 0, which
+    /// container rejects, and a slightly loose cap fails less destructively than
+    /// none at all. Callers report the change, as with the memory floor.
+    /// `Int(Double)` traps rather than saturating, so the range is checked before
+    /// the conversion: `cpus: 1e400` parses as infinity, `cpus: nan` as NaN, and
+    /// `cpus: 1e20` is finite but larger than `Int` can hold. All three crashed
+    /// here. A value this tool cannot express is passed through untouched so the
+    /// runtime rejects it by name, which is a better outcome than a fatal error
+    /// with no service in it.
+    static func clampCPULimit(_ value: String) -> (value: String, clamped: Bool) {
+        guard let cpus = Double(value), cpus.isFinite else { return (value, false) }
+        let rounded = cpus.rounded(.up)
+        guard rounded >= Double(Int.min), rounded <= Double(Int.max) else { return (value, false) }
+        let whole = max(1, Int(rounded))
+        guard Double(whole) != cpus else { return (value, false) }
+        return (String(whole), true)
+    }
+
     static func clampMemoryLimit(_ value: String) -> (value: String, clamped: Bool) {
         let minimumBytes: Int64 = 200 * 1_024 * 1_024
         if let bytes = parseMemoryToBytes(value), bytes < minimumBytes {
@@ -1095,7 +1131,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // the structured form. Both map to `container run --memory`. `mem_limit` takes
         // precedence when both are set, matching Docker Compose CLI behaviour.
         if let cpus = service.deploy?.resources?.limits?.cpus {
-            runCommandArgs.append(contentsOf: ["--cpus", cpus])
+            let (cpuArg, didClamp) = Self.clampCPULimit(cpus)
+            if didClamp {
+                print("Note: Service '\(serviceName)' cpus '\(cpus)' is not a whole number; Apple Container needs one, rounding up to \(cpuArg).")
+            }
+            runCommandArgs.append(contentsOf: ["--cpus", cpuArg])
         }
         let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
         if let memory = effectiveMemoryLimit {
@@ -1374,7 +1414,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         commands.append(contentsOf: ["--tag", imageToRun])
         
         // Add CPU & Memory
-        let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
+        let cpuCount = Self.builderCPUCount(for: service)
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
         commands.append(contentsOf: ["--cpus", "\(cpuCount)"])
         commands.append(contentsOf: ["--memory", memoryLimit])
