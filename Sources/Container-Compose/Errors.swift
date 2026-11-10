@@ -46,6 +46,7 @@ public enum ComposeError: Error, LocalizedError {
     case healthcheckUnavailable(String)
     case healthcheckFailed(String)
     case noSuchService(String)
+    case containerNameTaken(String)
 
     public var errorDescription: String? {
         switch self {
@@ -67,6 +68,8 @@ public enum ComposeError: Error, LocalizedError {
             return "Service '\(service)' failed its healthcheck."
         case .noSuchService(let name):
             return "no such service: \(name)"
+        case .containerNameTaken(let name):
+            return "container with id \(name) already exists. Run 'container rm \(name)' first, or pass --rm to replace it."
         }
     }
 }

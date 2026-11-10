@@ -76,14 +76,14 @@ struct MemLimitExtraHostsTests {
         #expect(svc.mem_limit == nil)
     }
 
-    @Test("mem_limit takes precedence over deploy.resources.limits.memory in run args")
+    @Test("deploy.resources.limits.memory takes precedence over mem_limit in run args")
     func memLimitPrecedence() throws {
-        // Verify effective memory limit selection logic matches Docker Compose semantics:
-        // mem_limit wins when both are present.
+        // The official deploy form wins when both are present; the legacy
+        // mem_limit shorthand only applies on its own.
         let memLimit: String? = "512m"
         let deployMemory: String? = "1g"
-        let effective = memLimit ?? deployMemory
-        #expect(effective == "512m")
+        let effective = deployMemory ?? memLimit
+        #expect(effective == "1g")
     }
 
     // MARK: - extra_hosts

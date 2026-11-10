@@ -11,6 +11,7 @@ Container-Compose brings (limited) Docker Compose support to [Apple Container](h
 - **Environment configuration:** Support for environment variable files (`.env`) to customize deployments.
 - **Service dependencies:** Specify service dependencies and startup order.
 - **Volume and network mapping:** Map data and networking as specified in Compose files to Apple Container equivalents.
+- **Resource limits:** Map the official `deploy.resources` limits (and the legacy `cpus`/`mem_limit`/`mem_reservation` shorthands, with `deploy` winning on conflict) plus `shm_size`, `tmpfs`, and `ulimits` onto Apple Container flags. Fractional CPU requests are rounded up (Apple Container takes whole CPUs), and unsupported keys (soft reservations, device/GPU reservations, replicas) are ignored with a warning.
 - **Extensible:** Designed for future extension and customization.
 
 ## Getting Started
@@ -62,6 +63,15 @@ container-compose up
 ```
 
 You may need to provide a path to your `docker-compose.yml` and `.env` file as arguments.
+
+Run a one-off command on a service (similar to `docker compose run`):
+
+```sh
+container-compose run --rm web sh
+```
+
+The service's ports are not mapped unless `--service-ports` is given, and its `depends_on`
+services are started first unless `--no-deps` is given.
 
 ## Contributing
 

@@ -114,8 +114,33 @@ public struct Service: Codable, Hashable {
     public let tty: Bool?
     
     /// Memory limit shorthand (e.g., "512m", "1g") — top-level alternative to
-    /// `deploy.resources.limits.memory`. Takes precedence when both are set.
+    /// `deploy.resources.limits.memory`. The `deploy` form wins when both are set.
     public let mem_limit: String?
+
+    /// CPU limit shorthand (e.g., "1.5", "2") — top-level alternative to
+    /// `deploy.resources.limits.cpus`. The `deploy` form wins when both are set.
+    public let cpus: String?
+
+    /// Memory reservation shorthand (e.g., "256m") — top-level alternative to
+    /// `deploy.resources.reservations.memory`. Apple Container has no soft
+    /// memory limit, so `ResourceArguments` approximates it as the hard
+    /// `--memory` limit when no limit is otherwise configured.
+    public let mem_reservation: String?
+
+    /// Size of `/dev/shm` (e.g., "64m", "1g"). Passed through as `--shm-size`.
+    public let shm_size: String?
+
+    /// tmpfs mounts (e.g., `["/run", "/tmp"]`). Each entry is passed through
+    /// as `--tmpfs <path>`.
+    public let tmpfs: [String]?
+
+    /// Resource limits keyed by type (e.g., `nofile: 65535`). Passed through as
+    /// `--ulimit <type>=<soft>[:<hard>]`.
+    public let ulimits: [String: Ulimit]?
+
+    /// Device mappings (e.g., `["/dev/kvm:/dev/kvm"]`). Parsed only so callers
+    /// can warn that Apple Container has no `--device` equivalent.
+    public let devices: [String]?
 
     /// Additional `/etc/hosts` entries injected into the container. Each entry is a
     /// `"hostname:IP"` string. The special token `host-gateway` resolves to the host
@@ -136,7 +161,7 @@ public struct Service: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, stop_grace_period, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
-             mem_limit, extra_hosts, profiles
+             mem_limit, cpus, mem_reservation, shm_size, tmpfs, ulimits, devices, extra_hosts, profiles
     }
     
     /// Public memberwise initializer for testing
@@ -170,6 +195,12 @@ public struct Service: Codable, Hashable {
         stdin_open: Bool? = nil,
         tty: Bool? = nil,
         mem_limit: String? = nil,
+        cpus: String? = nil,
+        mem_reservation: String? = nil,
+        shm_size: String? = nil,
+        tmpfs: [String]? = nil,
+        ulimits: [String: Ulimit]? = nil,
+        devices: [String]? = nil,
         extra_hosts: [String]? = nil,
         profiles: [String]? = nil,
         dependedBy: [String] = []
@@ -203,6 +234,12 @@ public struct Service: Codable, Hashable {
         self.stdin_open = stdin_open
         self.tty = tty
         self.mem_limit = mem_limit
+        self.cpus = cpus
+        self.mem_reservation = mem_reservation
+        self.shm_size = shm_size
+        self.tmpfs = tmpfs
+        self.ulimits = ulimits
+        self.devices = devices
         self.extra_hosts = extra_hosts
         self.profiles = profiles
         self.dependedBy = dependedBy
@@ -327,13 +364,25 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
-        if let s = try? container.decodeIfPresent(String.self, forKey: .mem_limit) {
-            mem_limit = s
-        } else if let i = try? container.decodeIfPresent(Int.self, forKey: .mem_limit) {
-            mem_limit = "\(i)"
+        mem_limit = Self.decodeScalarString(container, forKey: .mem_limit)
+        cpus = Self.decodeScalarString(container, forKey: .cpus)
+        mem_reservation = Self.decodeScalarString(container, forKey: .mem_reservation)
+        shm_size = Self.decodeScalarString(container, forKey: .shm_size)
+
+        // `tmpfs` accepts either a single path or a list of paths per the
+        // Compose spec (`tmpfs: /run` vs `tmpfs: [/run, /tmp]`). Apple's
+        // `container run --tmpfs` takes only a path, so the long form's
+        // `size`/`mode` options (when given as a mapping) are ignored.
+        if let list = try? container.decodeIfPresent([String].self, forKey: .tmpfs) {
+            tmpfs = list
+        } else if let single = try? container.decodeIfPresent(String.self, forKey: .tmpfs) {
+            tmpfs = [single]
         } else {
-            mem_limit = nil
+            tmpfs = nil
         }
+
+        ulimits = try container.decodeIfPresent([String: Ulimit].self, forKey: .ulimits)
+        devices = try container.decodeIfPresent([String].self, forKey: .devices)
 
         // `extra_hosts` accepts two forms per the Compose spec:
         //   extra_hosts:               extra_hosts:
@@ -351,6 +400,25 @@ public struct Service: Codable, Hashable {
         // `profiles` is a plain list of strings per the Compose spec (no shorthand
         // single-string form).
         profiles = try container.decodeIfPresent([String].self, forKey: .profiles)
+    }
+
+    /// Decodes a scalar that Compose permits as either a string or a number
+    /// (e.g. `mem_limit: 512m`, `mem_limit: 536870912`, `cpus: 1.5`) into its
+    /// string form so the value can be passed through to `container run`.
+    static func decodeScalarString(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> String? {
+        if let string = try? container.decodeIfPresent(String.self, forKey: key) {
+            return string
+        }
+        if let int = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return "\(int)"
+        }
+        if let double = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return double.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(double))" : "\(double)"
+        }
+        return nil
     }
 
     /// True when this service should be included by default given the currently
