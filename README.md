@@ -15,29 +15,54 @@ Container-Compose brings (limited) Docker Compose support to [Apple Container](h
 
 ## Compose support status
 
-This describes merged code at `ad82911`. It is a practical guide, not an exhaustive Compose conformance matrix. A file decoding successfully does not mean every field is applied: some fields are ignored or only logged, and some valid Compose forms fail decoding.
+- **Fully supported:** The listed behavior works end to end.
+- **Partially supported:** Some syntax or behavior is missing.
+- **Unsupported:** Not implemented in Container-Compose.
+- **Unsupported upstream:** Blocked by Apple Container or macOS.
 
-**Fully supported** below applies only to the specific behavior listed. **Partially supported** means there are syntax or runtime limits. **Unsupported** means Container-Compose does not implement the behavior. **Unsupported upstream** identifies a limitation of Apple Container or macOS itself.
+### Commands
 
-| Feature | Status | Current behavior and limits |
+The commands below are available. Their options do not cover every Docker Compose CLI flag.
+
+| Command | Support | Behavior |
 | --- | --- | --- |
-| Command surface | Fully supported (listed commands) | `up`, `down`, `build`, `pull`, and `version` are registered. `up` supports service selection, detached operation and rebuilding. This does not imply Docker Compose CLI flag parity. |
-| Other Compose commands | Unsupported | No `run`, `ps`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, or `watch` subcommand. Use Apple Container directly where appropriate. |
-| Project files and profiles | Partially supported | Finds `compose.yml`, `compose.yaml`, `docker-compose.yml`, or `docker-compose.yaml`; accepts `-f`/`--file`, `--cwd`, profiles and explicit service selection. Project naming uses top-level `name` or the directory name. No multiple-file merge, `include`, or service `extends`; resource isolation is incomplete. |
-| Images and builds | Partially supported | Pulls images; builds string contexts or objects with `context`, `dockerfile`, and dictionary `args`. Relative contexts use the Compose file directory; Dockerfiles use the context directory. Supports platform selection and no-cache builds. No build target, list-form args, or full Compose Build specification. |
-| Process configuration | Partially supported | Applies command/entrypoint overrides, user, working directory, privileged and read-only flags, container names and dictionary labels. String command/entrypoint handling has known splitting limits; prefer array form. Other service process and security options are not generally implemented. |
-| Environment and interpolation | Partially supported | Loads `.env`, service `env_file`, and service environment values. Interpolation is applied at selected call sites, with limited precedence and expression handling; it is not a whole-document Compose interpolation pass. Do not assume every field or Compose environment syntax works. |
-| Dependencies and health checks | Partially supported | Orders dependencies and handles started, healthy and successful-completion conditions. Health checks are startup checks, not continuous runtime monitoring; timeout and start-period semantics are incomplete. Independent services launch sequentially. |
-| Ports, networks and DNS | Partially supported | Publishes short-form ports and attaches named networks. Creates basic networks or uses external ones; driver/options, internal, attachable, IPv6 and network labels are not applied. DNS uses a registered project domain, otherwise best-effort hosts-file patching. Aliases depend on upstream CLI support. `extra_hosts` replaces the generated hosts file. |
-| Storage | Partially supported | Supports short-form service mounts, named-volume creation and external volumes. Relative bind paths currently resolve against the process working directory. Do not assume long-form mount or Docker volume-driver parity. |
-| CPU and memory | Partially supported | Maps `deploy.resources.limits.cpus` and memory to runtime flags; `mem_limit` takes precedence for memory and values below 200 MiB are clamped. This is not full resource control: reservations, device reservations, scaling and deployment strategies are not implemented. Fractional CPU handling has pending work. |
-| Configs and secrets | Unsupported | Definitions can decode and be logged, but are not created or attached to containers. This is an implementation gap here, not a claim that these features require Swarm. |
-| Restart and deployment policy | Unsupported | Restart policies are not applied. Each selected service runs as one container; no replica management, rolling updates or placement scheduling. |
-| Container networking on macOS 15 | Unsupported upstream | Apple documents no container-to-container virtual networking and no custom networks on macOS 15. macOS 26 or later is needed for these upstream capabilities. |
+| `up` | Partial | Starts selected services and their dependencies. Supports profiles, detached operation and rebuilding. YAML limits are listed below. |
+| `down` | Partial | Stops and removes project containers; project resource isolation is incomplete. |
+| `build` | Partial | Builds service images with platform selection and no-cache options. See build syntax below. |
+| `pull` | Full | Pulls service images. |
+| `version` | Full | Prints the Container-Compose version. |
+| `run`, `ps`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | Use Apple Container directly where appropriate. |
 
-The [Compose specification](https://compose-spec.github.io/compose-spec/spec.html) defines syntax and behavior; support is platform dependent. Apple's [command reference](https://github.com/apple/container/blob/main/docs/command-reference.md) describes upstream CLI capabilities, which do not automatically become Compose support here. Its [technical overview](https://github.com/apple/container/blob/main/docs/technical-overview.md#macos-15-limitations) documents the macOS 15 networking restrictions. Upstream main-branch documentation may describe capabilities newer than your installed release.
+Compose files can be selected with `-f`/`--file` and the working directory with `--cwd`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
 
-Pending work is **not available in merged code**: examples include [relative bind paths (#164)](https://github.com/Mcrich23/Container-Compose/pull/164), [build targets (#156)](https://github.com/Mcrich23/Container-Compose/pull/156), [health-check timing (#151)](https://github.com/Mcrich23/Container-Compose/pull/151), and [interpolation (#153)](https://github.com/Mcrich23/Container-Compose/pull/153). Open issue or PR titles can describe older behavior; use the limits above when assessing current support.
+### Compose YAML
+
+Decoding a field does not guarantee it is applied at runtime. The table describes implemented behavior and its limits.
+
+| Feature | Support | Behavior and limits |
+| --- | --- | --- |
+| Project name and profiles | Partial | Uses top-level `name` or the directory name. Supports profiles and explicit service selection; resource isolation is incomplete. |
+| Multiple files, `include`, `extends` | Unsupported | No file merging, includes or service inheritance. |
+| `image` and `build` | Partial | Pulls images and builds string contexts or mappings with `context`, `dockerfile`, and dictionary `args`. No build targets or list-form args. |
+| Build paths | Full | Relative contexts resolve from the Compose file directory; Dockerfile paths resolve from the build context. |
+| `command` and `entrypoint` | Partial | Applies overrides. String splitting has known limits; prefer array form. |
+| Process options | Partial | Applies user, working directory, privileged/read-only flags, container names and dictionary labels. Other process and security options are not generally implemented. |
+| Environment | Partial | Loads `.env`, service `env_file`, and environment values. Some Compose syntax and precedence rules are missing. |
+| Variable interpolation | Partial | Expands values at selected call sites, with limited expression handling. Does not interpolate the whole document. |
+| `depends_on` | Partial | Handles started, healthy and successful-completion conditions. Independent services launch sequentially. |
+| `healthcheck` | Partial | Checks health during startup only. Timeout and start-period handling are incomplete. |
+| Ports | Partial | Publishes short-form port mappings. |
+| Networks | Partial | Creates basic named networks or uses external ones. Driver/options, internal, attachable, IPv6 and network labels are not applied. |
+| DNS and hosts | Partial | Uses a registered project domain or best-effort hosts-file patching. Aliases depend on upstream CLI support; `extra_hosts` replaces the generated hosts file. |
+| Volumes and bind mounts | Partial | Supports short-form mounts, named-volume creation and external volumes. Relative bind paths resolve from the process working directory. Long-form mounts and Docker volume drivers are not fully supported. |
+| CPU and memory | Partial | Applies `deploy.resources.limits.cpus` and memory. `mem_limit` takes precedence; memory below 200 MiB is clamped. Fractional CPU handling has known limits. |
+| Resource reservations and devices | Unsupported | Does not apply reservations or device reservations. |
+| Configs and secrets | Unsupported | Definitions decode and are logged, but resources are not created or attached. |
+| Restart and deployment policies | Unsupported | No restart policies, replica management, rolling updates or placement scheduling. Each selected service runs as one container. |
+| Custom networks and container-to-container networking on macOS 15 | Unsupported upstream | Requires macOS 26 or later. |
+
+See the [Compose specification](https://compose-spec.github.io/compose-spec/spec.html) for YAML syntax and behavior, and Apple's [command reference](https://github.com/apple/container/blob/main/docs/command-reference.md) and [macOS 15 limitations](https://github.com/apple/container/blob/main/docs/technical-overview.md#macos-15-limitations) for upstream capabilities. Features available in Apple Container still need support here.
+
 
 ## Getting Started
 
