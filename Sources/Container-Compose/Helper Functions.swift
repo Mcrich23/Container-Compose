@@ -297,3 +297,38 @@ extension Flags.Logging {
         return flags
     }
 }
+
+/// Resolves a runtime field while preserving Compose's escaped dollar signs.
+/// Each unescaped segment is passed to the existing variable resolver once.
+func resolveRuntimeField(_ value: String, environment: [String: String]) -> String {
+    value.components(separatedBy: "$$")
+        .map { resolveVariable($0, with: environment) }
+        .joined(separator: "$")
+}
+
+/// Produces the image reference shared by build and startup.
+func runtimeImage(_ service: Service, serviceName: String, environment: [String: String]) -> String {
+    service.image.map { resolveRuntimeField($0, environment: environment) } ?? "\(serviceName):latest"
+}
+
+/// Resolves build paths before interpreting their relative locations.
+func runtimeBuildPaths(_ build: Build, directory: String, environment: [String: String]) -> [String] {
+    let context = URL(fileURLWithPath: resolveRuntimeField(build.context, environment: environment), isDirectory: true,
+                      relativeTo: URL(fileURLWithPath: directory, isDirectory: true))
+    let dockerfile = resolveRuntimeField(build.dockerfile ?? "Dockerfile", environment: environment)
+    var arguments = [context.path, "--file", URL(fileURLWithPath: dockerfile, relativeTo: context).path]
+    if let target = build.target, !target.isEmpty {
+        arguments += ["--target", resolveRuntimeField(target, environment: environment)]
+    }
+    return arguments
+}
+
+/// Interpolates label values, preserving mapping keys and deterministic ordering.
+func runtimeLabels(_ labels: [String: String], environment: [String: String]) -> [String] {
+    labels.keys.sorted().flatMap { ["--label", "\($0)=\(resolveRuntimeField(labels[$0]!, environment: environment))"] }
+}
+
+/// Produces the optional runtime user argument.
+func runtimeUserArguments(_ user: String?, environment: [String: String]) -> [String] {
+    user.map { ["--user", resolveRuntimeField($0, environment: environment)] } ?? []
+}

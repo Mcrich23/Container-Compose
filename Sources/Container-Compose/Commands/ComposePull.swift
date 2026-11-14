@@ -82,12 +82,10 @@ public struct ComposePull: AsyncParsableCommand {
         return project.services.filter { requested.contains($0.serviceName) }
     }
 
-    /// The image reference to pull for a service, with `${VAR}` /
-    /// `${VAR:-default}` placeholders resolved from the environment file —
-    /// a literal `${...}` is not a valid registry reference. `nil` for
-    /// build-only services (no `image:` key).
+    /// Resolves the image reference with the supplied environment, preserving escaped dollars.
+    /// Returns `nil` for services without an explicit image.
     static func resolvedImage(for service: Service, environment: [String: String]) -> String? {
-        service.image.map { resolveVariable($0, with: environment) }
+        service.image.map { resolveRuntimeField($0, environment: environment) }
     }
 
     private func pullImage(_ imageName: String, platform: String?) async throws {

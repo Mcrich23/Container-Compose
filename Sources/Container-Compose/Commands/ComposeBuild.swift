@@ -84,25 +84,20 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         projectName: String,
         environmentVariables: [String: String]
     ) async throws {
-        let imageTag = service.image ?? "\(serviceName):latest"
+        let imageTag = runtimeImage(service, serviceName: serviceName, environment: environmentVariables)
 
         // Per Compose spec: `context` is relative to the compose file's directory,
         // and `dockerfile` is relative to the resolved `context` (not the compose dir).
-        let contextURL = URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory))
-        var commands = [contextURL.path]
+        var commands = runtimeBuildPaths(buildConfig, directory: composeDirectory, environment: environmentVariables)
 
         for (key, value) in buildConfig.args ?? [:] {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
         }
 
         commands.append(contentsOf: [
-            "--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: contextURL).path,
             "--tag", imageTag,
         ])
 
-        if let target = buildConfig.target, !target.isEmpty {
-            commands.append(contentsOf: ["--target", target])
-        }
 
         if noCache {
             commands.append("--no-cache")

@@ -840,9 +840,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Handle 'build' configuration
         if let buildConfig = service.build {
             imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
-        } else if let img = service.image {
+        } else if service.image != nil {
             // Use specified image if no build config
             // Pull image if necessary
+            let img = runtimeImage(service, serviceName: serviceName, environment: environmentVariables)
             try await pullImage(img, platform: service.effectivePullPlatform())
             imageToRun = img
         } else {
@@ -903,9 +904,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         var labels = service.labels ?? [:]
         labels["com.docker.compose.project"] = projectName
         labels["com.docker.compose.service"] = serviceName
-        for key in labels.keys.sorted() {
-            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(labels[key] ?? "")"])
-        }
+        runCommandArgs.append(contentsOf: runtimeLabels(labels, environment: environmentVariables))
 
         // REMOVED: Restart policy is not supported by `container run`
         // if let restart = service.restart {
@@ -914,10 +913,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // }
 
         // Add user
-        if let user = service.user {
-            runCommandArgs.append("--user")
-            runCommandArgs.append(user)
-        }
+        runCommandArgs.append(contentsOf: runtimeUserArguments(service.user, environment: environmentVariables))
 
         // Add volume mounts
         if let volumes = service.volumes {
@@ -1339,7 +1335,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// - Returns: Image Name (`String`)
     private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
         // Determine image tag for built image
-        let imageToRun = service.image ?? "\(serviceName):latest"
+        let imageToRun = runtimeImage(service, serviceName: serviceName, environment: environmentVariables)
         let imageList = try await ClientImage.list()
         if !rebuild, imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageToRun }) {
             return imageToRun
@@ -1347,20 +1343,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Per Compose spec: `context` is relative to the compose file's directory,
         // and `dockerfile` is relative to the resolved `context` (not the compose dir).
-        let contextURL = URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory))
-        var commands = [contextURL.path]
+        var commands = runtimeBuildPaths(buildConfig, directory: composeDirectory, environment: environmentVariables)
 
         // Add build arguments
         for (key, value) in buildConfig.args ?? [:] {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
         }
 
-        // Add Dockerfile path
-        commands.append(contentsOf: ["--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: contextURL).path])
         
-        if let target = buildConfig.target, !target.isEmpty {
-            commands.append(contentsOf: ["--target", target])
-        }
 
         // Add caching options
         if noCache {
