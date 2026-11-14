@@ -55,10 +55,8 @@ public struct ComposePull: AsyncParsableCommand {
         }
         try Service.validateRequestedServices(services, against: defined)
 
-        let environment = loadEnvFile(path: project.envFilePath)
-
         for target in Self.pullTargets(in: resolved, requested: services, includeDeps: includeDeps) {
-            guard let image = Self.resolvedImage(for: target.service, environment: environment) else {
+            guard let image = target.service.image else {
                 // Build-only services have no image to pull; compose builds these.
                 print("Skipping \(target.serviceName) (no image, built from a Dockerfile)")
                 continue
