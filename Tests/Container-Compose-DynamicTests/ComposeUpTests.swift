@@ -90,7 +90,49 @@ struct ComposeUpTests {
         
         try? await stopInstance(location: tempLocation.deletingLastPathComponent())
     }
-    
+
+    @Test("Relative bind mount resolves from the compose file when up runs from the project root")
+    func testRelativeBindMountUsesComposeFileDirectory() async throws {
+        let projectRoot = URL.temporaryDirectory.appending(path: makeContainerName())
+        let composeDirectory = projectRoot.appending(path: "deploy")
+        let dataDirectory = projectRoot.appending(path: "data")
+        try FileManager.default.createDirectory(at: composeDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
+        try "mounted".write(to: dataDirectory.appending(path: "marker.txt"), atomically: true, encoding: .utf8)
+
+        let yaml = """
+            services:
+              app:
+                image: alpine:3.20
+                command: ["sleep", "3600"]
+                volumes: ["../data:/data"]
+                healthcheck:
+                  test: ["CMD-SHELL", "test \"$(cat /data/marker.txt)\" = mounted"]
+                  interval: "1s"
+                  timeout: "2s"
+                  retries: 5
+            """
+        try yaml.write(to: composeDirectory.appending(path: "docker-compose.yaml"), atomically: true, encoding: .utf8)
+
+        let arguments = ["--cwd", projectRoot.path, "-f", "deploy/docker-compose.yaml"]
+        do {
+            var composeUp = try ComposeUp.parse(["-d"] + arguments)
+            try await composeUp.run()
+
+            let container = try await ContainerClient().get(id: "\(projectRoot.lastPathComponent)-app")
+            #expect(container.status == .running)
+
+            var composeDown = try ComposeDown.parse(arguments)
+            try await composeDown.run()
+        } catch {
+            var composeDown = try? ComposeDown.parse(arguments)
+            try? await composeDown?.run()
+            try? FileManager.default.removeItem(at: projectRoot)
+            throw error
+        }
+        try? FileManager.default.removeItem(at: projectRoot)
+    }
+
     // TODO: Reenable
 //        @Test("Test three-tier web application with multiple networks")
 //        func testThreeTierWebAppWithNetworks() async throws {
