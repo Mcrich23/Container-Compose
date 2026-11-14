@@ -29,7 +29,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: "${CC_TEST_PROJECT_NAME_UNSET:-sample_project}",
             envVars: [:],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: [:]
         )
 
@@ -42,7 +42,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: "${CC_TEST_PROJECT_NAME_UNSET:-fallback}",
             envVars: ["CC_TEST_PROJECT_NAME_UNSET": "from_env_file"],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: [:]
         )
 
@@ -55,7 +55,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: "my-project",
             envVars: [:],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: [:]
         )
 
@@ -68,7 +68,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: "from-compose-file",
             envVars: [:],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: ["COMPOSE_PROJECT_NAME": "from-process-env"]
         )
 
@@ -81,7 +81,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: nil,
             envVars: ["COMPOSE_PROJECT_NAME": "from-env-file"],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: [:]
         )
 
@@ -94,7 +94,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: nil,
             envVars: ["COMPOSE_PROJECT_NAME": "from-env-file"],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: ["COMPOSE_PROJECT_NAME": "from-process-env"]
         )
 
@@ -107,7 +107,7 @@ struct ProjectNameResolutionTests {
             flagValue: "from-flag",
             composeName: "from-compose-file",
             envVars: ["COMPOSE_PROJECT_NAME": "from-env-file"],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: ["COMPOSE_PROJECT_NAME": "from-process-env"]
         )
 
@@ -120,7 +120,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: nil,
             envVars: [:],
-            cwd: "/tmp/my.project",
+            projectDirectory: "/tmp/my.project",
             processEnv: [:]
         )
 
@@ -133,7 +133,7 @@ struct ProjectNameResolutionTests {
             flagValue: nil,
             composeName: "from-compose-file",
             envVars: [:],
-            cwd: "/tmp/somedir",
+            projectDirectory: "/tmp/somedir",
             processEnv: ["COMPOSE_PROJECT_NAME": ""]
         )
 

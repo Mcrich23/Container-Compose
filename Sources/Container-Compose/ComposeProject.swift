@@ -112,7 +112,7 @@ public struct ComposeProjectOptions: ParsableArguments {
             flagValue: composeFileOptions.projectName,
             composeName: compose.name,
             envVars: loadEnvFile(path: envFilePath),
-            cwd: cwd)
+            projectDirectory: composeDirectory)
     }
 
     /// Resolves the services the command should act on, in dependency

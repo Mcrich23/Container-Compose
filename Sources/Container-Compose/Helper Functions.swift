@@ -155,14 +155,18 @@ public func deriveProjectName(cwd: String) -> String {
 ///   - flagValue: The value of the `-p`/`--project-name` flag, if provided.
 ///   - composeName: The top-level `name` field from the compose file, if present.
 ///   - envVars: Environment variables loaded from the .env file.
-///   - cwd: The current working directory path, used as the fallback.
+///   - projectDirectory: Directory whose name is the fallback project name.
+///     Pass the compose file's directory, not the process cwd: the name must
+///     come out the same no matter where the command is run from, or
+///     `up -f <path>` and `stop -f <path>` from different directories would
+///     target different projects.
 ///   - processEnv: The process environment (injectable for testing).
 /// - Returns: The resolved project name.
 public func resolveProjectName(
     flagValue: String?,
     composeName: String?,
     envVars: [String: String],
-    cwd: String,
+    projectDirectory: String,
     processEnv: [String: String] = ProcessInfo.processInfo.environment
 ) -> String {
     if let flagValue, !flagValue.isEmpty {
@@ -175,7 +179,7 @@ public func resolveProjectName(
     if let composeName {
         return resolveVariable(composeName, with: envVars)
     }
-    return deriveProjectName(cwd: cwd)
+    return deriveProjectName(cwd: projectDirectory)
 }
 
 /// Converts Docker Compose port specification into a container run -p format.

@@ -63,3 +63,21 @@ struct ProjectNameTests {
         #expect(options.projectName(for: compose) == deriveProjectName(cwd: cwd))
     }
 }
+
+extension ProjectNameTests {
+
+    /// Morris's #104 review ask: starting and stopping must resolve the same
+    /// project name even when `-f` points outside the current directory.
+    @Test("Default name derives from the compose file's directory, not the process cwd")
+    func defaultNameFollowsComposeFileDirectory() throws {
+        let composeNoName = try composeNoNameFixture()
+        let a = try ComposeProjectOptions.parse(["-f", "/srv/myapp/compose.yml", "--cwd", "/Users/austin"])
+        let b = try ComposeProjectOptions.parse(["-f", "/srv/myapp/compose.yml", "--cwd", "/tmp/somewhere-else"])
+        #expect(a.projectName(for: composeNoName) == deriveProjectName(cwd: "/srv/myapp"))
+        #expect(a.projectName(for: composeNoName) == b.projectName(for: composeNoName))
+    }
+
+    private func composeNoNameFixture() throws -> DockerCompose {
+        try YAMLDecoder().decode(DockerCompose.self, from: "services:\n  web:\n    image: x\n")
+    }
+}
