@@ -24,7 +24,7 @@
 
 /// Represents the `build` configuration for a service.
 public struct Build: Codable, Hashable {
-    /// Path to the build context
+    /// Path to the build context, defaulting to the project directory when omitted.
     public let context: String
     /// Optional path to the Dockerfile within the context
     public let dockerfile: String?
@@ -40,7 +40,7 @@ public struct Build: Codable, Hashable {
             self.args = nil
         } else {
             let keyedContainer = try decoder.container(keyedBy: CodingKeys.self)
-            self.context = try keyedContainer.decode(String.self, forKey: .context)
+            self.context = try keyedContainer.decodeIfPresent(String.self, forKey: .context) ?? "."
             self.dockerfile = try keyedContainer.decodeIfPresent(String.self, forKey: .dockerfile)
             self.args = try keyedContainer.decodeIfPresent([String: String].self, forKey: .args)
         }
