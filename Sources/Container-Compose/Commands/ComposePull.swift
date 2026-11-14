@@ -55,15 +55,58 @@ public struct ComposePull: AsyncParsableCommand {
         }
         try Service.validateRequestedServices(services, against: defined)
 
-        for target in Self.pullTargets(in: resolved, requested: services, includeDeps: includeDeps) {
-            guard let image = target.service.image else {
-                // Build-only services have no image to pull; compose builds these.
-                print("Skipping \(target.serviceName) (no image, built from a Dockerfile)")
-                continue
+        let environment = loadEnvFile(path: project.envFilePath)
+
+        let targets = Self.pullTargets(in: resolved, requested: services, includeDeps: includeDeps)
+        let (items, buildOnly) = Self.pullPlan(for: targets, environment: environment)
+        for serviceName in buildOnly {
+            // Build-only services have no image to pull; compose builds these.
+            print("Skipping \(serviceName) (no image, built from a Dockerfile)")
+        }
+        guard !items.isEmpty else { return }
+
+        // Pull a bounded number of images concurrently. With more than one
+        // pull in flight, per-pull progress rendering is disabled (interleaved
+        // progress bars are unreadable) and our own start/finish lines report
+        // instead; a single pull keeps the full progress output.
+        let passThrough = logging.passThroughCommands()
+        let parallel = items.count > 1
+        var failedImages: [String] = []
+
+        try await withThrowingTaskGroup(of: (image: String, error: Error?).self) { group in
+            var remaining = items.makeIterator()
+
+            @discardableResult
+            func startNext() -> Bool {
+                guard let item = remaining.next() else { return false }
+                print("Pulling \(item.services.joined(separator: ", ")) (\(item.image))...")
+                group.addTask {
+                    do {
+                        try await Self.pull(item, passThrough: passThrough, quietProgress: parallel)
+                        return (item.image, nil)
+                    } catch {
+                        return (item.image, error)
+                    }
+                }
+                return true
             }
 
-            print("Pulling \(target.serviceName) (\(image))...")
-            try await pullImage(image, platform: target.service.effectivePullPlatform())
+            for _ in 0..<Self.maxConcurrentPulls {
+                guard startNext() else { break }
+            }
+            while let (image, error) = try await group.next() {
+                if let error {
+                    failedImages.append(image)
+                    print("Error pulling \(image): \(error)")
+                } else if parallel {
+                    print("Pulled \(image)")
+                }
+                startNext()
+            }
+        }
+
+        if !failedImages.isEmpty {
+            throw ExitCode.failure
         }
     }
 
@@ -88,16 +131,63 @@ public struct ComposePull: AsyncParsableCommand {
         service.image.map { resolveVariable($0, with: environment) }
     }
 
-    private func pullImage(_ imageName: String, platform: String?) async throws {
-        // Always pull, even when a matching image exists locally: refreshing a
-        // moving tag like `:latest` is the point of an explicit `pull`.
-        // (`up`'s implicit pull is the place for the already-present shortcut.)
-        var commands = [imageName]
-        if let platform {
+    /// Maximum simultaneous `container image pull` operations. Each pull
+    /// already downloads up to three layers concurrently, so a modest cap
+    /// keeps the total number of registry connections reasonable.
+    static let maxConcurrentPulls = 3
+
+    /// One deduplicated pull: an image reference (variables resolved), the
+    /// platform to pull it for, and the services that use it.
+    struct PullItem: Equatable, Sendable {
+        let image: String
+        let platform: String?
+        var services: [String]
+    }
+
+    /// Groups the targets into deduplicated pull items, preserving service
+    /// order: services that share an image and platform pull it once.
+    ///
+    /// - Returns: The pull items, and the names of build-only services
+    ///   (no `image:` key) so the caller can report them as skipped.
+    static func pullPlan(
+        for targets: [ComposeProject.ServiceTarget],
+        environment: [String: String]
+    ) -> (items: [PullItem], buildOnly: [String]) {
+        var items: [PullItem] = []
+        var buildOnly: [String] = []
+        var indexByKey: [String: Int] = [:]
+
+        for target in targets {
+            guard let image = resolvedImage(for: target.service, environment: environment) else {
+                buildOnly.append(target.serviceName)
+                continue
+            }
+            let platform = target.service.effectivePullPlatform()
+            let key = "\(image)|\(platform ?? "")"
+            if let index = indexByKey[key] {
+                items[index].services.append(target.serviceName)
+            } else {
+                indexByKey[key] = items.count
+                items.append(PullItem(image: image, platform: platform, services: [target.serviceName]))
+            }
+        }
+        return (items, buildOnly)
+    }
+
+    /// Pulls one image. Always pulls, even when a matching image exists
+    /// locally: refreshing a moving tag like `:latest` is the point of an
+    /// explicit `pull` (`up`'s implicit pull keeps the already-present
+    /// shortcut).
+    private static func pull(_ item: PullItem, passThrough: [String], quietProgress: Bool) async throws {
+        var commands = [item.image]
+        if let platform = item.platform {
             commands.append(contentsOf: ["--platform", platform])
         }
+        if quietProgress {
+            commands.append(contentsOf: ["--progress", "none"])
+        }
 
-        let imagePull = try Application.ImagePull.parse(commands + logging.passThroughCommands())
+        let imagePull = try Application.ImagePull.parse(commands + passThrough)
         try await imagePull.run()
     }
 }
