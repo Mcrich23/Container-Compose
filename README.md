@@ -9,7 +9,7 @@ Container-Compose brings (limited) Docker Compose support to [Apple Container](h
 
 - **Compose file support:** Parse and interpret `docker-compose.yml` files to configure Apple Containers.
 - **Apple Container orchestration:** Launch and manage multiple containerized services using Apple’s native container runtime.
-- **Environment configuration:** Support for environment variable files (`.env`) to customize deployments.
+- **Environment configuration:** `.env` supplies interpolation values. Service `env_file` entries supply container variables, with later files taking precedence; explicit `environment` values override them.
 - **Service dependencies:** Specify service dependencies and startup order.
 - **Volume and network mapping:** Map data and networking as specified in Compose files to Apple Container equivalents.
 - **Extensible:** Designed for future extension and customization.
@@ -54,7 +54,7 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Process identity and paths | Partial | Applies `user`, `working_dir`, and `container_name`. Otherwise names derive from the project and service, using dotted names when project DNS is registered. | `user` and `container_name` do not receive variable interpolation. |
 | Privileges | Partial | Applies `privileged` and `read_only`. | Other security options are not generally implemented. |
 | Labels | Partial | Accepts mappings or lists. List entries split at the first `=`; bare names and explicit empty values become empty strings, and later duplicate names win. Passes labels to the container. | Generated Compose project/service labels override user values for those two keys. Label values do not receive variable interpolation. |
-| Environment | Partial | Loads `.env`, service `env_file`, and mapping or list environment values. Literal service values override file values. | `.env` wins over `env_file`, and earlier env files win over later ones. Values containing `${` follow a separate, limited substitution path. Missing env files are silently ignored; dotenv quoting and full Compose precedence are not implemented. |
+| Environment | Partial | Uses `.env` for interpolation without injecting it into containers. Later service `env_file` entries override earlier ones; explicit service values override files and interpolate against the external environment. | Missing env files are silently ignored. Dotenv quoting, null/bare inheritance and full Compose interpolation are not implemented. |
 | Variable interpolation | Partial | Expands values at selected call sites. | Expression handling is limited. Does not interpolate the whole document. |
 | `depends_on` | Partial | Handles started, healthy and successful-completion conditions. | `required: false` and `restart: true` are decoded but ignored; unavailable optional dependencies can still block startup. Independent services launch sequentially. |
 | `healthcheck` | Partial | Runs startup probes, honors retries and interval, and waits for `start_period` before probing. `test: [NONE]` disables checks. | `disable` is ignored. Absent or empty tests can be marked healthy without a probe; image-inherited HEALTHCHECK probes are not executed. Per-probe timeout enforcement and continuous health monitoring are missing. |

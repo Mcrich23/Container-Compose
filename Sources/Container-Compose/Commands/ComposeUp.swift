@@ -927,32 +927,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Combine environment variables from .env files and service environment
-        var combinedEnv: [String: String] = environmentVariables
-
-        if let envFiles = service.env_file {
-            for envFile in envFiles {
-                let additionalEnvVars = loadEnvFile(path: URL(fileURLWithPath: envFile, relativeTo: URL(fileURLWithPath: composeDirectory)).path)
-                combinedEnv.merge(additionalEnvVars) { (current, _) in current }
-            }
-        }
-
-        if let serviceEnv = service.environment {
-            combinedEnv.merge(serviceEnv) { (old, new) in
-                guard !new.contains("${") else {
-                    return old
-                }
-                return new
-            }  // Service env overrides .env files
-        }
-
-        // Fill in variables
-        combinedEnv = combinedEnv.mapValues({ value in
-            guard value.contains("${") else { return value }
-
-            let variableName = String(value.replacingOccurrences(of: "${", with: "").dropLast())
-            return combinedEnv[variableName] ?? value
-        })
+        var combinedEnv = assembleServiceEnvironment(
+            service: service,
+            composeDirectory: composeDirectory,
+            interpolationEnvironment: environmentVariables
+        )
 
         // Fill in IPs
         combinedEnv = combinedEnv.mapValues({ value in

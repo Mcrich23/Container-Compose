@@ -135,6 +135,24 @@ public func resolveVariable(_ value: String, with envVars: [String: String]) -> 
     return resolvedValue
 }
 
+/// Assembles container variables from service files and explicit values.
+/// The interpolation environment supplies substitutions without being injected.
+func assembleServiceEnvironment(
+    service: Service,
+    composeDirectory: String,
+    interpolationEnvironment: [String: String]
+) -> [String: String] {
+    var result: [String: String] = [:]
+    for path in service.env_file ?? [] {
+        let fullPath = resolvedPath(for: path, relativeTo: URL(fileURLWithPath: composeDirectory, isDirectory: true))
+        result.merge(loadEnvFile(path: fullPath)) { _, later in later }
+    }
+    for (key, value) in service.environment ?? [:] {
+        result[key] = resolveVariable(value, with: interpolationEnvironment)
+    }
+    return result
+}
+
 /// Derives a project name from the current working directory. It replaces any '.' characters with
 /// '_' to ensure compatibility with container naming conventions.
 ///
