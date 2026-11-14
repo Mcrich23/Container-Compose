@@ -26,14 +26,16 @@ The commands below are available. Their options do not cover every Docker Compos
 
 | Command | Support | Behavior |
 | --- | --- | --- |
-| `up` | Partial | Starts selected services and their dependencies. Supports profiles, detached operation and rebuilding. YAML limits are listed below. |
-| `down` | Partial | Stops and removes project containers; project resource isolation is incomplete. |
-| `build` | Partial | Builds service images with platform selection and no-cache options. See build syntax below. |
-| `pull` | Full | Pulls service images. |
-| `version` | Full | Prints the Container-Compose version. |
+| `up` | Partial | Starts all enabled services, or named services and their dependencies, in dependency order. Replaces existing containers for the selected services. `-d`/`--detach` returns after startup; foreground mode streams output and stops containers on SIGINT/SIGTERM. `-b`/`--build` requests rebuilding and `--no-cache` disables build caching. YAML limits are listed below. |
+| `down` | Partial | Stops selected project containers, honoring service stop settings. Containers, networks and named volumes are not removed. Inactive profiles must be enabled again, or their services named explicitly, to stop them. |
+| `build` | Partial | Builds services with a `build` definition; optional service names narrow the selection. Supports `--no-cache`, service `platform`, dictionary build arguments and custom Dockerfiles. Uses `image` as the tag, falling back to `<service>:latest`. Does not start containers. See build syntax below. |
+| `pull` | Full | Pulls images for enabled services or explicitly named services. `--include-deps` also pulls dependency images. Uses service platform selection; does not build images or start containers. |
+| `version` | Full | Prints the Container-Compose version; this is the tool version, not a Docker Compose compatibility version. |
 | `run`, `ps`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | Use Apple Container directly where appropriate. |
 
 Compose files can be selected with `-f`/`--file` and the working directory with `--cwd`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
+
+Unsupported commands are not aliases for Apple Container commands. For example, use the Apple Container CLI directly to inspect logs or execute a process in an existing container.
 
 ### Compose YAML
 
@@ -43,14 +45,16 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | --- | --- | --- |
 | Project name and profiles | Partial | Uses top-level `name` or the directory name. Supports profiles and explicit service selection; resource isolation is incomplete. |
 | Multiple files, `include`, `extends` | Unsupported | No file merging, includes or service inheritance. |
-| `image` and `build` | Partial | Pulls images and builds string contexts or mappings with `context`, `dockerfile`, and dictionary `args`. No build targets or list-form args. |
-| Build paths | Full | Relative contexts resolve from the Compose file directory; Dockerfile paths resolve from the build context. |
+| `image` and `platform` | Partial | Image-only services pull their image before starting; service `platform` is passed to the runtime. A service needs an image or build definition. Image pull policy configuration is not implemented. |
+| `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, and dictionary `args`. Build arguments receive variable substitution. No build targets or list-form arguments. |
+| Build paths | Full | Relative contexts resolve from the Compose file directory; Dockerfile paths resolve from the build context. Omitting `dockerfile` selects `Dockerfile` in that context. |
 | `command` and `entrypoint` | Partial | Applies overrides. String splitting has known limits; prefer array form. |
-| Process options | Partial | Applies user, working directory, privileged/read-only flags, container names and dictionary labels. Other process and security options are not generally implemented. |
+| Process identity and paths | Partial | Applies `user`, `working_dir`, and `container_name`. Otherwise names derive from the project and service, using dotted names when project DNS is registered. |
+| Privileges and labels | Partial | Applies `privileged`, `read_only`, and dictionary-form labels. Other security options and list-form labels are not generally implemented. |
 | Environment | Partial | Loads `.env`, service `env_file`, and environment values. Some Compose syntax and precedence rules are missing. |
 | Variable interpolation | Partial | Expands values at selected call sites, with limited expression handling. Does not interpolate the whole document. |
 | `depends_on` | Partial | Handles started, healthy and successful-completion conditions. Independent services launch sequentially. |
-| `healthcheck` | Partial | Checks health during startup only. Timeout and start-period handling are incomplete. |
+| `healthcheck` | Partial | Checks health during startup only. Honors retries and interval, and waits for `start_period` before probing. Per-probe timeout enforcement and continuous health monitoring are missing. |
 | Ports | Partial | Publishes short-form port mappings. |
 | Networks | Partial | Creates basic named networks or uses external ones. Driver/options, internal, attachable, IPv6 and network labels are not applied. |
 | DNS and hosts | Partial | Uses a registered project domain or best-effort hosts-file patching. Aliases depend on upstream CLI support; `extra_hosts` replaces the generated hosts file. |
