@@ -55,10 +55,8 @@ public struct ComposePull: AsyncParsableCommand {
         }
         try Service.validateRequestedServices(services, against: defined)
 
-        let environment = loadEnvFile(path: project.envFilePath)
-
         for target in Self.pullTargets(in: resolved, requested: services, includeDeps: includeDeps) {
-            guard let image = Self.resolvedImage(for: target.service, environment: environment) else {
+            guard let image = target.service.image else {
                 // Build-only services have no image to pull; compose builds these.
                 print("Skipping \(target.serviceName) (no image, built from a Dockerfile)")
                 continue
@@ -82,10 +80,12 @@ public struct ComposePull: AsyncParsableCommand {
         return project.services.filter { requested.contains($0.serviceName) }
     }
 
-    /// Resolves the image reference with the supplied environment, preserving escaped dollars.
-    /// Returns `nil` for services without an explicit image.
+    /// The image reference to pull for a service, with `${VAR}` /
+    /// `${VAR:-default}` placeholders resolved from the environment file —
+    /// a literal `${...}` is not a valid registry reference. `nil` for
+    /// build-only services (no `image:` key).
     static func resolvedImage(for service: Service, environment: [String: String]) -> String? {
-        service.image.map { resolveRuntimeField($0, environment: environment) }
+        service.image.map { resolveVariable($0, with: environment) }
     }
 
     private func pullImage(_ imageName: String, platform: String?) async throws {

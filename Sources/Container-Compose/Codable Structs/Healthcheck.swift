@@ -36,6 +36,8 @@ public struct Healthcheck: Codable, Hashable {
     ]
     private static let durationRegex = try! NSRegularExpression(pattern: #"([0-9]+(?:\.[0-9]+)?)(ns|us|µs|ms|s|m|h)"#)
 
+    /// Disables probing even when a test is supplied.
+    public let disable: Bool?
     /// Command to run to check health
     public let test: [String]?
     /// Grace period for the container to start
@@ -52,8 +54,10 @@ public struct Healthcheck: Codable, Hashable {
         start_period: String? = nil,
         interval: String? = nil,
         retries: Int? = nil,
-        timeout: String? = nil
+        timeout: String? = nil,
+        disable: Bool? = nil
     ) {
+        self.disable = disable
         self.test = test
         self.start_period = start_period
         self.interval = interval
@@ -73,6 +77,7 @@ public struct Healthcheck: Codable, Hashable {
             self.test = nil
         }
         
+        self.disable = try container.decodeIfPresent(Bool.self, forKey: .disable)
         self.start_period = try container.decodeIfPresent(String.self, forKey: .start_period)
         self.interval = try container.decodeIfPresent(String.self, forKey: .interval)
         self.retries = try container.decodeIfPresent(Int.self, forKey: .retries)
@@ -80,7 +85,7 @@ public struct Healthcheck: Codable, Hashable {
     }
 
     public var isDisabled: Bool {
-        test?.first?.uppercased() == "NONE"
+        disable == true || test?.first?.uppercased() == "NONE"
     }
 
     public var execArguments: [String]? {

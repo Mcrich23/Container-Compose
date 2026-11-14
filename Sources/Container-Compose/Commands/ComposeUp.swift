@@ -396,13 +396,14 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     static func hostnameRunArgs(
         hostname: String?,
         serviceName: String,
-        environmentVariables: [String: String]
+        environmentVariables: [String: String],
+        interpolate: Bool = true
     ) -> (args: [String], warning: String?) {
         guard let hostname else {
             return ([], nil)
         }
 
-        let resolvedHostname = resolveVariable(hostname, with: environmentVariables)
+        let resolvedHostname = interpolate ? resolveVariable(hostname, with: environmentVariables) : hostname
         return (
             [],
             "Warning: Service '\(serviceName)' defines hostname '\(resolvedHostname)', but Apple Container does not currently expose a container run hostname flag."
@@ -414,10 +415,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         aliases: [String],
         serviceName: String,
         environmentVariables: [String: String],
-        supportsAliases: Bool = networkAliasesSupported
+        supportsAliases: Bool = networkAliasesSupported,
+        interpolate: Bool = true
     ) -> (arg: String, warning: String?) {
         let resolvedUserAliases = aliases
-            .map { resolveVariable($0, with: environmentVariables) }
+            .map { interpolate ? resolveVariable($0, with: environmentVariables) : $0 }
             .reduce(into: [String]()) { result, alias in
                 guard !alias.isEmpty, !result.contains(alias) else { return }
                 result.append(alias)
@@ -840,10 +842,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Handle 'build' configuration
         if let buildConfig = service.build {
             imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
-        } else if service.image != nil {
+        } else if let img = service.image {
             // Use specified image if no build config
             // Pull image if necessary
-            let img = runtimeImage(service, serviceName: serviceName, environment: environmentVariables)
             try await pullImage(img, platform: service.effectivePullPlatform())
             imageToRun = img
         } else {
@@ -904,7 +905,9 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         var labels = service.labels ?? [:]
         labels["com.docker.compose.project"] = projectName
         labels["com.docker.compose.service"] = serviceName
-        runCommandArgs.append(contentsOf: runtimeLabels(labels, environment: environmentVariables))
+        for key in labels.keys.sorted() {
+            runCommandArgs.append(contentsOf: ["--label", "\(key)=\(labels[key] ?? "")"])
+        }
 
         // REMOVED: Restart policy is not supported by `container run`
         // if let restart = service.restart {
@@ -913,7 +916,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // }
 
         // Add user
-        runCommandArgs.append(contentsOf: runtimeUserArguments(service.user, environment: environmentVariables))
+        if let user = service.user {
+            runCommandArgs.append("--user")
+            runCommandArgs.append(user)
+        }
 
         // Add volume mounts
         if let volumes = service.volumes {
@@ -923,32 +929,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             }
         }
 
-        // Combine environment variables from .env files and service environment
-        var combinedEnv: [String: String] = environmentVariables
-
-        if let envFiles = service.env_file {
-            for envFile in envFiles {
-                let additionalEnvVars = loadEnvFile(path: URL(fileURLWithPath: envFile, relativeTo: URL(fileURLWithPath: composeDirectory)).path)
-                combinedEnv.merge(additionalEnvVars) { (current, _) in current }
-            }
-        }
-
-        if let serviceEnv = service.environment {
-            combinedEnv.merge(serviceEnv) { (old, new) in
-                guard !new.contains("${") else {
-                    return old
-                }
-                return new
-            }  // Service env overrides .env files
-        }
-
-        // Fill in variables
-        combinedEnv = combinedEnv.mapValues({ value in
-            guard value.contains("${") else { return value }
-
-            let variableName = String(value.replacingOccurrences(of: "${", with: "").dropLast())
-            return combinedEnv[variableName] ?? value
-        })
+        var combinedEnv = assembleServiceEnvironment(
+            service: service,
+            composeDirectory: composeDirectory,
+            interpolationEnvironment: environmentVariables,
+            interpolate: false
+        )
 
         // Fill in IPs
         combinedEnv = combinedEnv.mapValues({ value in
@@ -964,7 +950,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
          if let ports = service.ports {
              for port in ports {
-                 let resolvedPort = resolveVariable(port, with: environmentVariables)
+                 let resolvedPort = port
                  runCommandArgs.append("-p")
                  runCommandArgs.append(composePortToRunArg(resolvedPort))
              }
@@ -973,7 +959,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Connect to specified networks
         if let serviceNetworks = service.networks {
             for network in serviceNetworks {
-                let resolvedNetwork = resolveVariable(network, with: environmentVariables)
+                let resolvedNetwork = network
                 // Use the explicit network name from top-level definition if available, otherwise resolved name
                 let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
                 runCommandArgs.append("--network")
@@ -981,7 +967,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     network: networkToConnect,
                     aliases: service.networkConfigurations?[network]?.aliases ?? [],
                     serviceName: serviceName,
-                    environmentVariables: environmentVariables
+                    environmentVariables: environmentVariables,
+                    interpolate: false
                 )
                 runCommandArgs.append(networkTranslation.arg)
                 if let warning = networkTranslation.warning {
@@ -1002,7 +989,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         let hostnameTranslation = Self.hostnameRunArgs(
             hostname: service.hostname,
             serviceName: serviceName,
-            environmentVariables: environmentVariables
+            environmentVariables: environmentVariables,
+            interpolate: false
         )
         if let warning = hostnameTranslation.warning {
             print(warning)
@@ -1030,13 +1018,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                     + "other daemon-managed entries are not preserved."
             )
 
-            // Resolve variables first: needsGateway must inspect the resolved value,
-            // otherwise an entry fully wrapped in a variable (e.g. "${HOST_ENTRY}"
-            // expanding to "foo:host-gateway") is missed and hostGatewayIP is left
-            // empty, silently producing "--add-host foo:" (now "foo:" in /etc/hosts).
-            let resolvedEntries = extraHosts.map { resolveVariable($0, with: environmentVariables) }
+            // Project loading has already expanded entries such as ${HOST_ENTRY},
+            // so gateway detection sees the same values used to write the hosts file.
+            let resolvedEntries = extraHosts
             let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
-            let resolvedNetworkName = service.networks?.first.map { resolveVariable($0, with: environmentVariables) } ?? "default"
+            let resolvedNetworkName = service.networks?.first ?? "default"
             let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
 
             var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
@@ -1055,7 +1041,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // the container that resolves its own hostname still works. Skipped if
             // extra_hosts already defines that name explicitly, so an intentional
             // user override wins.
-            let ownHostname = service.hostname.map { resolveVariable($0, with: environmentVariables) } ?? containerName
+            let ownHostname = service.hostname ?? containerName
             if !seenHostnames.contains(ownHostname) {
                 hostsFileLines.append("127.0.0.1 \(ownHostname)")
             }
@@ -1071,7 +1057,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Add working directory
         if let workingDir = service.working_dir {
-            let resolvedWorkingDir = resolveVariable(workingDir, with: environmentVariables)
+            let resolvedWorkingDir = workingDir
             runCommandArgs.append("--workdir")
             runCommandArgs.append(resolvedWorkingDir)
         }
@@ -1095,7 +1081,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
         let effectiveMemoryLimit = service.mem_limit ?? service.deploy?.resources?.limits?.memory
         if let memory = effectiveMemoryLimit {
-            let resolved = resolveVariable(memory, with: environmentVariables)
+            let resolved = memory
             let (memoryArg, didClamp) = Self.clampMemoryLimit(resolved)
             if didClamp {
                 print("Note: Service '\(serviceName)' mem_limit '\(resolved)' is below Apple Container's 200 MiB minimum; clamping to \(memoryArg).")
@@ -1335,7 +1321,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     /// - Returns: Image Name (`String`)
     private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
         // Determine image tag for built image
-        let imageToRun = runtimeImage(service, serviceName: serviceName, environment: environmentVariables)
+        let imageToRun = service.image ?? "\(serviceName):latest"
         let imageList = try await ClientImage.list()
         if !rebuild, imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageToRun }) {
             return imageToRun
@@ -1343,14 +1329,20 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Per Compose spec: `context` is relative to the compose file's directory,
         // and `dockerfile` is relative to the resolved `context` (not the compose dir).
-        var commands = runtimeBuildPaths(buildConfig, directory: composeDirectory, environment: environmentVariables)
+        let contextURL = URL(fileURLWithPath: buildConfig.context, isDirectory: true, relativeTo: URL(fileURLWithPath: composeDirectory, isDirectory: true))
+        var commands = [contextURL.path]
 
         // Add build arguments
         for (key, value) in buildConfig.args ?? [:] {
-            commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
+            commands.append(contentsOf: ["--build-arg", "\(key)=\(value)"])
         }
 
+        // Add Dockerfile path
+        commands.append(contentsOf: ["--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: contextURL).path])
         
+        if let target = buildConfig.target, !target.isEmpty {
+            commands.append(contentsOf: ["--target", target])
+        }
 
         // Add caching options
         if noCache {
@@ -1387,7 +1379,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             fileManager: fileManager,
             environmentVariables: environmentVariables,
             projectName: projectName,
-            volumeDefinitions: dockerCompose.volumes
+            volumeDefinitions: dockerCompose.volumes,
+            interpolate: false
         )
     }
 }
