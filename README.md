@@ -2,7 +2,7 @@
 
 Container-Compose brings (limited) Docker Compose support to [Apple Container](https://github.com/apple/container), allowing you to define and orchestrate multi-container applications on Apple platforms using familiar Compose files. This project is not a Docker or Docker Compose wrapper but a tool to bridge Compose workflows with Apple's container management ecosystem.
 
-> **Note:** Container-Compose does not automatically configure DNS for macOS 15 (Sequoia). Use macOS 26 (Tahoe) for an optimal experience.
+> **Note:** Use macOS 26.0 or later for custom networks and container-to-container networking.
 
 ## Features
 
@@ -15,10 +15,9 @@ Container-Compose brings (limited) Docker Compose support to [Apple Container](h
 
 ## Compose support status
 
-- **Fully supported:** The listed behavior works end to end.
+- **Implemented:** The listed behavior has an implementation path. This does not imply complete Docker Compose compatibility or runtime verification of every combination.
 - **Partially supported:** Some syntax or behavior is missing.
 - **Unsupported:** Not implemented in Container-Compose.
-- **Unsupported upstream:** Blocked by Apple Container or macOS.
 
 ### Commands
 
@@ -26,13 +25,13 @@ Command support includes both available behavior and known gaps. A command being
 
 | Command | Support | What works | What is missing or limited |
 | --- | --- | --- | --- |
-| `up` | Partial | Starts enabled services, or named services and their dependencies, in dependency order. Replaces existing containers for selected services. Supports detached operation, foreground output, rebuilding with `-b`/`--build`, and `--no-cache`. | SIGTERM does not reliably stop containers: signal handling is installed only after service startup, leaving startup and health-check waits uncovered. Use `down` to stop them. Independent services start sequentially. Builds through `up` ignore `build.target`. Other YAML limits are listed below. |
-| `down` | Partial | Stops selected project containers using each service's stop settings. | Does not remove containers, networks or named volumes. Services in inactive profiles are skipped unless their profile is enabled or they are named explicitly. Container lookup uses candidate names rather than checking project labels. |
-| `build` | Partial | Builds selected services and their buildable dependencies. Supports `--no-cache`, service `platform`, dictionary build arguments, custom Dockerfiles and `build.target`. Tags images with `image` or `<service>:latest`. | No CLI `--build-arg` override or list-form YAML arguments. Other Compose build options, such as inline Dockerfiles and cache import/export, are not implemented. |
-| `pull` | Partial | Pulls images for enabled or explicitly named services. `--include-deps` includes dependency images. Honors an explicit service `platform` and skips build-only services. | Without an explicit platform, pulls can download every architecture in an image index. No pull-policy selection or option to continue after a pull failure. |
+| `up` | Partial | Starts enabled or explicitly named services and their dependencies in dependency order. Attempts to stop and remove existing selected containers before starting replacements. Supports detached operation, foreground output, rebuilding with `-b`/`--build`, and `--no-cache`. | Foreground signal handling is installed only after service startup, leaving startup and health-check waits uncovered. Use `down` to stop them. Independent services start sequentially. `--no-cache` only affects a build that runs; use `--build` to rebuild an existing local image. Builds through `up` ignore `build.target`. Cleanup errors are printed and startup continues. Other YAML limits are listed below. |
+| `down` | Partial | Attempts to stop selected project containers using `stop_grace_period`. | Does not remove containers, networks or named volumes. Uses the shared profile and dependency selection: inactive-profile services are included when explicitly named or required by a selected service, but otherwise skipped. Container lookup uses candidate names rather than checking project labels. Stop errors are printed and do not fail the command; YAML `stop_signal` is not applied. |
+| `build` | Partial | Builds selected services and their buildable dependencies. Supports `--no-cache`, service `platform`, dictionary build arguments, custom Dockerfiles and `build.target`. Tags images with `image` or `<service>:latest`. | No CLI `--build-arg` override or list-form YAML arguments. Build platform parsing uses the first and last `/` components, so a variant such as `linux/arm64/v8` is misread as OS `linux`, architecture `v8`. Other Compose build options, such as inline Dockerfiles and cache import/export, are not implemented. |
+| `pull` | Partial | By default, pulls images for enabled services and their dependencies. With explicit service names, pulls only those services unless `--include-deps` is set. Honors an explicit service `platform` and skips build-only services. | Without an explicit platform, this command leaves platform selection to Apple Container. No pull-policy selection or option to continue after a pull failure. |
 | `ps` | Partial | Lists running project containers with name, image, status and published ports. `-a`/`--all` includes stopped containers. Uses project/service labels, falling back to names for containers without project labels. | No JSON output, quiet mode or status-filter option. Service selection uses the shared dependency resolver, so selecting a service also includes its dependencies. |
-| `images` | Partial | Lists service, repository, tag, image ID and size. Uses `<service>:latest` for builds without an explicit image name. Looks up ID and size from local images. | Lists configured service images rather than inspecting the images attached to existing containers. Unavailable local details stay blank. No JSON or quiet output. Service selection also includes dependencies. |
-| `version` | Full | Prints the Container-Compose version. | Reports this tool's version, not a Docker Compose compatibility version. |
+| `images` | Partial | Lists service, repository, tag, image ID and size. Uses `<service>:latest` for builds without an explicit image name. Looks up ID and size from local images. | Lists configured service images rather than inspecting the images attached to existing containers. Unavailable local details stay blank. Local matching does not check platform and can match another registry by a short image name. Digest references are split as repository/tag, and variables are displayed literally. No JSON or quiet output. Service selection also includes dependencies. |
+| `version` | Implemented | Prints the Container-Compose version. | Reports this tool's version, not a Docker Compose compatibility version. |
 | `run`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | — | These subcommands are not implemented. Use Apple Container directly where appropriate. |
 
 Compose files can be selected with `-f`/`--file` and the working directory with `--cwd`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
@@ -47,25 +46,26 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | --- | --- | --- |
 | Project name and profiles | Partial | Uses top-level `name` or the directory name. Supports profiles and explicit service selection; resource isolation is incomplete. |
 | Multiple files, `include`, `extends` | Unsupported | No file merging, includes or service inheritance. |
-| `image` and `platform` | Partial | Image-only services pull their image before starting; service `platform` is passed to the runtime. A service needs an image or build definition. Image pull policy configuration is not implemented. |
-| `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, dictionary `args`, and `target`. Omitted or null context defaults to `.`. Build arguments receive variable substitution; list-form arguments are not supported. The `build` command honors `target`, but builds started by `up` do not yet apply it. |
-| Build paths | Full | Relative contexts resolve from the Compose file directory; Dockerfile paths resolve from the build context. Omitting `dockerfile` selects `Dockerfile` in that context. |
-| `command` and `entrypoint` | Partial | Applies overrides. String splitting has known limits; prefer array form. |
+| `image` and `platform` | Partial | Image-only services pull before starting when no matching local reference is found; service `platform` is passed to the runtime. Local-image matching does not check platform. A service needs an image or build definition. Image pull policy configuration is not implemented. |
+| `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, dictionary `args`, and `target`. Omitted or null context defaults to `.`. Build arguments receive variable substitution; list-form arguments are not supported. The `build` command honors `target`, but builds started by `up` do not yet apply it. Both build paths misparse platform strings containing a variant. |
+| Build paths | Implemented | Relative contexts resolve from the Compose file directory; Dockerfile paths resolve from the build context. Omitting `dockerfile` selects `Dockerfile` in that context. Context and Dockerfile paths do not receive variable interpolation or explicit tilde expansion. |
+| `command` and `entrypoint` | Partial | String form is passed as one argument; use arrays to separate the executable and arguments. Empty entrypoint arrays emit no override, so they do not clear the image entrypoint. Empty command arrays emit no arguments and have no distinct clearing behavior. |
 | Process identity and paths | Partial | Applies `user`, `working_dir`, and `container_name`. Otherwise names derive from the project and service, using dotted names when project DNS is registered. |
 | Privileges | Partial | Applies `privileged` and `read_only`. Other security options are not generally implemented. |
-| Labels | Full | Accepts mappings or lists. List entries split at the first `=`; bare names and explicit empty values become empty strings, and later duplicate names win. Passes labels to the container alongside Compose project/service labels. |
-| Environment | Partial | Loads `.env`, service `env_file`, and environment values. Some Compose syntax and precedence rules are missing. |
+| Labels | Implemented | Accepts mappings or lists. List entries split at the first `=`; bare names and explicit empty values become empty strings, and later duplicate names win. Passes labels to the container; generated Compose project/service labels override user values for those two keys. |
+| Environment | Partial | Loads `.env`, service `env_file`, and mapping or list environment values. `.env` wins over `env_file`, and earlier env files win over later ones. Literal service values override these, but values containing `${` follow a separate, limited substitution path. Missing env files are silently ignored; dotenv quoting and full Compose precedence are not implemented. |
 | Variable interpolation | Partial | Expands values at selected call sites, with limited expression handling. Does not interpolate the whole document. |
-| `depends_on` | Partial | Handles started, healthy and successful-completion conditions. Independent services launch sequentially. |
-| `healthcheck` | Partial | Checks health during startup only. Honors retries and interval, and waits for `start_period` before probing. Per-probe timeout enforcement and continuous health monitoring are missing. |
-| Ports | Partial | Publishes short-form port mappings. |
-| Networks | Partial | Creates basic named networks or uses external ones. Driver/options, internal, attachable, IPv6 and network labels are not applied. |
-| DNS and hosts | Partial | Uses a registered project domain or best-effort hosts-file patching. Aliases depend on upstream CLI support; `extra_hosts` replaces the generated hosts file. |
-| Volumes and bind mounts | Partial | Supports short-form mounts, named-volume creation and external volumes. Relative bind paths resolve from the Compose file directory, including when the file is selected with `-f`. Long-form mounts and Docker volume drivers are not fully supported. |
-| CPU and memory | Partial | Applies `deploy.resources.limits.cpus` and memory. `mem_limit` takes precedence; memory below 200 MiB is clamped. Fractional CPU handling has known limits. |
+| `depends_on` | Partial | Handles started, healthy and successful-completion conditions. `required: false` and `restart: true` are decoded but ignored; unavailable optional dependencies can still block startup. Independent services launch sequentially. |
+| `healthcheck` | Partial | Checks health during startup only. `disable` is ignored; only `test: [NONE]` disables checks. Absent or empty tests can be marked healthy without a probe; image-inherited HEALTHCHECK probes are not executed. Honors retries and interval, and waits for `start_period` before probing. Per-probe timeout enforcement and continuous health monitoring are missing. |
+| Ports | Partial | Passes short-form mappings to the runtime. A bare container port publishes the same host port on `0.0.0.0`, rather than requesting an ephemeral host port. Long-form mappings are not supported. |
+| Networks | Partial | Creates basic named networks or uses external ones. Driver/options, internal, attachable, IPv6 and network labels are not applied. No project-specific implicit default network is created. Legacy external network names are not used when attaching services; use the top-level network `name`. |
+| Automatic DNS registration | Unsupported | Container-Compose checks for an existing DNS domain but does not register one. Apple Container supports registration with `sudo container system dns create <domain>`. |
+| DNS and hosts | Partial | Uses a registered project domain or best-effort hosts-file patching. Network aliases are ignored by this implementation. `hostname` does not set the runtime hostname. `extra_hosts` bind-mounts a replacement `/etc/hosts`; `host-gateway` uses network inspection with a potentially unreachable LAN-gateway fallback. |
+| Volumes and bind mounts | Partial | Supports short-form mounts, named-volume creation and external volumes. Relative bind paths resolve from the Compose file directory, including when the file is selected with `-f`. Long-form mounts and destination-only anonymous mounts are unsupported. Null top-level volume definitions are skipped during explicit volume creation. Volume driver names, options and labels are forwarded. The pinned Apple Container implementation creates local ext4 images regardless of driver name; it interprets `size` and `journal` options and stores other options without applying Docker driver behavior. |
+| CPU and memory | Partial | Applies `deploy.resources.limits.cpus` and memory. `mem_limit` takes precedence; memory below 200 MiB is clamped. Runtime CPU values are passed through; build CPU values must parse as integers or fall back to 2. Build memory uses deploy limits or its default, without the runtime clamp or `mem_limit` precedence. |
 | Resource reservations and devices | Unsupported | Does not apply reservations or device reservations. |
 | External resource declarations | Partial | Accepts boolean `external` values and the legacy `{name: shared}` form on volumes, networks, configs and secrets. Malformed declarations fail decoding instead of silently falling back to local resources. Config and secret attachments remain unimplemented. |
-| Configs and secrets | Unsupported | Definitions decode and are logged, but resources are not created or attached. |
+| Configs and secrets | Unsupported | Definitions and attachments decode; service attachments are logged, but resources are not created or attached. |
 | Restart and deployment policies | Unsupported | No restart policies, replica management, rolling updates or placement scheduling. Each selected service runs as one container. |
 
 > **Note:** Custom networks and container-to-container networking require macOS 26.0 or later.
@@ -77,9 +77,9 @@ See the [Compose specification](https://compose-spec.github.io/compose-spec/spec
 
 ### Prerequisites
 
-- A Mac running macOS with Apple Container support (macOS Sonoma or later recommended)
-- Git
-- [Xcode command line tools](https://developer.apple.com/xcode/resources/) (for building, if building from source)
+- A Mac with Apple silicon. The package targets macOS 15 or later; macOS 26.0 or later is recommended and required for custom networks and container-to-container networking.
+- [Apple Container](https://github.com/apple/container) installed, with its system running for container operations (`container system start`).
+- For source builds: Git and a Swift 6.1 or later toolchain, available through [Xcode](https://developer.apple.com/xcode/resources/).
 
 ### Installation
 
