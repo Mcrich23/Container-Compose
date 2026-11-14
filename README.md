@@ -59,7 +59,8 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Resource reservations and devices | Unsupported | Does not apply reservations or device reservations. |
 | Configs and secrets | Unsupported | Definitions decode and are logged, but resources are not created or attached. |
 | Restart and deployment policies | Unsupported | No restart policies, replica management, rolling updates or placement scheduling. Each selected service runs as one container. |
-| Custom networks and container-to-container networking on macOS 15 | Unsupported upstream | Requires macOS 26 or later. |
+
+> **Note:** Custom networks and container-to-container networking require macOS 26.0 or later.
 
 See the [Compose specification](https://compose-spec.github.io/compose-spec/spec.html) for YAML syntax and behavior, and Apple's [command reference](https://github.com/apple/container/blob/main/docs/command-reference.md) and [macOS 15 limitations](https://github.com/apple/container/blob/main/docs/technical-overview.md#macos-15-limitations) for upstream capabilities. Features available in Apple Container still need support here.
 
