@@ -24,7 +24,7 @@ struct ServiceEnvironmentAssemblyTests {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        try "ORDER=first\nOVERRIDE=file\nONLY_FILE=kept".write(to: directory.appendingPathComponent("first.env"), atomically: true, encoding: .utf8)
+        try "ORDER=first\nOVERRIDE=file\nEMPTY=nonempty\nCC_ASSEMBLY_SELF=file-self\nONLY_FILE=kept".write(to: directory.appendingPathComponent("first.env"), atomically: true, encoding: .utf8)
         try "ORDER=second".write(to: directory.appendingPathComponent("second.env"), atomically: true, encoding: .utf8)
         let service = try YAMLDecoder().decode(Service.self, from: """
         image: alpine
