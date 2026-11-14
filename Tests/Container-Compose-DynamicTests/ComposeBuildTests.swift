@@ -40,6 +40,37 @@ struct ComposeBuildTests {
 
     // MARK: - Tests
 
+    @Test("build preserves the platform architecture and variant")
+    func buildPreservesPlatformVariant() async throws {
+        let image = "compose-platform-\(UUID().uuidString.lowercased()):latest"
+        let yaml = """
+        services:
+          app:
+            image: \(image)
+            platform: linux/arm64/v8
+            build: .
+        """
+        // BuildKit normalizes arm64/v8 to arm64, so TARGETVARIANT is empty.
+        let dockerfile = """
+        FROM alpine:3.20
+        ARG TARGETOS
+        ARG TARGETARCH
+        ARG TARGETVARIANT
+        RUN test "$TARGETOS" = linux && test "$TARGETARCH" = arm64 && test -z "$TARGETVARIANT"
+        """
+        let project = try writeBuildProject(yaml: yaml, dockerfile: dockerfile)
+        defer {
+            let cleanup = Process()
+            cleanup.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            cleanup.arguments = ["container", "image", "delete", "--force", image]
+            if (try? cleanup.run()) != nil { cleanup.waitUntilExit() }
+            try? FileManager.default.removeItem(at: project.base)
+        }
+        var build = try ComposeBuild.parse(["--cwd", project.base.path(percentEncoded: false)])
+        try await build.run()
+        #expect(try await imageExists(named: image))
+    }
+
     @Test("Build produces an image in the local store")
     func buildProducesImageInLocalStore() async throws {
         let yaml = """

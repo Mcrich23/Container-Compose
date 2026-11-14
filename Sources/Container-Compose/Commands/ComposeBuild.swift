@@ -108,10 +108,7 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
             commands.append("--no-cache")
         }
 
-        let split = service.platform?.split(separator: "/")
-        let os = String(split?.first ?? "linux")
-        let arch = String(((split ?? []).count >= 1 ? split?.last : nil) ?? "arm64")
-        commands.append(contentsOf: ["--os", os, "--arch", arch])
+        commands.append(contentsOf: ["--platform", service.platform ?? "linux/arm64"])
 
         let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"

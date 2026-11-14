@@ -1368,11 +1368,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
         
         // Add OS/Arch
-        let split = service.platform?.split(separator: "/")
-        let os = String(split?.first ?? "linux")
-        let arch = String(((split ?? []).count >= 1 ? split?.last : nil) ?? "arm64")
-        commands.append(contentsOf: ["--os", os])
-        commands.append(contentsOf: ["--arch", arch])
+        commands.append(contentsOf: ["--platform", service.platform ?? "linux/arm64"])
         
         // Add image name
         commands.append(contentsOf: ["--tag", imageToRun])
