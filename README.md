@@ -1,4 +1,4 @@
-# Container-Compose
+=# Container-Compose
 
 Container-Compose brings (limited) Docker Compose support to [Apple Container](https://github.com/apple/container), allowing you to define and orchestrate multi-container applications on Apple platforms using familiar Compose files. This project is not a Docker or Docker Compose wrapper but a tool to bridge Compose workflows with Apple's container management ecosystem.
 
@@ -69,7 +69,8 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Configs and secrets | Unsupported | - | Definitions and attachments decode, and service attachments are logged, but resources are not created or attached. |
 | Restart and deployment policies | Unsupported | - | No restart policies, replica management, rolling updates or placement scheduling. Each selected service runs as one container. |
 
-> **Note:** Custom networks and container-to-container networking require macOS 26.0 or later.
+> [!Note]
+> Custom networks and container-to-container networking require macOS 26.0 or later.
 
 See the [Compose specification](https://compose-spec.github.io/compose-spec/spec.html) for YAML syntax and behavior, and Apple's [command reference](https://github.com/apple/container/blob/main/docs/command-reference.md) and [macOS 15 limitations](https://github.com/apple/container/blob/main/docs/technical-overview.md#macos-15-limitations) for upstream capabilities. Features available in Apple Container still need support here.
 
