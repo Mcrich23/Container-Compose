@@ -69,6 +69,12 @@ public struct ComposeLogs: AsyncParsableCommand, @unchecked Sendable {
     ]
 
     public func run() async throws {
+        // Make SIGPIPE non-fatal deterministically (libraries in the daemon
+        // client already ignore it on some paths), then detect the closed
+        // pipe ourselves in `emit` — so `logs --follow | head` exits when the
+        // downstream reader goes away instead of streaming forever.
+        signal(SIGPIPE, SIG_IGN)
+
         // Resolve the project through the shared options, failing fast on
         // unknown service names per the #139 contract.
         let resolved = try project.resolve(filteringBy: services)
@@ -141,6 +147,13 @@ public struct ComposeLogs: AsyncParsableCommand, @unchecked Sendable {
                     // `--follow` (and `logs | grep`) show output live instead of
                     // in delayed chunks.
                     fflush(stdout)
+                    // Downstream closed the pipe (e.g. `logs --follow | head`):
+                    // nothing we print can reach anyone anymore. Exit like
+                    // docker compose does on SIGPIPE; the child `container
+                    // logs` processes die on their own broken pipes.
+                    if ferror(stdout) != 0 {
+                        Foundation.exit(0)
+                    }
                 }
 
                 var args = ["logs"]
