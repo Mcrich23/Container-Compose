@@ -152,6 +152,33 @@ struct HealthcheckConfigurationTests {
         #expect(Healthcheck.parseDuration(nil, default: 7) == 7)
     }
     
+    @Test("Disable controls the production health gate and exec arguments", arguments: [
+        ("disable: true", true),
+        ("disable: false", false),
+        ("", false),
+    ])
+    func disableControlsProbe(setting: String, disabled: Bool) throws {
+        let healthcheck = try YAMLDecoder().decode(Healthcheck.self, from:
+            "test: [CMD, \"true\"]\n" + setting)
+        #expect(healthcheck.isDisabled == disabled)
+        #expect(healthcheck.execArguments == (disabled ? nil : ["true"]))
+    }
+
+    @Test("NONE remains disabled with disable false")
+    func noneWithDisableFalse() throws {
+        let healthcheck = Healthcheck(test: ["NONE"], disable: false)
+        #expect(healthcheck.isDisabled)
+        #expect(healthcheck.execArguments == nil)
+    }
+
+    @Test("Disable without a test skips the health gate")
+    func disableWithoutTest() throws {
+        let healthcheck = try YAMLDecoder().decode(Healthcheck.self, from: "disable: true")
+        #expect(healthcheck.disable == true)
+        #expect(healthcheck.isDisabled)
+        #expect(healthcheck.execArguments == nil)
+    }
+
     @Test("Disable healthcheck")
     func disableHealthcheck() throws {
         let yaml = """
