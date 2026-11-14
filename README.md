@@ -28,10 +28,12 @@ The commands below are available. Their options do not cover every Docker Compos
 | --- | --- | --- |
 | `up` | Partial | Starts all enabled services, or named services and their dependencies, in dependency order. Replaces existing containers for the selected services. `-d`/`--detach` returns after startup; foreground mode streams output and stops containers on SIGINT/SIGTERM. `-b`/`--build` requests rebuilding and `--no-cache` disables build caching. YAML limits are listed below. |
 | `down` | Partial | Stops selected project containers, honoring service stop settings. Containers, networks and named volumes are not removed. Inactive profiles must be enabled again, or their services named explicitly, to stop them. |
-| `build` | Partial | Builds services with a `build` definition; optional service names narrow the selection. Supports `--no-cache`, service `platform`, dictionary build arguments and custom Dockerfiles. Uses `image` as the tag, falling back to `<service>:latest`. Does not start containers. See build syntax below. |
+| `build` | Partial | Builds services with a `build` definition; optional service names narrow the selection. Supports `--no-cache`, service `platform`, dictionary build arguments, custom Dockerfiles and `build.target` stage selection. Uses `image` as the tag, falling back to `<service>:latest`. Does not start containers. See build syntax below. |
 | `pull` | Full | Pulls images for enabled services or explicitly named services. `--include-deps` also pulls dependency images. Uses service platform selection; does not build images or start containers. |
+| `ps` | Full | Lists running project containers with name, image, status and published ports. `-a`/`--all` includes stopped containers; service names narrow the selection. Matches project/service labels, with a name fallback for containers without project labels. |
+| `images` | Partial | Lists service, repository, tag, image ID and size for selected services. Uses `<service>:latest` for builds without an explicit image name. ID and size are filled from locally available images when possible; unavailable details stay blank. Does not pull or build images. |
 | `version` | Full | Prints the Container-Compose version; this is the tool version, not a Docker Compose compatibility version. |
-| `run`, `ps`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | Use Apple Container directly where appropriate. |
+| `run`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | Use Apple Container directly where appropriate. |
 
 Compose files can be selected with `-f`/`--file` and the working directory with `--cwd`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
 
@@ -46,11 +48,12 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Project name and profiles | Partial | Uses top-level `name` or the directory name. Supports profiles and explicit service selection; resource isolation is incomplete. |
 | Multiple files, `include`, `extends` | Unsupported | No file merging, includes or service inheritance. |
 | `image` and `platform` | Partial | Image-only services pull their image before starting; service `platform` is passed to the runtime. A service needs an image or build definition. Image pull policy configuration is not implemented. |
-| `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, and dictionary `args`. Build arguments receive variable substitution. No build targets or list-form arguments. |
+| `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, dictionary `args`, and `target`. Omitted or null context defaults to `.`. Build arguments receive variable substitution; list-form arguments are not supported. The `build` command honors `target`, but builds started by `up` do not yet apply it. |
 | Build paths | Full | Relative contexts resolve from the Compose file directory; Dockerfile paths resolve from the build context. Omitting `dockerfile` selects `Dockerfile` in that context. |
 | `command` and `entrypoint` | Partial | Applies overrides. String splitting has known limits; prefer array form. |
 | Process identity and paths | Partial | Applies `user`, `working_dir`, and `container_name`. Otherwise names derive from the project and service, using dotted names when project DNS is registered. |
-| Privileges and labels | Partial | Applies `privileged`, `read_only`, and dictionary-form labels. Other security options and list-form labels are not generally implemented. |
+| Privileges | Partial | Applies `privileged` and `read_only`. Other security options are not generally implemented. |
+| Labels | Full | Accepts mappings or lists. List entries split at the first `=`; bare names and explicit empty values become empty strings, and later duplicate names win. Passes labels to the container alongside Compose project/service labels. |
 | Environment | Partial | Loads `.env`, service `env_file`, and environment values. Some Compose syntax and precedence rules are missing. |
 | Variable interpolation | Partial | Expands values at selected call sites, with limited expression handling. Does not interpolate the whole document. |
 | `depends_on` | Partial | Handles started, healthy and successful-completion conditions. Independent services launch sequentially. |
@@ -58,9 +61,10 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Ports | Partial | Publishes short-form port mappings. |
 | Networks | Partial | Creates basic named networks or uses external ones. Driver/options, internal, attachable, IPv6 and network labels are not applied. |
 | DNS and hosts | Partial | Uses a registered project domain or best-effort hosts-file patching. Aliases depend on upstream CLI support; `extra_hosts` replaces the generated hosts file. |
-| Volumes and bind mounts | Partial | Supports short-form mounts, named-volume creation and external volumes. Relative bind paths resolve from the process working directory. Long-form mounts and Docker volume drivers are not fully supported. |
+| Volumes and bind mounts | Partial | Supports short-form mounts, named-volume creation and external volumes. Relative bind paths resolve from the Compose file directory, including when the file is selected with `-f`. Long-form mounts and Docker volume drivers are not fully supported. |
 | CPU and memory | Partial | Applies `deploy.resources.limits.cpus` and memory. `mem_limit` takes precedence; memory below 200 MiB is clamped. Fractional CPU handling has known limits. |
 | Resource reservations and devices | Unsupported | Does not apply reservations or device reservations. |
+| External resource declarations | Partial | Accepts boolean `external` values and the legacy `{name: shared}` form on volumes, networks, configs and secrets. Malformed declarations fail decoding instead of silently falling back to local resources. Config and secret attachments remain unimplemented. |
 | Configs and secrets | Unsupported | Definitions decode and are logged, but resources are not created or attached. |
 | Restart and deployment policies | Unsupported | No restart policies, replica management, rolling updates or placement scheduling. Each selected service runs as one container. |
 
