@@ -192,7 +192,7 @@ public func composePortToRunArg(_ portSpec: String) -> String {
 /// Internal so tests can reach it via `@testable import ContainerComposeCore`.
 func composeVolumeToRunArgs(
     _ volume: String,
-    cwd: String,
+    composeDirectory: String,
     fileManager: FileManager = .default,
     environmentVariables: [String: String] = [:],
     projectName: String?,
@@ -217,7 +217,7 @@ func composeVolumeToRunArgs(
     }
 
     if source.contains("/") || source.starts(with: ".") || source.starts(with: "..") {
-        let fullHostPath = resolvedPath(for: source, relativeTo: URL(fileURLWithPath: cwd, isDirectory: true))
+        let fullHostPath = resolvedPath(for: source, relativeTo: URL(fileURLWithPath: composeDirectory, isDirectory: true))
 
         if fileManager.fileExists(atPath: fullHostPath) {
             args.append("-v")

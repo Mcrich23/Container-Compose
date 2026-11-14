@@ -1393,7 +1393,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private func configVolume(_ volume: String, from dockerCompose: DockerCompose) async throws -> [String] {
         try composeVolumeToRunArgs(
             volume,
-            cwd: cwd,
+            composeDirectory: composeDirectory,
             fileManager: fileManager,
             environmentVariables: environmentVariables,
             projectName: projectName,

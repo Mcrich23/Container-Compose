@@ -163,7 +163,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(hostFile.path):/app/config.yaml:ro",
-            cwd: tmp.path,
+            composeDirectory: tmp.path,
             projectName: "test"
         )
         #expect(result == ["-v", "\(hostFile.path):/app/config.yaml:ro"])
@@ -177,7 +177,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh",
-            cwd: tmp.path,
+            composeDirectory: tmp.path,
             projectName: "test"
         )
         #expect(result == ["-v", "\(hostFile.path):/docker-entrypoint-initdb.d/init.sh"])
@@ -191,7 +191,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(dataDir.path):/app/data",
-            cwd: tmp.path,
+            composeDirectory: tmp.path,
             projectName: "test"
         )
         #expect(result == ["-v", "\(dataDir.path):/app/data"])
@@ -205,24 +205,44 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(dataDir.path):/app/data:ro",
-            cwd: tmp.path,
+            composeDirectory: tmp.path,
             projectName: "test"
         )
         #expect(result == ["-v", "\(dataDir.path):/app/data:ro"])
     }
 
-    @Test("Relative file bind mount resolved to absolute path against cwd", .tempDir)
-    func testRelativeFileMountResolvedAgainstCwd() throws {
+    @Test("Relative file bind mount resolves to an absolute path against the compose directory", .tempDir)
+    func testRelativeFileMountResolvedAgainstComposeDirectory() throws {
         let tmp = TempDirTrait.current
         let hostFile = tmp.appending(path: "config.yaml")
         FileManager.default.createFile(atPath: hostFile.path, contents: nil)
 
         let result = try composeVolumeToRunArgs(
             "./config.yaml:/app/config.yaml:ro",
-            cwd: tmp.path,
+            composeDirectory: tmp.path,
             projectName: "test"
         )
         #expect(result == ["-v", "\(hostFile.path):/app/config.yaml:ro"])
+    }
+
+    @Test("Relative parent-path bind mount resolves from the compose directory", .tempDir)
+    func testRelativeParentPathMountResolvesFromComposeDirectory() throws {
+        let tmp = TempDirTrait.current
+        let projectDirectory = tmp.appending(path: "project")
+        let composeDirectory = projectDirectory.appending(path: "deploy")
+        let dataDirectory = projectDirectory.appending(path: "data")
+        let markerFile = dataDirectory.appending(path: "marker.txt")
+        try FileManager.default.createDirectory(at: composeDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: markerFile.path, contents: nil)
+
+        let result = try composeVolumeToRunArgs(
+            "../data:/data",
+            composeDirectory: composeDirectory.path,
+            projectName: "test"
+        )
+
+        #expect(result == ["-v", "\(dataDirectory.path):/data"])
     }
 
     @Test("Missing host path is auto-created as a directory", .tempDir)
@@ -233,7 +253,7 @@ struct ComposeVolumeTests {
 
         let result = try composeVolumeToRunArgs(
             "\(newDir.path):/app/data",
-            cwd: tmp.path,
+            composeDirectory: tmp.path,
             projectName: "test"
         )
         #expect(result == ["-v", "\(newDir.path):/app/data"])
@@ -244,7 +264,7 @@ struct ComposeVolumeTests {
 
     @Test("Invalid volume format returns empty array")
     func testInvalidFormatReturnsEmpty() throws {
-        let result = try composeVolumeToRunArgs("nodestination", cwd: "/tmp", projectName: "test")
+        let result = try composeVolumeToRunArgs("nodestination", composeDirectory: "/tmp", projectName: "test")
         #expect(result == [])
     }
 
@@ -252,7 +272,7 @@ struct ComposeVolumeTests {
     func testNamedVolumeUsesNativeVolumeSyntax() throws {
         let result = try composeVolumeToRunArgs(
             "data:/var/lib/postgresql/data",
-            cwd: "/tmp",
+            composeDirectory: "/tmp",
             projectName: "test"
         )
         #expect(result == ["-v", "test_data:/var/lib/postgresql/data"])
@@ -262,7 +282,7 @@ struct ComposeVolumeTests {
     func testNamedVolumeMountsAtDeclaredSingleSegmentDestination() throws {
         let result = try composeVolumeToRunArgs(
             "redisdata:/data",
-            cwd: "/tmp",
+            composeDirectory: "/tmp",
             projectName: "proj"
         )
         #expect(result == ["-v", "proj_redisdata:/data"])
@@ -272,7 +292,7 @@ struct ComposeVolumeTests {
     func testNamedVolumePreservesNestedDestinationAndMode() throws {
         let result = try composeVolumeToRunArgs(
             "pgdata:/var/lib/postgresql/data:ro",
-            cwd: "/tmp",
+            composeDirectory: "/tmp",
             projectName: "proj"
         )
         #expect(result == ["-v", "proj_pgdata:/var/lib/postgresql/data:ro"])
@@ -282,7 +302,7 @@ struct ComposeVolumeTests {
     func testNamedVolumeUsesExplicitTopLevelName() throws {
         let result = try composeVolumeToRunArgs(
             "db-data:/var/lib/postgresql/data:ro",
-            cwd: "/tmp",
+            composeDirectory: "/tmp",
             projectName: "test",
             volumeDefinitions: [
                 "db-data": Volume(name: "prod-db-data")
@@ -295,7 +315,7 @@ struct ComposeVolumeTests {
     func testNamedVolumeKeepsExternalSourceName() throws {
         let result = try composeVolumeToRunArgs(
             "db-data:/var/lib/postgresql/data",
-            cwd: "/tmp",
+            composeDirectory: "/tmp",
             projectName: "test",
             volumeDefinitions: [
                 "db-data": Volume(external: ExternalVolume(isExternal: true, name: nil))
@@ -308,7 +328,7 @@ struct ComposeVolumeTests {
     func testNamedVolumeUsesExplicitExternalName() throws {
         let result = try composeVolumeToRunArgs(
             "db-data:/var/lib/postgresql/data",
-            cwd: "/tmp",
+            composeDirectory: "/tmp",
             projectName: "test",
             volumeDefinitions: [
                 "db-data": Volume(external: ExternalVolume(isExternal: true, name: "shared-db-data"))
