@@ -60,26 +60,32 @@ public struct ComposeProjectOptions: ParsableArguments {
 
     var cwdURL: URL { URL(fileURLWithPath: cwd) }
 
-    /// Absolute path to the compose file: the explicit `--file` if given,
-    /// otherwise the first supported filename found in `cwd`, otherwise the
-    /// default name (so callers produce a consistent "not found" error).
-    public var composePath: String {
-        if let composeFilename = composeFileOptions.composeFilename {
-            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
+    /// Absolute paths to the compose files to load, in order: every explicit
+    /// `--file` if any were given, otherwise the first supported filename found
+    /// in `cwd` (or the default name, so callers get a consistent "not found"
+    /// error). Multiple files are deep-merged by `loadCompose()`.
+    public var composePaths: [String] {
+        if !composeFileOptions.composeFilenames.isEmpty {
+            return composeFileOptions.composeFilenames.map { resolvedPath(for: $0, relativeTo: cwdURL) }
         }
 
         for filename in Self.supportedComposeFilenames {
             let candidate = cwdURL.appending(path: filename).path
             if fileManager.fileExists(atPath: candidate) {
-                return candidate
+                return [candidate]
             }
         }
 
-        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
+        return [cwdURL.appending(path: Self.supportedComposeFilenames[0]).path]
     }
 
-    /// Directory containing the compose file (the base for relative `context`,
-    /// `env_file`, etc.).
+    /// The primary compose file (first `-f`, or the discovered default). Used for
+    /// the base directory of relative paths and for "not found" messages.
+    public var composePath: String { composePaths[0] }
+
+    /// Directory containing the primary compose file (the base for relative
+    /// `context`, `env_file`, etc.). Per the Compose spec, relative paths are
+    /// resolved against the first file's directory even when merging.
     public var composeDirectory: String {
         URL(fileURLWithPath: composePath).deletingLastPathComponent().path
     }
@@ -91,15 +97,51 @@ public struct ComposeProjectOptions: ParsableArguments {
         return resolvedPath(for: envFile, relativeTo: cwdURL)
     }
 
-    /// Reads and decodes the compose file at `composePath`.
-    /// - Throws: `YamlError.composeFileNotFound` if the file is missing.
+    /// Reads and decodes the compose file(s). When more than one `-f` is given,
+    /// the parsed YAML documents are deep-merged in order (later files override
+    /// earlier ones) before decoding — see `Self.mergeYAML`.
+    /// - Throws: `YamlError.composeFileNotFound` if any file is missing.
     public func loadCompose() throws -> DockerCompose {
-        guard let yamlData = fileManager.contents(atPath: composePath) else {
-            let path = URL(fileURLWithPath: composePath).deletingLastPathComponent().path
-            throw YamlError.composeFileNotFound(path)
+        var merged: Node?
+        for path in composePaths {
+            guard let data = fileManager.contents(atPath: path),
+                  let yaml = String(data: data, encoding: .utf8)
+            else {
+                throw YamlError.composeFileNotFound(URL(fileURLWithPath: path).deletingLastPathComponent().path)
+            }
+            // An empty/whitespace-only override file parses to nil; skip it.
+            guard let node = try Yams.compose(yaml: yaml) else { continue }
+            merged = merged.map { Self.mergeYAML($0, node) } ?? node
         }
-        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        return try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+
+        guard let merged else {
+            throw YamlError.composeFileNotFound(composeDirectory)
+        }
+
+        // Single file: decode the original text directly. Multiple: re-serialize
+        // the merged tree, then decode through the same model path.
+        let yaml = composePaths.count == 1
+            ? (String(data: fileManager.contents(atPath: composePath)!, encoding: .utf8) ?? "")
+            : try Yams.serialize(node: merged)
+        return try YAMLDecoder().decode(DockerCompose.self, from: yaml)
+    }
+
+    /// Deep-merges two parsed compose documents per the Compose override rules
+    /// the project uses: mappings merge key-by-key (recursively), and any other
+    /// node kind — scalars and sequences — is replaced by the override.
+    static func mergeYAML(_ base: Node, _ override: Node) -> Node {
+        guard case .mapping(let baseMap) = base, case .mapping(let overrideMap) = override else {
+            return override
+        }
+        var result = baseMap
+        for (key, overrideValue) in overrideMap {
+            if let baseValue = result[key] {
+                result[key] = mergeYAML(baseValue, overrideValue)
+            } else {
+                result[key] = overrideValue
+            }
+        }
+        return .mapping(result)
     }
 
     /// Project name used to namespace containers: the compose `name:` field if

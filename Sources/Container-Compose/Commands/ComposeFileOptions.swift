@@ -20,8 +20,15 @@ import Foundation
 public struct ComposeFileOptions: ParsableArguments, Sendable {
     public init() {}
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    public var composeFilename: String?
+    /// Compose files, in order. Repeat `-f`/`--file` to merge several together
+    /// (later files override earlier ones); commands that don't merge use the
+    /// first via `composeFilename`.
+    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file (repeat to merge overrides)")
+    public var composeFilenames: [String] = []
+
+    /// The primary compose file (first `-f`), or `nil` when none was given.
+    /// Back-compat accessor for commands that operate on a single file.
+    public var composeFilename: String? { composeFilenames.first }
 
     @Option(
         name: .long,
