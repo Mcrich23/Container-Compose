@@ -22,18 +22,18 @@ Container-Compose brings (limited) Docker Compose support to [Apple Container](h
 
 ### Commands
 
-The commands below are available. Their options do not cover every Docker Compose CLI flag.
+Command support includes both available behavior and known gaps. A command being present does not mean it behaves like Docker Compose in every case.
 
-| Command | Support | Behavior |
-| --- | --- | --- |
-| `up` | Partial | Starts all enabled services, or named services and their dependencies, in dependency order. Replaces existing containers for the selected services. `-d`/`--detach` returns after startup; foreground mode streams output and stops containers on SIGINT/SIGTERM. `-b`/`--build` requests rebuilding and `--no-cache` disables build caching. YAML limits are listed below. |
-| `down` | Partial | Stops selected project containers, honoring service stop settings. Containers, networks and named volumes are not removed. Inactive profiles must be enabled again, or their services named explicitly, to stop them. |
-| `build` | Partial | Builds services with a `build` definition; optional service names narrow the selection. Supports `--no-cache`, service `platform`, dictionary build arguments, custom Dockerfiles and `build.target` stage selection. Uses `image` as the tag, falling back to `<service>:latest`. Does not start containers. See build syntax below. |
-| `pull` | Full | Pulls images for enabled services or explicitly named services. `--include-deps` also pulls dependency images. Uses service platform selection; does not build images or start containers. |
-| `ps` | Full | Lists running project containers with name, image, status and published ports. `-a`/`--all` includes stopped containers; service names narrow the selection. Matches project/service labels, with a name fallback for containers without project labels. |
-| `images` | Partial | Lists service, repository, tag, image ID and size for selected services. Uses `<service>:latest` for builds without an explicit image name. ID and size are filled from locally available images when possible; unavailable details stay blank. Does not pull or build images. |
-| `version` | Full | Prints the Container-Compose version; this is the tool version, not a Docker Compose compatibility version. |
-| `run`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | Use Apple Container directly where appropriate. |
+| Command | Support | What works | What is missing or limited |
+| --- | --- | --- | --- |
+| `up` | Partial | Starts enabled services, or named services and their dependencies, in dependency order. Replaces existing containers for selected services. Supports detached operation, foreground output, rebuilding with `-b`/`--build`, and `--no-cache`. | SIGTERM does not reliably stop containers: signal handling is installed only after service startup, leaving startup and health-check waits uncovered. Use `down` to stop them. Independent services start sequentially. Builds through `up` ignore `build.target`. Other YAML limits are listed below. |
+| `down` | Partial | Stops selected project containers using each service's stop settings. | Does not remove containers, networks or named volumes. Services in inactive profiles are skipped unless their profile is enabled or they are named explicitly. Container lookup uses candidate names rather than checking project labels. |
+| `build` | Partial | Builds selected services and their buildable dependencies. Supports `--no-cache`, service `platform`, dictionary build arguments, custom Dockerfiles and `build.target`. Tags images with `image` or `<service>:latest`. | No CLI `--build-arg` override or list-form YAML arguments. Other Compose build options, such as inline Dockerfiles and cache import/export, are not implemented. |
+| `pull` | Partial | Pulls images for enabled or explicitly named services. `--include-deps` includes dependency images. Honors an explicit service `platform` and skips build-only services. | Without an explicit platform, pulls can download every architecture in an image index. No pull-policy selection or option to continue after a pull failure. |
+| `ps` | Partial | Lists running project containers with name, image, status and published ports. `-a`/`--all` includes stopped containers. Uses project/service labels, falling back to names for containers without project labels. | No JSON output, quiet mode or status-filter option. Service selection uses the shared dependency resolver, so selecting a service also includes its dependencies. |
+| `images` | Partial | Lists service, repository, tag, image ID and size. Uses `<service>:latest` for builds without an explicit image name. Looks up ID and size from local images. | Lists configured service images rather than inspecting the images attached to existing containers. Unavailable local details stay blank. No JSON or quiet output. Service selection also includes dependencies. |
+| `version` | Full | Prints the Container-Compose version. | Reports this tool's version, not a Docker Compose compatibility version. |
+| `run`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | — | These subcommands are not implemented. Use Apple Container directly where appropriate. |
 
 Compose files can be selected with `-f`/`--file` and the working directory with `--cwd`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
 
