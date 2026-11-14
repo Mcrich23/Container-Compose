@@ -189,7 +189,7 @@ public struct ComposeProject {
         /// - Returns: `true` when the labels name `projectName` and this
         ///   service, or when the container is unlabeled and `containerID` is
         ///   one of the candidate names.
-        /// - Note: See `ComposeProject.ownsContainer` for the ownership rule
+        /// - Note: See ``ComposeProject/ownsContainer`` for the ownership rule
         ///   this builds on.
         func matches(containerID: String, labels: [String: String], projectName: String) -> Bool {
             guard ComposeProject.ownsContainer(labels: labels, projectName: projectName) else { return false }
