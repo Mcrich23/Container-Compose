@@ -296,7 +296,17 @@ public struct Service: Codable, Hashable {
         user = try container.decodeIfPresent(String.self, forKey: .user)
 
         container_name = try container.decodeIfPresent(String.self, forKey: .container_name)
-        labels = try container.decodeIfPresent([String: String].self, forKey: .labels)
+        if try !container.contains(.labels) || container.decodeNil(forKey: .labels) {
+            labels = nil
+        } else if let map = try? container.decode([String: String].self, forKey: .labels) {
+            labels = map
+        } else {
+            let entries = try container.decode([String].self, forKey: .labels)
+            labels = entries.reduce(into: [:]) { result, entry in
+                let parts = entry.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                result[String(parts[0])] = parts.count == 2 ? String(parts[1]) : ""
+            }
+        }
         if let networkArray = try? container.decodeIfPresent([String].self, forKey: .networks) {
             networks = networkArray
             networkConfigurations = Dictionary(uniqueKeysWithValues: networkArray.map { ($0, ServiceNetwork()) })
