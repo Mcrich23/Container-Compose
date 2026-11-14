@@ -1358,6 +1358,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         // Add Dockerfile path
         commands.append(contentsOf: ["--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: contextURL).path])
         
+        if let target = buildConfig.target, !target.isEmpty {
+            commands.append(contentsOf: ["--target", target])
+        }
+
         // Add caching options
         if noCache {
             commands.append("--no-cache")

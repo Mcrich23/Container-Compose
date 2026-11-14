@@ -417,6 +417,47 @@ struct ComposeUpTests {
         try? await stopInstance(location: upProject.base)
     }
 
+    @Test("up builds the selected Dockerfile stage")
+    func composeUpUsesBuildTarget() async throws {
+        let identifier = "compose-target-\(UUID().uuidString.lowercased())"
+        let image = "\(identifier):latest"
+        let yaml = """
+        services:
+          app:
+            container_name: \(identifier)
+            image: \(image)
+            build:
+              context: .
+              target: selected
+        """
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+        defer {
+            // Clean up only this test's uniquely named container and image, even after a failure.
+            for arguments in [["delete", "--force", identifier], ["image", "delete", "--force", image]] {
+                let cleanup = Process()
+                cleanup.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                cleanup.arguments = ["container"] + arguments
+                if (try? cleanup.run()) != nil { cleanup.waitUntilExit() }
+            }
+            try? FileManager.default.removeItem(at: project.base)
+        }
+        let dockerfile = """
+        FROM alpine:3.20 AS selected
+        CMD ["sleep", "600"]
+        FROM alpine:3.20 AS final
+        CMD ["sleep", "601"]
+        """
+        try dockerfile.write(to: project.base.appending(path: "Dockerfile"), atomically: true, encoding: .utf8)
+
+        var up = try ComposeUp.parse(["-d", "--build", "--cwd", project.base.path(percentEncoded: false)])
+        try await up.run()
+
+        let container = try await ContainerClient().get(id: identifier)
+        #expect(container.status == .running)
+        #expect(container.configuration.initProcess.arguments.contains("600"))
+        #expect(!container.configuration.initProcess.arguments.contains("601"))
+    }
+
     @Test("up stamps compose project/service labels and passes user labels through")
     func testUpStampsComposeLabels() async throws {
         let explicitName = "container-compose-test-\(makeContainerName())"
