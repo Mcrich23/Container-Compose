@@ -18,9 +18,9 @@ struct ResourceExternalTests {
     @Test(arguments: ["[]", "42", "unexpected", "{}", "{other: shared}", "{name: shared, other: ignored}", "{name: ''}"])
     func malformedExternal(_ value: String) {
         let yaml = "external: \(value)"
-        #expect(throws: (any Error).self) { try YAMLDecoder().decode(Volume.self, from: yaml) }
-        #expect(throws: (any Error).self) { try YAMLDecoder().decode(Network.self, from: yaml) }
-        #expect(throws: (any Error).self) { try YAMLDecoder().decode(Config.self, from: yaml) }
-        #expect(throws: (any Error).self) { try YAMLDecoder().decode(Secret.self, from: yaml) }
+        #expect(throws: DecodingError.self) { try YAMLDecoder().decode(Volume.self, from: yaml) }
+        #expect(throws: DecodingError.self) { try YAMLDecoder().decode(Network.self, from: yaml) }
+        #expect(throws: DecodingError.self) { try YAMLDecoder().decode(Config.self, from: yaml) }
+        #expect(throws: DecodingError.self) { try YAMLDecoder().decode(Secret.self, from: yaml) }
     }
 }
