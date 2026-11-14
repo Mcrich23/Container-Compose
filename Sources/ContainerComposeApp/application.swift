@@ -10,6 +10,6 @@ import ContainerComposeCore
 @main
 struct Application {
     static func main() async {
-        await Main.main()
+        await Main.main(normalizing: Array(CommandLine.arguments.dropFirst()))
     }
 }
