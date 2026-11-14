@@ -564,10 +564,6 @@ extension Service {
     ///   injectable for testing.
     /// - Returns: A platform string to pass to `container image pull`, or
     ///   `nil` to let `container` resolve the platform itself.
-    /// - Note: Passing no platform makes `container image pull` fetch the
-    ///   entire multi-arch index — every variant in the manifest list — which
-    ///   downloads variants that cannot run, since `container` requires Apple
-    ///   silicon. `build` defaults to arm64 on the same reasoning.
     /// - Important: Temporary workaround. Upstream is converging on
     ///   host-platform-by-default pull semantics (apple/container#913, the
     ///   umbrella for #83/#455). Once a `container` release ships that, the
