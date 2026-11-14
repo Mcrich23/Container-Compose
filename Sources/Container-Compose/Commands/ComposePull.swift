@@ -65,7 +65,7 @@ public struct ComposePull: AsyncParsableCommand {
             }
 
             print("Pulling \(target.serviceName) (\(image))...")
-            try await pullImage(image, platform: target.service.platform)
+            try await pullImage(image, platform: target.service.effectivePullPlatform())
         }
     }
 
