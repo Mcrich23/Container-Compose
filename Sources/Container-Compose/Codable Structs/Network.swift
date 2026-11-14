@@ -57,12 +57,18 @@ public struct Network: Codable {
         labels = try container.decodeIfPresent([String: String].self, forKey: .labels)
         name = try container.decodeIfPresent(String.self, forKey: .name)
 
-        if let externalBool = try? container.decodeIfPresent(Bool.self, forKey: .external) {
-            external = ExternalNetwork(isExternal: externalBool, name: nil)
-        } else if let externalDict = try? container.decodeIfPresent([String: String].self, forKey: .external) {
-            external = ExternalNetwork(isExternal: true, name: externalDict["name"])
-        } else {
+        if try !container.contains(.external) || container.decodeNil(forKey: .external) {
             external = nil
+        } else if let value = try? container.decode(Bool.self, forKey: .external) {
+            external = ExternalNetwork(isExternal: value, name: nil)
+        } else {
+            let value = try container.decode([String: String].self, forKey: .external)
+            guard value.count == 1, let externalName = value["name"], !externalName.isEmpty else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .external, in: container,
+                    debugDescription: "external must be a boolean or a mapping containing only a nonempty name")
+            }
+            external = ExternalNetwork(isExternal: true, name: externalName)
         }
     }
 }
