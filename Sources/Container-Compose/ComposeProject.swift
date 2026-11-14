@@ -177,6 +177,27 @@ public struct ComposeProject {
         /// Names the service's container may exist under, in the order they
         /// should be tried (see `candidateContainerNames(serviceName:service:projectName:)`).
         public let candidateContainerNames: [String]
+
+        /// Reports whether a container is this service's container within
+        /// `projectName`.
+        ///
+        /// A labeled container matches solely by its
+        /// `com.docker.compose.project` and `.service` labels; the
+        /// candidate-name fallback applies only to unlabeled containers from
+        /// before the labels existed.
+        ///
+        /// - Returns: `true` when the labels name `projectName` and this
+        ///   service, or when the container is unlabeled and `containerID` is
+        ///   one of the candidate names.
+        /// - Note: See `ComposeProject.ownsContainer` for the ownership rule
+        ///   this builds on.
+        func matches(containerID: String, labels: [String: String], projectName: String) -> Bool {
+            guard ComposeProject.ownsContainer(labels: labels, projectName: projectName) else { return false }
+            if labels["com.docker.compose.project"] != nil {
+                return labels["com.docker.compose.service"] == serviceName
+            }
+            return candidateContainerNames.contains(containerID)
+        }
     }
 
     /// Container names a service's container may exist under, in try order.
@@ -200,6 +221,25 @@ public struct ComposeProject {
             candidates.insert(explicit, at: 0)
         }
         return candidates
+    }
+
+    /// Reports whether a container belongs to `projectName`, so compose
+    /// commands know they may list, stop, or remove it.
+    ///
+    /// A labeled container belongs to whatever project its
+    /// `com.docker.compose.project` label names, regardless of its name.
+    /// An unlabeled container is treated as belonging to the project: a
+    /// matching candidate name is the only identity it has.
+    ///
+    /// - Returns: `true` when the labels name `projectName` or carry no
+    ///   project label; `false` when they name a different project.
+    /// - Important: Candidate names can collide across projects (project
+    ///   `demo` + service `web-x` produce `demo-web-x`, which is also the
+    ///   name project `demo-web` gives its service `x`). A collision must
+    ///   not let one project act on another's container.
+    static func ownsContainer(labels: [String: String], projectName: String) -> Bool {
+        guard let labeledProject = labels["com.docker.compose.project"] else { return true }
+        return labeledProject == projectName
     }
 
     /// Coerce an arbitrary project name into a single DNS label: lowercase, only
