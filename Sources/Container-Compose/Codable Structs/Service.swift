@@ -560,3 +560,31 @@ public struct Service: Codable, Hashable {
         return services.filter { selected.contains($0.serviceName) }
     }
 }
+
+extension Service {
+    /// Resolves the platform to pull this service's image for.
+    ///
+    /// The service's explicit `platform:` key takes precedence. When the key
+    /// is absent and `CONTAINER_DEFAULT_PLATFORM` is set in `environment`,
+    /// resolution is deferred to `container image pull`, which honors that
+    /// variable itself. Otherwise the host platform (`linux/arm64`) is used.
+    ///
+    /// - Parameter environment: The environment to consult for
+    ///   `CONTAINER_DEFAULT_PLATFORM`. Defaults to the process environment;
+    ///   injectable for testing.
+    /// - Returns: A platform string to pass to `container image pull`, or
+    ///   `nil` to let `container` resolve the platform itself.
+    /// - Important: Temporary workaround. Upstream is converging on
+    ///   host-platform-by-default pull semantics (apple/container#913, the
+    ///   umbrella for #83/#455). Once a `container` release ships that, the
+    ///   nil path behaves correctly natively: delete this method and pass
+    ///   `service.platform` straight through at its two call sites (`up`'s
+    ///   implicit pull and `pull`).
+    public func effectivePullPlatform(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        if let platform { return platform }
+        if environment["CONTAINER_DEFAULT_PLATFORM"]?.isEmpty == false { return nil }
+        return "linux/arm64"
+    }
+}
