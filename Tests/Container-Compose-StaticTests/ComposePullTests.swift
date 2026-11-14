@@ -110,3 +110,41 @@ struct ComposePullTests {
         #expect(cmd.project.cwd == "/tmp")
     }
 }
+
+extension ComposePullTests {
+
+    private func target(_ name: String, image: String?) -> ComposeProject.ServiceTarget {
+        ComposeProject.ServiceTarget(
+            serviceName: name,
+            service: Service(image: image),
+            candidateContainerNames: ["demo-\(name)"])
+    }
+
+    @Test("Services sharing an image pull it once, order preserved")
+    func planDeduplicatesSharedImages() {
+        let (items, buildOnly) = ComposePull.pullPlan(
+            for: [target("a", image: "alpine:3"), target("b", image: "nginx:1"), target("c", image: "alpine:3")],
+            environment: [:])
+        #expect(items.map(\.image) == ["alpine:3", "nginx:1"])
+        #expect(items[0].services == ["a", "c"])
+        #expect(buildOnly.isEmpty)
+    }
+
+    @Test("Build-only services are reported separately, not pulled")
+    func planSeparatesBuildOnly() {
+        let (items, buildOnly) = ComposePull.pullPlan(
+            for: [target("web", image: "nginx:1"), target("builder", image: nil)],
+            environment: [:])
+        #expect(items.map(\.image) == ["nginx:1"])
+        #expect(buildOnly == ["builder"])
+    }
+
+    @Test("Image variables resolve before deduplication")
+    func planResolvesVariablesBeforeDedup() {
+        let (items, _) = ComposePull.pullPlan(
+            for: [target("a", image: "app:${TAG}"), target("b", image: "app:9")],
+            environment: ["TAG": "9"])
+        #expect(items.count == 1)
+        #expect(items[0].services == ["a", "b"])
+    }
+}
