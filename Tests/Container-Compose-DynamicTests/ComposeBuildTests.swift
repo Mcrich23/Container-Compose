@@ -50,12 +50,13 @@ struct ComposeBuildTests {
             platform: linux/arm64/v8
             build: .
         """
+        // BuildKit normalizes arm64/v8 to arm64, so TARGETVARIANT is empty.
         let dockerfile = """
         FROM alpine:3.20
         ARG TARGETOS
         ARG TARGETARCH
         ARG TARGETVARIANT
-        RUN test "$TARGETOS" = linux && test "$TARGETARCH" = arm64 && test "$TARGETVARIANT" = v8
+        RUN test "$TARGETOS" = linux && test "$TARGETARCH" = arm64 && test -z "$TARGETVARIANT"
         """
         let project = try writeBuildProject(yaml: yaml, dockerfile: dockerfile)
         defer {
