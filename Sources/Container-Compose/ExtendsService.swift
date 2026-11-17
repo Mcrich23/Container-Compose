@@ -107,7 +107,7 @@ struct ExtendsService: Codable {
 
     /// Allocate a pseudo-TTY (-t flag for `container run`)
     var tty: Bool?
-    
+
     /// Memory limit shorthand (e.g., "512m", "1g") — top-level alternative to
     /// `deploy.resources.limits.memory`. Takes precedence when both are set.
     var mem_limit: String?
@@ -130,14 +130,14 @@ struct ExtendsService: Codable {
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
              mem_limit, extra_hosts, profiles
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         extends = try container.decodeIfPresent(ExtendsReference.self, forKey: .extends)
         image = try container.decodeIfPresent(String.self, forKey: .image)
         build = try container.decodeIfPresent(ExtendsBuild.self, forKey: .build)
         deploy = try container.decodeIfPresent(Deploy.self, forKey: .deploy)
-        
+
         restart = try container.decodeIfPresent(String.self, forKey: .restart)
         stop_grace_period = try container.decodeIfPresent(StopGracePeriod.self, forKey: .stop_grace_period)
         healthcheck = try container.decodeIfPresent(ExtendsHealthcheck.self, forKey: .healthcheck)
@@ -196,7 +196,7 @@ struct ExtendsService: Codable {
         } else {
             command = nil
         }
-        
+
         if let dependsOnString = try? container.decodeIfPresent(String.self, forKey: .depends_on) {
             depends_on = [dependsOnString]
             dependencyConditions = [dependsOnString: ServiceDependency()]
@@ -227,7 +227,7 @@ struct ExtendsService: Codable {
             networkConfigurations = nil
         }
         hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
-        
+
         // Decode 'entrypoint' which can be either a single string or an array of strings.
         if let entrypointArray = try? container.decodeIfPresent([String].self, forKey: .entrypoint) {
             entrypoint = entrypointArray
