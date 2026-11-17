@@ -393,4 +393,20 @@ struct ComposeExtendsTests {
         #expect(service.healthcheck?.interval == "30s")
     }
 
+    @Test("Inherited port sequences remove duplicates within child overrides", .tempDir)
+    func duplicateChildPorts() throws {
+        let directory = TempDirTrait.current
+        try write("""
+            services:
+              base:
+                image: alpine
+                ports: ["80:80"]
+              app:
+                extends: base
+                ports: ["81:81", "81:81", "80:80"]
+            """, to: "compose.yml", in: directory)
+        let service = try #require(load(in: directory).services["app"] ?? nil)
+        #expect(service.ports == ["80:80", "81:81"])
+    }
+
 }

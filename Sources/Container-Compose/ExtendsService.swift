@@ -397,7 +397,11 @@ private func mergedMapping<Value>(_ parent: [String: Value]?, _ child: [String: 
 private func mergedSequence<Value: Equatable>(_ parent: [Value]?, _ child: [Value]?) -> [Value]? {
     guard let parent else { return child }
     guard let child else { return parent }
-    return parent + child.filter { !parent.contains($0) }
+    var result = parent
+    for item in child where !result.contains(item) {
+        result.append(item)
+    }
+    return result
 }
 
 extension ExtendsService {
