@@ -318,4 +318,79 @@ struct ComposeExtendsTests {
             """, to: "compose.yml", in: directory)
         #expect(throws: ComposeExtendsResolver.ResolutionError.self) { try load(in: directory) }
     }
+    @Test("A partial build inherits shorthand context before validation", .tempDir)
+    func partialBuildInheritance() throws {
+        let directory = TempDirTrait.current
+        try write("""
+            services:
+              base:
+                build: ./context
+              app:
+                extends: base
+                build:
+                  dockerfile: App.Dockerfile
+                  args:
+                    MODE: release
+            """, to: "compose.yml", in: directory)
+        let service = try #require(load(in: directory).services["app"] ?? nil)
+        #expect(service.build?.context == "./context")
+        #expect(service.build?.dockerfile == "App.Dockerfile")
+        #expect(service.build?.args == ["MODE": "release"])
+    }
+
+    @Test("Inheritance fields reject invalid concrete types", .tempDir)
+    func invalidHealthcheckType() throws {
+        let directory = TempDirTrait.current
+        try write("""
+            services:
+              base:
+                image: alpine
+              app:
+                extends: base
+                healthcheck:
+                  disable: definitely
+            """, to: "compose.yml", in: directory)
+        #expect(throws: (any Error).self) { try load(in: directory) }
+    }
+
+    @Test("Typed nested mappings preserve inherited fields and child overrides", .tempDir)
+    func nestedMappings() throws {
+        let directory = TempDirTrait.current
+        try write("""
+            services:
+              base:
+                image: alpine
+                build:
+                  context: ./context
+                  args: {BASE: inherited, SHARED: parent}
+                deploy:
+                  replicas: 2
+                  resources:
+                    limits: {cpus: "1", memory: 512m}
+                  restart_policy: {condition: on-failure, delay: 5s}
+                healthcheck:
+                  test: [CMD, "true"]
+                  interval: 30s
+              app:
+                extends: base
+                build:
+                  args: {SHARED: child}
+                deploy:
+                  resources:
+                    limits: {cpus: "2"}
+                  restart_policy: {delay: 10s}
+                healthcheck:
+                  test: [CMD, "false"]
+            """, to: "compose.yml", in: directory)
+        let service = try #require(load(in: directory).services["app"] ?? nil)
+        #expect(service.build?.args == ["BASE": "inherited", "SHARED": "child"])
+        #expect(service.deploy?.replicas == 2)
+        #expect(service.deploy?.resources?.limits?.cpus == "2")
+        #expect(service.deploy?.resources?.limits?.memory == "512m")
+        #expect(service.deploy?.restart_policy?.condition == "on-failure")
+        #expect(service.deploy?.restart_policy?.delay == "10s")
+        #expect(service.healthcheck?.test == ["CMD", "false"])
+        #expect(service.healthcheck?.interval == "30s")
+    }
+
 }
