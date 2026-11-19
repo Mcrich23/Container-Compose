@@ -110,7 +110,7 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
 
         commands.append(contentsOf: ["--platform", service.platform ?? "linux/arm64"])
 
-        let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
+        let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? service.cpus ?? "2") ?? 2
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
         commands.append(contentsOf: ["--cpus", "\(cpuCount)", "--memory", memoryLimit])
 

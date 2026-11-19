@@ -101,5 +101,23 @@ public struct ComposeDown: AsyncParsableCommand {
             // to remove once the container that had it mounted is stopped.
             try? fileManager.removeItem(atPath: ComposeUp.extraHostsFilePath(projectName: project.projectName, serviceName: target.serviceName))
         }
+
+        await removeOrphanedOneOffHostsFiles(projectName: project.projectName)
+    }
+
+    /// Sweeps the generated /etc/hosts files for one-off `run` containers whose
+    /// container no longer exists. Files still backing a running or stopped
+    /// container are kept, since that container may be started again.
+    private func removeOrphanedOneOffHostsFiles(projectName: String) async {
+        let client = ContainerClient()
+        let tmpDirectory = NSTemporaryDirectory()
+        let entries = (try? fileManager.contentsOfDirectory(atPath: tmpDirectory)) ?? []
+        for entry in entries {
+            guard let containerName = ComposeUp.runContainerName(fromHostsFilename: entry, projectName: projectName) else {
+                continue
+            }
+            guard (try? await client.get(id: containerName)) == nil else { continue }
+            try? fileManager.removeItem(atPath: tmpDirectory + entry)
+        }
     }
 }
