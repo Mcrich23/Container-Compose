@@ -137,10 +137,6 @@ Contributions are welcome! Please open issues or submit pull requests to help im
 5. Push to the branch (`git push origin feature/YourFeature`).
 6. Open a pull request.
 
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
 ## Support
 
 If you encounter issues or have questions, please open an [Issue](https://github.com/Mcrich23/Container-Compose/issues).
