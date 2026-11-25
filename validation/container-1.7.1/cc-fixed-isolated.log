@@ -1,0 +1,143 @@
+Building for debugging...
+[Computing dependencies]
+[Provisioning 1 / 184]
+[Using on-disk description]
+[1 / 5]
+[1 / 4] NIOHTTP2
+[2 / 6] Container-Compose-DynamicTests-product
+[4 / 8] Container-Compose-DynamicTests-product
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-c04bb7c9-07d27ad37f7fbf80/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:28:13: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+ 26 |     
+ 27 |     func stopInstance(location: URL) async throws {
+ 28 |         var composeDown = try ComposeDown.parse(["--cwd", location.path(percentEncoded: false)])
+    |             `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+ 29 |         try await composeDown.run()
+ 30 |     }
+
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-c04bb7c9-07d27ad37f7fbf80/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:126:17: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+124 |             #expect(container.status == .running)
+125 | 
+126 |             var composeDown = try ComposeDown.parse(arguments)
+    |                 `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+127 |             try await composeDown.run()
+128 |         } catch {
+
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-c04bb7c9-07d27ad37f7fbf80/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:129:17: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+127 |             try await composeDown.run()
+128 |         } catch {
+129 |             var composeDown = try? ComposeDown.parse(arguments)
+    |                 `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+130 |             try? await composeDown?.run()
+131 |             try? FileManager.default.removeItem(at: projectRoot)
+
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-c04bb7c9-07d27ad37f7fbf80/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:356:13: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+354 |         #expect(webContainer.configuration.publishedPorts.map({ "\($0.hostAddress):\($0.hostPort):\($0.containerPort)" }) == ["127.0.0.1:18081:80"])
+355 |         
+356 |         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
+    |             `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+357 |         try await composeDown.run()
+358 |         
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+[9 / 11] Container-Compose-DynamicTests-product
+[11 / 11] Container-Compose-DynamicTests-product
+Build complete! (3.27 sec)
+objc[76047]: Class _TtC12UniversalHID17FluidTouchGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1501c8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1665a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID23FluidTouchGestureFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150268) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1666a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID15RotationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1503e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a166860). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID20GameControllerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150488) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a166a40). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID18TranslationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150568) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a166b68). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID21HIDVirtualServicePool is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150608) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a166f88). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtCC12UniversalHID21HIDVirtualServicePool14VirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1506d0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a167088). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID14PointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150830) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1675d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID12ScaleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150998) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a167798). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID16DigitizerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150dc0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a167ec8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID12ScrollFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150e88) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a168120). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID14KeyboardFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150f40) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a168230). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID27TouchSensitiveButtonGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1683d0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID21GameControllerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1511b0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1687b0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID17HIDVirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151258) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a168970). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHIDP33_77F0A1D2252CCF67CE1080DE620C755225HIDVirtualServiceDelegate is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a166360). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID22AbsolutePointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1513a0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a168c70). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID13PointerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151468) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a168d80). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID22NavigationSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151560) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a168e78). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID21GenericGestureGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151628) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1693c0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID16DockSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1516e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a169480). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID19HIDReportDispatcher is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151788) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a169580). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID26TouchSensitiveButtonFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151848) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1696f0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID15DigitizerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151900) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a1697b8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID13ScrollGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1519f8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a169938). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76047]: Class _TtC12UniversalHID17ZoomToggleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151ad8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a169a28). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID17FluidTouchGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1501c8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833a5a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID23FluidTouchGestureFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150268) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833a6a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID15RotationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1503e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833a860). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID20GameControllerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150488) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833aa40). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID18TranslationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150568) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833ab68). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID21HIDVirtualServicePool is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150608) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833af88). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtCC12UniversalHID21HIDVirtualServicePool14VirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1506d0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833b088). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID14PointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150830) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833b5d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID12ScaleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150998) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833b798). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID16DigitizerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150dc0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833bec8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID12ScrollFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150e88) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833c120). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID14KeyboardFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150f40) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833c230). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID27TouchSensitiveButtonGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833c3d0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID21GameControllerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1511b0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833c7b0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID17HIDVirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151258) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833c970). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHIDP33_77F0A1D2252CCF67CE1080DE620C755225HIDVirtualServiceDelegate is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833a360). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID22AbsolutePointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1513a0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833cc70). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID13PointerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151468) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833cd80). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID22NavigationSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151560) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833ce78). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID21GenericGestureGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151628) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833d3c0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID16DockSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1516e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833d480). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID19HIDReportDispatcher is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151788) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833d580). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID26TouchSensitiveButtonFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151848) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833d6f0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID15DigitizerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151900) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833d7b8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID13ScrollGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1519f8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833d938). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[76048]: Class _TtC12UniversalHID17ZoomToggleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151ad8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10833da28). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+Launching container-apiserver...
+Testing access to container-apiserver...
+Verifying machine API server is running...
+􀟈  Suite "Compose Up Tests - Real-World Compose Files" started.
+􀟈  Test "Relative bind mount resolves from the compose file when up runs from the project root" started.
+Info: Docker Compose project name parsed as: Container-Compose_Tests_FBF12589
+Note: The 'name' field affects generated container names and default named-volume names. Full project-level isolation for other resources is not implemented by this tool.
+Note: DNS domain 'container-compose-tests-fbf12589' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-fbf12589
+
+--- Processing Services ---
+["app"]
+Note: Service 'app' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: app
+Starting app
+----------------------------------------
+
+app: [0/6] [0s]
+
+app: [1/6] Fetching image [0s]
+
+app: [2/6] Unpacking image [0s]
+
+app: [3/6] Fetching kernel [0s]
+
+app: [4/6] Fetching init image [0s]
+
+app: [5/6] Unpacking init image [0s]
+
+app: [6/6] Starting container [0s]
+
+app: [6/6] Starting container [0s]
+
+app: Container-Compose_Tests_FBF12589-app
+
+Info: Docker Compose project name parsed as: Container-Compose_Tests_FBF12589
+Note: The 'name' field currently only affects container naming (e.g., 'Container-Compose_Tests_FBF12589-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool.
+Stopping container: Container-Compose_Tests_FBF12589-app
+Successfully stopped container: Container-Compose_Tests_FBF12589-app
+􁁛  Test "Relative bind mount resolves from the compose file when up runs from the project root" passed after 11.978 seconds.
+􁁛  Suite "Compose Up Tests - Real-World Compose Files" passed after 11.979 seconds.
+􁁛  Test run with 1 test in 1 suite passed after 12.003 seconds.

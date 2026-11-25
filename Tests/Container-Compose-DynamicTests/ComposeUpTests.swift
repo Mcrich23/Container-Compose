@@ -101,13 +101,14 @@ struct ComposeUpTests {
         try "mounted".write(to: dataDirectory.appending(path: "marker.txt"), atomically: true, encoding: .utf8)
 
         let yaml = """
+            name: \(projectRoot.lastPathComponent)
             services:
               app:
                 image: alpine:3.20
                 command: ["sleep", "3600"]
                 volumes: ["../data:/data"]
                 healthcheck:
-                  test: ["CMD-SHELL", "test \"$(cat /data/marker.txt)\" = mounted"]
+                  test: ["CMD-SHELL", 'test "$(cat /data/marker.txt)" = mounted']
                   interval: "1s"
                   timeout: "2s"
                   retries: 5
