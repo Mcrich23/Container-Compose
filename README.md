@@ -37,14 +37,15 @@ Command support includes both available behavior and known gaps. A command being
 | `pull` | Partial | By default, pulls images for enabled services and their dependencies. With explicit service names, pulls only those services unless `--include-deps` is set. Honors an explicit service `platform` and skips build-only services. | No pull-policy selection or option to continue after a pull failure. |
 | `ps` | Partial | Lists running project containers with name, image, status and published ports. `-a`/`--all` includes stopped containers. Uses project/service labels, falling back to names for containers without project labels. | No JSON output, quiet mode or status-filter option. Service selection uses the shared dependency resolver, so selecting a service also includes its dependencies. |
 | `images` | Partial | Lists service, repository, tag, image ID and size. Uses `<service>:latest` for builds without an explicit image name. Looks up ID and size from local images. | Lists configured service images rather than inspecting the images attached to existing containers. Unavailable local details stay blank. Local matching does not check platform and can match another registry by a short image name. Digest references are split as repository/tag. No JSON or quiet output. Service selection also includes dependencies. |
+| `exec` | Partial | Runs a command in a running service container with the terminal's stdin/stdout/stderr inherited, so `-i`/`-t` sessions work. Passes `--user`, `--env` and `--env-file` through. Uses project/service labels, falling back to names for containers without project labels. | `--index` is accepted but ignored (no replicas). `--cwd` also sets the container's working directory, since the same flag locates the project. No `--detach` or `--privileged`. |
 | `version` | Supported | Prints the Container-Compose version. | - |
-| `run`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | - | These subcommands are not implemented. Use Apple Container directly where appropriate. |
+| `run`, `logs`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | - | These subcommands are not implemented. Use Apple Container directly where appropriate. |
 
 Compose files can be selected with `-f`/`--file`, the working directory with `--cwd`, and the project name with `-p`/`--project-name`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
 
 `up` and `down` leave containers labeled as belonging to another project alone. Unlabeled containers are matched by name.
 
-Unsupported commands are not aliases for Apple Container commands. For example, use the Apple Container CLI directly to inspect logs or execute a process in an existing container.
+Unsupported commands are not aliases for Apple Container commands. For example, use the Apple Container CLI directly to inspect logs.
 
 ### Compose YAML
 
