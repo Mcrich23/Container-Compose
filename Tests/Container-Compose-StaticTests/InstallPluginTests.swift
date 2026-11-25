@@ -86,3 +86,24 @@ struct UserPluginsBaseTests {
         #expect(base.path == "/data/container/plugins")
     }
 }
+
+extension InstallPluginParsingTests {
+    @Test("A dangling plugins-base symlink resolves to its target, like Homebrew's keg link")
+    func followsDanglingSymlink() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let keg = root.appendingPathComponent("Cellar/container/1.0/libexec")
+        try FileManager.default.createDirectory(at: keg, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let link = keg.appendingPathComponent("container-plugins")
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "../../../../libexec/container-plugins")
+
+        let resolved = InstallPlugin.followingSymlink(link)
+        #expect(resolved.standardizedFileURL.path == root.appendingPathComponent("libexec/container-plugins").standardizedFileURL.path)
+    }
+
+    @Test("A real directory is returned unchanged")
+    func leavesDirectoriesAlone() {
+        let dir = FileManager.default.temporaryDirectory
+        #expect(InstallPlugin.followingSymlink(dir) == dir)
+    }
+}
