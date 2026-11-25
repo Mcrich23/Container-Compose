@@ -15,14 +15,18 @@
 //===----------------------------------------------------------------------===//
 
 import ContainerResource
+import Containerization
 
 /// Converts Compose service shutdown configuration into Apple Container options.
 ///
-/// `signal` remains nil so the container runtime uses the image's configured
-/// stop signal, or SIGTERM when the image does not specify one.
+/// An omitted signal preserves the runtime or image default.
 enum ComposeStopOptions {
     static func resolve(for service: Service) -> ContainerStopOptions {
-        resolve(timeoutInSeconds: service.stopTimeoutInSeconds)
+        ContainerStopOptions(timeoutInSeconds: service.stopTimeoutInSeconds, signal: service.stop_signal)
+    }
+
+    static func validateSignal(_ value: String) throws -> Int32 {
+        try Signal(value).rawValue
     }
 
     static func resolve(timeoutInSeconds: Int32) -> ContainerStopOptions {

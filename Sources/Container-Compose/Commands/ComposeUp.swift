@@ -25,6 +25,7 @@ import ArgumentParser
 import ContainerCommands
 import ContainerAPIClient
 import ContainerXPC
+import ContainerResource
 import ContainerizationExtras
 import Foundation
 @preconcurrency import Rainbow
@@ -158,7 +159,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if dockerCompose.name != nil {
             print("Info: Docker Compose project name parsed as: \(projectName)")
             print(
-                "Note: The 'name' field affects generated container names and default named-volume names. Full project-level isolation for other resources is not implemented by this tool."
+                "Note: The project name scopes generated container, network, and volume names."
             )
         } else {
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(projectName)")
@@ -206,12 +207,16 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print("--- Networks Processed ---\n")
         }
 
+        if project.services.contains(where: { $0.service.networks?.isEmpty != false }) {
+            try await setupNetwork(name: "default", config: dockerCompose.networks?["default"] ?? nil)
+        }
+
         // Process top-level volumes
         // This creates named volumes defined in the docker-compose.yml
         if let volumes = dockerCompose.volumes {
             print("\n--- Processing Volumes ---")
             for (volumeName, volumeConfig) in volumes {
-                guard let volumeConfig else { continue }
+                let volumeConfig = try volumeConfig ?? YAMLDecoder().decode(Volume.self, from: "{}")
                 try await createVolume(name: volumeName, config: volumeConfig)
             }
             print("--- Volumes Processed ---\n")
@@ -759,11 +764,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         if volumeConfig.external?.isExternal == true {
             print("Info: Volume '\(volumeName)' is declared as external.")
-            print("This tool assumes external volume '\(actualVolumeName)' already exists and will not attempt to create it.")
+            _ = try await ClientVolume.inspect(actualVolumeName)
             return
         }
 
-        if (try? await ClientVolume.inspect(actualVolumeName)) != nil {
+        if try await ClientVolume.list().contains(where: { $0.name == actualVolumeName }) {
             print("Volume '\(actualVolumeName)' already exists")
             return
         }
@@ -773,70 +778,27 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             name: actualVolumeName,
             driver: volumeConfig.driver ?? "local",
             driverOpts: volumeConfig.driver_opts ?? [:],
-            labels: volumeConfig.labels ?? [:]
+            labels: ComposeResources.labels(project: projectName, existing: volumeConfig.labels ?? [:])
         )
         print("Volume '\(actualVolumeName)' created")
     }
 
     private func setupNetwork(name networkName: String, config networkConfig: Network?) async throws {
-        let actualNetworkName = networkConfig?.name ?? networkName  // Use explicit name or key as name
-
-        if let externalNetwork = networkConfig?.external, externalNetwork.isExternal {
-            print("Info: Network '\(networkName)' is declared as external.")
-            print("This tool assumes external network '\(externalNetwork.name ?? actualNetworkName)' already exists and will not attempt to create it.")
-        } else {
-            let networkCreateArgs: [String] = ["network", "create"]
-
-            #warning("Docker Compose Network Options Not Supported")
-            // Add driver and driver options
-            if let driver = networkConfig?.driver, !driver.isEmpty {
-                //                    networkCreateArgs.append("--driver")
-                //                    networkCreateArgs.append(driver)
-                print("Network Driver Detected, But Not Supported")
+        let name = ComposeResources.networkName(networkName, config: networkConfig, project: projectName)
+        let client = NetworkClient()
+        let existing = try await client.list()
+        if networkConfig?.external?.isExternal == true {
+            guard existing.contains(where: { $0.id == name }) else {
+                throw ValidationError("External network '\(name)' does not exist")
             }
-            if let driverOpts = networkConfig?.driver_opts, !driverOpts.isEmpty {
-                //                    for (optKey, optValue) in driverOpts {
-                //                        networkCreateArgs.append("--opt")
-                //                        networkCreateArgs.append("\(optKey)=\(optValue)")
-                //                    }
-                print("Network Options Detected, But Not Supported")
-            }
-            // Add various network flags
-            if networkConfig?.attachable == true {
-                //                    networkCreateArgs.append("--attachable")
-                print("Network Attachable Flag Detected, But Not Supported")
-            }
-            if networkConfig?.enable_ipv6 == true {
-                //                    networkCreateArgs.append("--ipv6")
-                print("Network IPv6 Flag Detected, But Not Supported")
-            }
-            if networkConfig?.isInternal == true {
-                //                    networkCreateArgs.append("--internal")
-                print("Network Internal Flag Detected, But Not Supported")
-            }  // CORRECTED: Use isInternal
-
-            // Add labels
-            if let labels = networkConfig?.labels, !labels.isEmpty {
-                print("Network Labels Detected, But Not Supported")
-                //                    for (labelKey, labelValue) in labels {
-                //                        networkCreateArgs.append("--label")
-                //                        networkCreateArgs.append("\(labelKey)=\(labelValue)")
-                //                    }
-            }
-
-            print("Creating network: \(networkName) (Actual name: \(actualNetworkName))")
-            print("Executing container network create: container \(networkCreateArgs.joined(separator: " "))")
-            guard (try? await NetworkClient().get(id: actualNetworkName)) == nil else {
-                print("Network '\(networkName)' already exists")
-                return
-            }
-            let commands = [actualNetworkName]
-            
-            let networkCreate = try Application.NetworkCreate.parse(commands + logging.passThroughCommands())
-
-            try await networkCreate.run()
-            print("Network '\(networkName)' created")
+            return
         }
+        guard !existing.contains(where: { $0.id == name }) else { return }
+        let config = try NetworkConfiguration(
+            name: name, mode: networkConfig?.isInternal == true ? .hostOnly : .nat,
+            labels: ResourceLabels(ComposeResources.labels(project: projectName, existing: networkConfig?.labels ?? [:])),
+            plugin: "container-network-vmnet")
+        _ = try await client.create(configuration: config)
     }
 
     // MARK: Compose Service Level Functions
@@ -965,11 +927,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
          }
 
         // Connect to specified networks
-        if let serviceNetworks = service.networks {
+        if let serviceNetworks = service.networks, !serviceNetworks.isEmpty {
             for network in serviceNetworks {
                 let resolvedNetwork = network
                 // Use the explicit network name from top-level definition if available, otherwise resolved name
-                let networkToConnect = dockerCompose.networks?[network]??.name ?? resolvedNetwork
+                let networkToConnect = ComposeResources.networkName(resolvedNetwork, config: dockerCompose.networks?[network] ?? nil, project: projectName)
                 runCommandArgs.append("--network")
                 let networkTranslation = Self.networkRunArg(
                     network: networkToConnect,
@@ -986,11 +948,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             print(
                 "Info: Service '\(serviceName)' is configured to connect to networks: \(serviceNetworks.joined(separator: ", ")) ascertained from networks attribute in \(composePath)."
             )
-            print(
-                "Note: This tool assumes custom networks are defined at the top-level 'networks' key or are pre-existing. This tool does not create implicit networks for services if not explicitly defined at the top-level."
-            )
         } else {
-            print("Note: Service '\(serviceName)' is not explicitly connected to any networks. It will likely use the default bridge network.")
+            runCommandArgs += ["--network", ComposeResources.networkName("default", config: dockerCompose.networks?["default"] ?? nil, project: projectName)]
         }
 
         // Apple Container 1.0.0 does not expose a `container run` hostname flag.
@@ -1030,7 +989,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             // so gateway detection sees the same values used to write the hosts file.
             let resolvedEntries = extraHosts
             let needsGateway = resolvedEntries.contains { $0.hasSuffix(":host-gateway") }
-            let resolvedNetworkName = service.networks?.first ?? "default"
+            let networkKey = service.networks?.first ?? "default"
+            let resolvedNetworkName = ComposeResources.networkName(networkKey, config: dockerCompose.networks?[networkKey] ?? nil, project: projectName)
             let hostGatewayIP = needsGateway ? Self.resolveHostGatewayIP(networkName: resolvedNetworkName) : ""
 
             var hostsFileLines = ["127.0.0.1 localhost", "::1 localhost"]
@@ -1381,7 +1341,17 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func configVolume(_ volume: String, from dockerCompose: DockerCompose) async throws -> [String] {
-        try composeVolumeToRunArgs(
+        if !volume.contains(":") && volume.hasPrefix("/") {
+            let name = "\(projectName)_anonymous_\(UUID().uuidString.lowercased())"
+            _ = try await ClientVolume.create(name: name, labels: ComposeResources.labels(project: projectName))
+            return ["-v", "\(name):\(volume)"]
+        }
+        let source = String(volume.split(separator: ":", maxSplits: 1).first ?? "")
+        if volume.contains(":"), !source.contains("/"), !source.hasPrefix(".") {
+            let definition = try (dockerCompose.volumes?[source] ?? nil) ?? YAMLDecoder().decode(Volume.self, from: "{}")
+            try await createVolume(name: source, config: definition)
+        }
+        return try composeVolumeToRunArgs(
             volume,
             composeDirectory: composeDirectory,
             fileManager: fileManager,
