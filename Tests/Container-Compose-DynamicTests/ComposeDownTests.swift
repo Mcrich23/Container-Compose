@@ -55,10 +55,8 @@ struct ComposeDownTests {
             })
 
         #expect(
-            containers.count == 2,
-            "Expected 2 containers for \(project.name), found \(containers.count)")
-
-        #expect(containers.filter({ $0.status == .stopped}).count == 2, "Expected 2 stopped containers for \(project.name), found \(containers.filter({ $0.status == .stopped }).count)")
+            containers.isEmpty,
+            "Expected removed containers for \(project.name), found \(containers.count)")
     }
 
     @Test("stop_grace_period controls the graceful stop deadline")
@@ -156,12 +154,8 @@ struct ComposeDownTests {
             })
 
         #expect(
-            containers.count == 1,
-            "Expected 1 container with the name \(containerName), found \(containers.count)")
-        #expect(
-            containers.filter({ $0.status == .stopped }).count == 1,
-            "Expected container \(containerName) to be stopped, found status: \(containers.map(\.status))"
-        )
+            containers.isEmpty,
+            "Expected container \(containerName) to be removed")
     }
 
     /// Synchronously force-delete containers by ID. Sync so it can run in
