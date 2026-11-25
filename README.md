@@ -148,3 +148,5 @@ If you encounter issues or have questions, please open an [Issue](https://github
 ---
 
 Happy Coding! 🚀
+
+Service `pull_policy` supports `always`, `never`, `missing` (`if_not_present`), and `build`. Missing images are pulled by default; `latest` tags are refreshed. Time-based policies are rejected because pull timestamps are not tracked.

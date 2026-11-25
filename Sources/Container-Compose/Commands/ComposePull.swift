@@ -62,6 +62,12 @@ public struct ComposePull: AsyncParsableCommand {
                 continue
             }
 
+            let policy = target.service.pull_policy ?? .always
+            if policy == .never || policy == .build { continue }
+            if policy != .always {
+                let local = try await PullPolicy.isLocal(image, platform: target.service.effectivePullPlatform())
+                if !policy.shouldPull(image: image, local: local) { continue }
+            }
             print("Pulling \(target.serviceName) (\(image))...")
             try await pullImage(image, platform: target.service.effectivePullPlatform())
         }

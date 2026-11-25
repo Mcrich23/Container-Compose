@@ -847,19 +847,29 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         
         var runCommandArgs: [String] = []
 
-        // Handle 'build' configuration
-        if let buildConfig = service.build {
-            imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
-        } else if let img = service.image {
-            // Use specified image if no build config
-            // Pull image if necessary
-            try await pullImage(img, platform: service.effectivePullPlatform())
-            imageToRun = img
+        let policy = service.pull_policy ?? .missing
+        if policy == .build, service.build == nil {
+            throw ValidationError("Service '\(serviceName)' uses pull_policy: build without build configuration")
+        }
+        if let build = service.build, policy == .build || rebuild || service.image == nil {
+            imageToRun = try await buildService(build, for: service, serviceName: serviceName)
+        } else if let image = service.image {
+            let local = try await PullPolicy.isLocal(image, platform: service.effectivePullPlatform())
+            if policy == .never && !local {
+                throw ValidationError("Image '\(image)' is unavailable locally for the requested platform (pull_policy: never)")
+            }
+            imageToRun = image
+            if policy.shouldPull(image: image, local: local) {
+                do { try await pullImage(image, platform: service.effectivePullPlatform()) }
+                catch {
+                    guard service.pull_policy == nil, let build = service.build else { throw error }
+                    imageToRun = try await buildService(build, for: service, serviceName: serviceName)
+                }
+            }
         } else {
-            // Should not happen due to Service init validation, but as a fallback
             throw ComposeError.imageNotFound(serviceName)
         }
-        
+
         // Set Run Platform
         if let platform = service.platform {
             runCommandArgs.append(contentsOf: ["--platform", "\(platform)"])
@@ -1288,23 +1298,6 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func pullImage(_ imageName: String, platform: String?) async throws {
-        let imageList = try await ClientImage.list()
-        // An image is considered already-local if any of:
-        //   - the stored reference matches `imageName` exactly (multi-path local builds, e.g. `myorg/foo:local`)
-        //   - the stored reference is `imageName` with a registry prefix (`docker.io/library/nginx:latest`
-        //     when the user wrote `nginx:latest` or `library/nginx:latest`)
-        //   - the last `/`-separated component of the stored reference matches `imageName`
-        //     (legacy fallback for short references like `alpine:latest`)
-        let exists = imageList.contains { ref in
-            let stored = ref.description.reference
-            return stored == imageName
-                || stored.hasSuffix("/\(imageName)")
-                || stored.components(separatedBy: "/").last == imageName
-        }
-        guard !exists else {
-            return
-        }
-
         print("Pulling Image \(imageName)...")
         
         var commands = [
@@ -1330,8 +1323,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
         // Determine image tag for built image
         let imageToRun = service.image ?? "\(serviceName):latest"
-        let imageList = try await ClientImage.list()
-        if !rebuild, imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageToRun }) {
+        if !rebuild, service.pull_policy != .build,
+           try await PullPolicy.isLocal(imageToRun, platform: service.effectivePullPlatform()) {
             return imageToRun
         }
 
