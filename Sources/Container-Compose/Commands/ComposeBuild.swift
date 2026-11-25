@@ -59,7 +59,6 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         // profile-gated or just not named explicitly — would be started by
         // `up` but never get built here.
         let project = try projectOptions.resolve(filteringBy: services)
-        let environmentVariables = loadEnvFile(path: projectOptions.envFilePath)
 
         let servicesToBuild = project.services.filter { $0.service.build != nil }
 
@@ -72,7 +71,7 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         for target in servicesToBuild {
             try await buildService(
                 target.service.build!, for: target.service, serviceName: target.serviceName,
-                projectName: project.projectName, environmentVariables: environmentVariables)
+                projectName: project.projectName)
         }
         print("Build complete")
     }
@@ -81,18 +80,17 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         _ buildConfig: Build,
         for service: Service,
         serviceName: String,
-        projectName: String,
-        environmentVariables: [String: String]
+        projectName: String
     ) async throws {
         let imageTag = service.image ?? "\(serviceName):latest"
 
         // Per Compose spec: `context` is relative to the compose file's directory,
         // and `dockerfile` is relative to the resolved `context` (not the compose dir).
-        let contextURL = URL(fileURLWithPath: buildConfig.context, relativeTo: URL(fileURLWithPath: composeDirectory))
+        let contextURL = URL(fileURLWithPath: buildConfig.context, isDirectory: true, relativeTo: URL(fileURLWithPath: composeDirectory, isDirectory: true))
         var commands = [contextURL.path]
 
         for (key, value) in buildConfig.args ?? [:] {
-            commands.append(contentsOf: ["--build-arg", "\(key)=\(resolveVariable(value, with: environmentVariables))"])
+            commands.append(contentsOf: ["--build-arg", "\(key)=\(value)"])
         }
 
         commands.append(contentsOf: [

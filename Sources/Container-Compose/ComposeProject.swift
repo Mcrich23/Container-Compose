@@ -91,7 +91,8 @@ public struct ComposeProjectOptions: ParsableArguments {
         return resolvedPath(for: envFile, relativeTo: cwdURL)
     }
 
-    /// Reads and decodes the compose file at `composePath`.
+    /// Reads the compose file and expands YAML values before decoding.
+    /// Commands receive resolved values and must not interpolate them again.
     /// - Throws: `YamlError.composeFileNotFound` if the file is missing.
     public func loadCompose() throws -> DockerCompose {
         guard let yamlData = fileManager.contents(atPath: composePath) else {
@@ -99,7 +100,12 @@ public struct ComposeProjectOptions: ParsableArguments {
             throw YamlError.composeFileNotFound(path)
         }
         let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        return try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        guard let node = try Yams.compose(yaml: dockerComposeString) else {
+            return try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        }
+        let environment = loadEnvFile(path: envFilePath).merging(ProcessInfo.processInfo.environment) { _, process in process }
+        let expanded = try ComposeInterpolation(environment: environment).expandValues(in: node)
+        return try YAMLDecoder().decode(DockerCompose.self, from: expanded)
     }
 
     /// Project name used to namespace containers, resolved with the same

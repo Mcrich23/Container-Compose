@@ -61,14 +61,13 @@ struct EnvironmentVariableTests {
         #expect(result == "postgres://localhost:5432/mydb")
     }
     
-    @Test("Leave unresolved variable when no default provided")
-    func leaveUnresolvedVariable() {
+    @Test("Use an empty string when no variable or default is provided")
+    func missingVariableUsesEmptyString() {
         let envVars: [String: String] = [:]
         let input = "${UNDEFINED_VAR}"
         let result = resolveVariable(input, with: envVars)
         
-        // Should leave as-is when variable not found and no default
-        #expect(result == "${UNDEFINED_VAR}")
+        #expect(result == "")
     }
     
     @Test("Resolve with empty default value")

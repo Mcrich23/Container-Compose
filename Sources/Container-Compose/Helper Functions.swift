@@ -97,50 +97,29 @@ public func loadEnvFile(path: String) -> [String: String] {
 }
 
 /// Resolves environment variables within a string (e.g., ${VAR:-default}, ${VAR:?error}).
-/// This function supports default values and error-on-missing variable syntax.
+/// Supports Compose defaults, required values, alternatives and escaped dollars.
+/// Missing variables produce a warning and an empty string.
 /// - Parameters:
 ///   - value: The string possibly containing environment variable references.
 ///   - envVars: A dictionary of environment variables to use for resolution.
 /// - Returns: The string with all recognized environment variables resolved.
 public func resolveVariable(_ value: String, with envVars: [String: String]) -> String {
-    var resolvedValue = value
-    // Regex to find ${VAR}, ${VAR:-default}, ${VAR:?error}
-    let regex = try! NSRegularExpression(pattern: #"\$\{([A-Za-z0-9_]+)(:?-(.*?))?(:\?(.*?))?\}"#, options: [])
-    
-    // Combine process environment with loaded .env file variables, prioritizing process environment
-    let combinedEnv = ProcessInfo.processInfo.environment.merging(envVars) { (current, _) in current }
-    
-    // Loop to resolve all occurrences of variables in the string
-    while let match = regex.firstMatch(in: resolvedValue, options: [], range: NSRange(resolvedValue.startIndex..<resolvedValue.endIndex, in: resolvedValue)) {
-        guard let varNameRange = Range(match.range(at: 1), in: resolvedValue) else { break }
-        let varName = String(resolvedValue[varNameRange])
-        
-        if let envValue = combinedEnv[varName] {
-            // Variable found in environment, replace with its value
-            resolvedValue.replaceSubrange(Range(match.range(at: 0), in: resolvedValue)!, with: envValue)
-        } else if let defaultValueRange = Range(match.range(at: 3), in: resolvedValue) {
-            // Variable not found, but default value is provided, replace with default
-            let defaultValue = String(resolvedValue[defaultValueRange])
-            resolvedValue.replaceSubrange(Range(match.range(at: 0), in: resolvedValue)!, with: defaultValue)
-        } else if match.range(at: 5).location != NSNotFound, let errorMessageRange = Range(match.range(at: 5), in: resolvedValue) {
-            // Variable not found, and error-on-missing syntax used, print error and exit
-            let errorMessage = String(resolvedValue[errorMessageRange])
-            fputs("Error: Missing required environment variable '\(varName)': \(errorMessage)\n", stderr)
-            Application.exit(withError: "Error: Missing required environment variable '\(varName)': \(errorMessage)\n")
-        } else {
-            // Variable not found and no default/error specified, leave as is and break loop to avoid infinite loop
-            break
-        }
+    let combined = envVars.merging(ProcessInfo.processInfo.environment) { _, process in process }
+    do {
+        return try ComposeInterpolation(environment: combined).expand(value)
+    } catch {
+        Application.exit(withError: error)
     }
-    return resolvedValue
 }
 
 /// Assembles container variables from service files and explicit values.
 /// The interpolation environment supplies substitutions without being injected.
+/// - Important: Pass `interpolate: false` for values already expanded by project loading.
 func assembleServiceEnvironment(
     service: Service,
     composeDirectory: String,
-    interpolationEnvironment: [String: String]
+    interpolationEnvironment: [String: String],
+    interpolate: Bool = true
 ) -> [String: String] {
     var result: [String: String] = [:]
     for path in service.env_file ?? [] {
@@ -148,7 +127,7 @@ func assembleServiceEnvironment(
         result.merge(loadEnvFile(path: fullPath)) { _, later in later }
     }
     for (key, value) in service.environment ?? [:] {
-        result[key] = resolveVariable(value, with: interpolationEnvironment)
+        result[key] = interpolate ? resolveVariable(value, with: interpolationEnvironment) : value
     }
     return result
 }
@@ -243,16 +222,17 @@ public func composePortToRunArg(_ portSpec: String) -> String {
 }
 
 /// Converts a Docker Compose `volumes:` entry into the `--volume` arguments for `container run`.
-/// Internal so tests can reach it via `@testable import ContainerComposeCore`.
+/// - Important: Pass `interpolate: false` for values already expanded by project loading.
 func composeVolumeToRunArgs(
     _ volume: String,
     composeDirectory: String,
     fileManager: FileManager = .default,
     environmentVariables: [String: String] = [:],
     projectName: String?,
-    volumeDefinitions: [String: Volume?]? = nil
+    volumeDefinitions: [String: Volume?]? = nil,
+    interpolate: Bool = true
 ) throws -> [String] {
-    let resolvedVolume = resolveVariable(volume, with: environmentVariables)
+    let resolvedVolume = interpolate ? resolveVariable(volume, with: environmentVariables) : volume
     var args: [String] = []
 
     let components = resolvedVolume.split(separator: ":", maxSplits: 2).map(String.init)
