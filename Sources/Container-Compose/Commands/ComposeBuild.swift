@@ -114,14 +114,9 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
 
         print("\n----------------------------------------")
         print("Building \(serviceName) -> \(imageTag)")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["container", "build"] + commands + logging.passThroughCommands()
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw ExitCode(process.terminationStatus)
-        }
+        let options = try ContainerCommands.BuildOptions.parse(commands + logging.passThroughCommands())
+        try await options.runLinuxBuild(
+            containerSystemConfig: try await ClientHealthCheck.loadContainerSystemConfig())
         print("Built \(serviceName) successfully.")
         print("----------------------------------------")
     }
