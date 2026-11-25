@@ -18,8 +18,7 @@
 //  ComposeStop.swift
 //  Container-Compose
 //
-//  Implements `stop [SERVICE...]`: stop service containers without removing
-//  them, so a later `start` can bring them back.
+//  `stop [SERVICE...]`: stops containers without removing them.
 //
 
 import ArgumentParser
@@ -49,9 +48,7 @@ public struct ComposeStop: AsyncParsableCommand {
         }
         try Service.validateRequestedServices(services, against: defined)
 
-        // Explicit requests stop only the named services (`docker compose
-        // stop <svc>` does not stop dependencies); the shared selection's
-        // depends_on expansion is for `up`.
+        // Stop only named services; the shared selection adds dependencies.
         let selected = services.isEmpty
             ? resolved.services
             : resolved.services.filter { services.contains($0.serviceName) }
@@ -59,10 +56,7 @@ public struct ComposeStop: AsyncParsableCommand {
         let client = ContainerClient()
         let snapshots = (try? await client.list()) ?? []
 
-        // Stop in reverse dependency order so dependents go down before the
-        // services they depend on. Containers are found via the shared
-        // matching rule: labels are authoritative, candidate names identify
-        // only unlabeled pre-label containers.
+        // Reverse order: dependents stop before their dependencies.
         for target in selected.reversed() {
             let container = snapshots.first { snapshot in
                 target.matches(containerID: snapshot.id, labels: snapshot.configuration.labels, projectName: resolved.projectName)

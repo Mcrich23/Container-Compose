@@ -18,8 +18,7 @@
 //  ComposeStart.swift
 //  Container-Compose
 //
-//  Implements `start [SERVICE...]`: boot existing (stopped) service
-//  containers, the counterpart to `stop`.
+//  `start [SERVICE...]`: starts existing stopped containers.
 //
 
 import ArgumentParser
@@ -49,8 +48,7 @@ public struct ComposeStart: AsyncParsableCommand {
         }
         try Service.validateRequestedServices(services, against: defined)
 
-        // Explicit requests start only the named services, matching
-        // `docker compose start <svc>`.
+        // Start only named services; the shared selection adds dependencies.
         let selected = services.isEmpty
             ? resolved.services
             : resolved.services.filter { services.contains($0.serviceName) }
@@ -58,10 +56,6 @@ public struct ComposeStart: AsyncParsableCommand {
         let client = ContainerClient()
         let snapshots = (try? await client.list()) ?? []
 
-        // Start in resolved (dependency) order so dependencies come up first.
-        // Containers are found via the shared matching rule: labels are
-        // authoritative, candidate names identify only unlabeled pre-label
-        // containers.
         for target in selected {
             let container = snapshots.first { snapshot in
                 target.matches(containerID: snapshot.id, labels: snapshot.configuration.labels, projectName: resolved.projectName)
@@ -73,14 +67,12 @@ public struct ComposeStart: AsyncParsableCommand {
 
             print("Starting container: \(container.id)")
             do {
-                // There is no `ContainerClient.start(id:)`; reuse the underlying
-                // `container start` command, which boots a created/stopped
-                // container by id in detached mode.
+                // `ContainerClient` has no `start(id:)`.
                 let start = try Application.ContainerStart.parse([container.id])
                 try await start.run()
                 print("Successfully started container: \(container.id)")
             } catch let exit as ExitCode where exit == .success {
-                // ContainerStart throws ExitCode on completion; success is fine.
+                // ContainerStart signals completion by throwing ExitCode.success.
                 print("Successfully started container: \(container.id)")
             } catch {
                 print("Error Starting Container: \(error)")
