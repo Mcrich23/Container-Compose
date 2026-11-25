@@ -1341,7 +1341,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         var commands = [contextURL.path]
 
         // Add build arguments
-        for (key, value) in buildConfig.args ?? [:] {
+        for (key, value) in try resolvedBuildArguments(buildConfig.args, environment: ProcessInfo.processInfo.environment) {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(value)"])
         }
 

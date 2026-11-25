@@ -148,3 +148,8 @@ If you encounter issues or have questions, please open an [Issue](https://github
 ---
 
 Happy Coding! 🚀
+
+Build arguments accept map or list syntax. Null map values and bare list entries
+inherit from the host environment; missing values preserve Dockerfile defaults.
+`container-compose build --build-arg KEY=value` overrides the compose value and
+can be repeated. Use `KEY=` to explicitly pass an empty value.

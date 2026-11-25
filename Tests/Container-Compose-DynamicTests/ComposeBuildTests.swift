@@ -71,6 +71,39 @@ struct ComposeBuildTests {
         #expect(try await imageExists(named: image))
     }
 
+    @Test("build arguments reach the native builder")
+    func buildArgumentsReachBuilder() async throws {
+        let image = "compose-args-\(UUID().uuidString.lowercased()):latest"
+        let yaml = """
+        services:
+          app:
+            image: \(image)
+            platform: linux/arm64/v8
+            build:
+              args: [VALUE=file, EMPTY=, DEFAULT, LITERAL=$$cash]
+        """
+        // BuildKit normalizes arm64/v8 to arm64, so TARGETVARIANT is empty.
+        let dockerfile = """
+        FROM alpine:3.20
+        ARG VALUE
+        ARG EMPTY=nonempty
+        ARG DEFAULT=default
+        ARG LITERAL
+        RUN test "$VALUE" = 'cli=a=b' && test -z "$EMPTY" && test "$DEFAULT" = default && test "$LITERAL" = '$cash'
+        """
+        let project = try writeBuildProject(yaml: yaml, dockerfile: dockerfile)
+        defer {
+            let cleanup = Process()
+            cleanup.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            cleanup.arguments = ["container", "image", "delete", "--force", image]
+            if (try? cleanup.run()) != nil { cleanup.waitUntilExit() }
+            try? FileManager.default.removeItem(at: project.base)
+        }
+        var build = try ComposeBuild.parse(["--cwd", project.base.path(percentEncoded: false), "--build-arg", "VALUE=cli=a=b"])
+        try await build.run()
+        #expect(try await imageExists(named: image))
+    }
+
     @Test("Build produces an image in the local store")
     func buildProducesImageInLocalStore() async throws {
         let yaml = """
