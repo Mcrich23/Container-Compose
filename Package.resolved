@@ -1,5 +1,5 @@
 {
-  "originHash" : "e917e40033aff4851ed6a5b8499d011d99d5124f64afdf389d5f7efecb7b8476",
+  "originHash" : "48cffadf4cdc4e59850a0b7916469142a2c2046d6c203d5fd41abdbf455435ee",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/container",
       "state" : {
-        "revision" : "9a8917ca2da5cd6ba059b9ba5ca5a74892e9bb7d",
-        "version" : "1.4.1"
+        "revision" : "a15b46097aa4c2325da13c1fb5192b9274aab083",
+        "version" : "1.7.1"
       }
     },
     {
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/containerization.git",
       "state" : {
-        "revision" : "9eacc197d7c3663eb29cbab6d51244ede6d1cd7d",
-        "version" : "0.45.0"
+        "revision" : "baf212e5a8e432e539beee325050aa26443a154d",
+        "version" : "0.54.0"
       }
     },
     {

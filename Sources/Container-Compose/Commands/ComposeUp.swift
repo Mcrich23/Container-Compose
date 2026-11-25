@@ -1369,11 +1369,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         commands.append(contentsOf: ["--cpus", "\(cpuCount)"])
         commands.append(contentsOf: ["--memory", memoryLimit])
 
-        var buildCommand = try Application.BuildCommand.parse(commands)
         print("\n----------------------------------------")
         print("Building image for service: \(serviceName) (Tag: \(imageToRun))")
-        try buildCommand.validate()
-        try await buildCommand.run()
+        let options = try ContainerCommands.BuildOptions.parse(commands)
+        try await options.runLinuxBuild(
+            containerSystemConfig: try await ClientHealthCheck.loadContainerSystemConfig())
         print("Image build for \(serviceName) completed.")
         print("----------------------------------------")
 
