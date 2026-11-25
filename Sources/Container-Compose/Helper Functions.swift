@@ -332,12 +332,10 @@ extension Flags.Logging {
     }
 }
 
-/// Runs a command, streaming its stdout and stderr line-by-line as they arrive.
+/// Runs a command, streaming stdout and stderr chunks as they arrive.
 ///
-/// Used by `ComposeLogs` to stream `container logs`. `ComposeUp` keeps its own
-/// private equivalent for now; unifying them is deferred while several open
-/// PRs rework ComposeUp's process handling.
-///
+/// - Note: `ComposeUp.streamCommand` duplicates this; merge them once open
+///   PRs reworking `ComposeUp` land.
 /// - Parameters:
 ///   - command: The name of the command to run (e.g., `"container"`).
 ///   - args: Command-line arguments to pass to the command.

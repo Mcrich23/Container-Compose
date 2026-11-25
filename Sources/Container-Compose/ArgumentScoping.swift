@@ -18,58 +18,29 @@
 //  ArgumentScoping.swift
 //  Container-Compose
 //
-//  swift-argument-parser merges a parent command and its subcommands into a
-//  single flag namespace, so a short flag can only mean one thing across the
-//  whole tool. The root owns `-f`/`--file`, which means a subcommand cannot
-//  independently rebind `-f` (e.g. `docker compose logs -f` for "follow").
-//
-//  `cobra` (Docker's CLI library) avoids this by scoping flags positionally:
-//  the parent's flags are parsed before the subcommand name, the child's after.
-//  We reproduce *only that small slice* of behavior here, opt-in per subcommand,
-//  by normalizing argv before ArgumentParser ever sees it: a short flag typed in
-//  a subcommand's segment is rewritten to the long form that subcommand wants.
-//
-//  This is deliberately narrow. Add an entry to `scopedShortFlagOverrides` to
-//  opt a specific subcommand into rebinding a specific short flag; everything
-//  else is passed through untouched.
+//  ArgumentParser gives a command and its subcommands one flag namespace, so
+//  `-f` can't mean `--file` at the root and `--follow` under `logs`. This
+//  rewrites argv before parsing to scope short flags by position, like cobra.
 //
 
 import Foundation
 
-/// Per-subcommand short-flag rebindings, applied only within that subcommand's
-/// argument segment. Keyed by subcommand name, then by the short flag the user
-/// types, mapping to the long flag ArgumentParser should receive.
-///
-/// Example: under `logs`, a bare `-f` means `--follow` (like `docker compose
-/// logs -f`), even though `-f` is `--file` everywhere else in the tool.
+/// Short flags rewritten to a long flag only after the named subcommand.
 let scopedShortFlagOverrides: [String: [String: String]] = [
     "logs": ["-f": "--follow"]
 ]
 
-/// Root-level options that consume the *following* token as their value. We skip
-/// past that value when scanning for the subcommand boundary, so a value that
-/// happens to equal a subcommand name (e.g. `-f up logs`) isn't mistaken for the
-/// subcommand itself.
+/// Root options whose value is skipped when finding the subcommand, so
+/// `-f up logs` treats `up` as a file name.
 private let rootValueTakingFlags: Set<String> = ["-f", "--file"]
 
-/// Rewrites argv so that subcommands listed in `scopedShortFlagOverrides` can
-/// rebind a short flag within their own segment, without disturbing the root's
-/// use of that flag.
+/// Applies `scopedShortFlagOverrides` to tokens after the first subcommand.
+/// Stops rewriting at `--`.
 ///
-/// Scanning model (mirrors cobra's positional scoping):
-///   - Tokens before the first recognized subcommand are the *root* segment.
-///     Root value-taking flags consume their following token.
-///   - The first token matching a known subcommand name switches us into the
-///     *subcommand* segment; from there, that subcommand's overrides apply.
-///   - A `--` terminator ends rewriting; everything after it is passed verbatim.
-///
-/// Only an exact short-flag token (e.g. `-f`) is rewritten. Attached or combined
-/// forms (`-ffile`, `--file=x`, `-fd`) are intentionally left untouched — they
-/// are unambiguous to ArgumentParser as written, and expanding them would mean
-/// reimplementing a full option parser here.
-///
+/// - Note: Only exact tokens like `-f` are rewritten; attached or combined
+///   forms (`-ffile`, `-fd`) pass through unchanged.
 /// - Parameters:
-///   - argv: The raw arguments (NOT including the executable name).
+///   - argv: The raw arguments, without the executable name.
 ///   - subcommands: The set of known subcommand names.
 /// - Returns: The normalized arguments to hand to ArgumentParser.
 public func normalizeScopedFlags(_ argv: [String], subcommands: Set<String>) -> [String] {
@@ -82,14 +53,12 @@ public func normalizeScopedFlags(_ argv: [String], subcommands: Set<String>) -> 
     while index < argv.count {
         let token = argv[index]
 
-        // `--` ends option processing entirely; copy the remainder verbatim.
         if token == "--" {
             out.append(contentsOf: argv[index...])
             break
         }
 
         if let activeSubcommand {
-            // Inside a subcommand's segment: apply its overrides, if any.
             if let mapped = scopedShortFlagOverrides[activeSubcommand]?[token] {
                 out.append(mapped)
             } else {
@@ -99,10 +68,7 @@ public func normalizeScopedFlags(_ argv: [String], subcommands: Set<String>) -> 
             continue
         }
 
-        // Root segment.
         if rootValueTakingFlags.contains(token) {
-            // Emit the flag and its value together so the value can't be
-            // misread as the subcommand boundary.
             out.append(token)
             if index + 1 < argv.count {
                 out.append(argv[index + 1])
@@ -124,16 +90,14 @@ public func normalizeScopedFlags(_ argv: [String], subcommands: Set<String>) -> 
 }
 
 extension Main {
-    /// Subcommand names recognized at the top level, derived from the command
-    /// configuration so this stays in sync as subcommands are added. Includes
-    /// the implicit `help` subcommand ArgumentParser provides.
+    /// Top-level subcommand names, including ArgumentParser's implicit `help`.
     public static var subcommandNames: Set<String> {
         var names = Set(configuration.subcommands.compactMap { $0.configuration.commandName })
         names.insert("help")
         return names
     }
 
-    /// Convenience entry point that normalizes scoped short flags before parsing.
+    /// Parses `argv` after applying `normalizeScopedFlags`.
     public static func main(normalizing argv: [String]) async {
         await main(normalizeScopedFlags(argv, subcommands: subcommandNames))
     }
