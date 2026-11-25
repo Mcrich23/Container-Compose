@@ -44,6 +44,9 @@ public struct ComposeDown: AsyncParsableCommand {
     @Flag(help: "Remove containers labeled for this project whose services are absent from the Compose file")
     var removeOrphans = false
 
+    @Flag(name: .shortAndLong, help: "Remove owned named and anonymous volumes unused by surviving containers")
+    var volumes = false
+
     @Option(name: .long, help: "Shutdown timeout in seconds")
     var timeout: Int32?
 
@@ -60,9 +63,7 @@ public struct ComposeDown: AsyncParsableCommand {
 
         if project.compose.name != nil {
             print("Info: Docker Compose project name parsed as: \(project.projectName)")
-            print(
-                "Note: The 'name' field currently only affects container naming (e.g., '\(project.projectName)-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool."
-            )
+
         } else {
             print("Info: No 'name' field found in docker-compose.yml. Using directory name as project name: \(project.projectName)")
         }
@@ -82,12 +83,13 @@ public struct ComposeDown: AsyncParsableCommand {
         }
 
         try await stop(project)
+        try await ComposeResources.cleanup(project: project, volumes: volumes)
     }
 
     private func stop(_ project: ComposeProject) async throws {
         let client = ContainerClient()
         let snapshots = try await client.list()
-        for target in project.services {
+        for target in project.services.reversed() {
             let matches = snapshots.filter {
                 target.matches(containerID: $0.configuration.id,
                                labels: $0.configuration.labels,
@@ -97,7 +99,7 @@ public struct ComposeDown: AsyncParsableCommand {
                 let id = container.configuration.id
                 if container.status == .running {
                     print("Stopping container: \(id)")
-                    try await client.stop(id: id, opts: ComposeStopOptions.resolve(timeoutInSeconds: timeout ?? target.service.stopTimeoutInSeconds))
+                    try await client.stop(id: id, opts: .init(timeoutInSeconds: timeout ?? target.service.stopTimeoutInSeconds, signal: target.service.stop_signal))
                 }
                 // A failed stop must leave both the container and its bind source intact.
                 try await client.delete(id: id)

@@ -3,8 +3,10 @@ import Testing
 
 struct ComposeDownParsingTests {
     @Test func cleanupOptions() throws {
-        let command = try ComposeDown.parse(["--remove-orphans", "--timeout", "3"])
+        let command = try ComposeDown.parse(["--remove-orphans", "--volumes", "--timeout", "3"])
         #expect(command.removeOrphans)
+        #expect(command.volumes)
+        #expect(try ComposeDown.parse(["-v"]).volumes)
         #expect(command.timeout == 3)
     }
 

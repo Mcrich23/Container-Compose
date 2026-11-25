@@ -16,6 +16,7 @@
 
 import ContainerAPIClient
 import ContainerCommands
+import ContainerResource
 import Foundation
 import TestHelpers
 import Testing
@@ -25,9 +26,103 @@ import Testing
 @Suite("Compose Down Tests", .containerDependent, .serialized)
 struct ComposeDownTests {
 
+    @Test("Cleanup requires ownership and preserves external resources")
+    func resourceOwnership() async throws {
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: "services: {}")
+        defer { try? FileManager.default.removeItem(at: project.base) }
+        let owned = "\(project.name)_owned".lowercased()
+        let legacy = "\(project.name)_legacy"
+        let external = "\(project.name)_external"
+        try "services: {}\nvolumes:\n  external:\n    name: \(external)\n    external: true\n".write(to: project.url, atomically: true, encoding: .utf8)
+        let networkClient = NetworkClient()
+        _ = try await networkClient.create(configuration: NetworkConfiguration(
+            name: owned, mode: .nat,
+            labels: ResourceLabels(ComposeResources.labels(project: project.name)),
+            plugin: "container-network-vmnet"))
+        _ = try await ClientVolume.create(name: owned, labels: ComposeResources.labels(project: project.name))
+        _ = try await ClientVolume.create(name: legacy)
+        _ = try await ClientVolume.create(name: external, labels: ComposeResources.labels(project: project.name))
+        do {
+            let down = try ComposeDown.parse(["--cwd", project.base.path, "--volumes"])
+            try await down.run()
+            #expect(try await networkClient.list().allSatisfy { $0.id != owned })
+            let volumes = try await ClientVolume.list()
+            #expect(!volumes.contains { $0.name == owned })
+            #expect(volumes.contains { $0.name == legacy })
+            #expect(volumes.contains { $0.name == external })
+        } catch {
+            try? await networkClient.delete(id: owned)
+            try? await ClientVolume.delete(name: owned)
+            try? await ClientVolume.delete(name: legacy)
+            try? await ClientVolume.delete(name: external)
+            throw error
+        }
+        try await ClientVolume.delete(name: legacy)
+        try await ClientVolume.delete(name: external)
+    }
+
+    @Test("Reverse teardown preserves resources attached to an inactive service")
+    func orderAndSurvivingResources() async throws {
+        let marker = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: marker, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: marker) }
+        let yaml = """
+            services:
+              base:
+                image: alpine:latest
+                command: [sh, -c, "trap 'echo base >> /marker/order; exit 0' TERM; touch /marker/base; while true; do sleep 1; done"]
+                volumes: ["\(marker.path):/marker"]
+              dependent:
+                image: alpine:latest
+                depends_on: [base]
+                command: [sh, -c, "trap 'echo dependent >> /marker/order; exit 0' TERM; touch /marker/dependent; while true; do sleep 1; done"]
+                volumes: ["\(marker.path):/marker", "/anonymous"]
+              survivor:
+                image: alpine:latest
+                profiles: [keep]
+                command: [sleep, '300']
+                volumes: ["data:/data"]
+            volumes:
+              data: {}
+            """
+        let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
+        do {
+            var up = try ComposeUp.parse(["--cwd", project.base.path, "--profile", "keep", "-d"])
+            try await up.run()
+            let deadline = Date().addingTimeInterval(30)
+            while (!FileManager.default.fileExists(atPath: marker.appending(path: "base").path)
+                   || !FileManager.default.fileExists(atPath: marker.appending(path: "dependent").path)), Date() < deadline {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            let down = try ComposeDown.parse(["--cwd", project.base.path, "--volumes", "--remove-orphans"])
+            try await down.run()
+            let order = try String(contentsOf: marker.appending(path: "order"), encoding: .utf8)
+            #expect(order.split(separator: "\n") == ["dependent", "base"])
+            let survivors = try await ContainerClient().list().filter {
+                $0.configuration.labels["com.docker.compose.project"] == project.name
+            }
+            #expect(survivors.count == 1)
+            #expect(survivors.first?.configuration.labels["com.docker.compose.service"] == "survivor")
+            let remainingVolumes = try await ClientVolume.list().filter {
+                ComposeResources.owns($0.labels, project: project.name)
+            }
+            #expect(remainingVolumes.map(\.name) == ["\(project.name)_data"])
+            let network = ComposeResources.networkName("default", config: nil, project: project.name)
+            #expect(try await NetworkClient().list().contains { $0.id == network })
+        } catch {
+            let cleanup = try ComposeDown.parse(["--cwd", project.base.path, "--profile", "keep", "--volumes"])
+            try? await cleanup.run()
+            try? FileManager.default.removeItem(at: project.base)
+            throw error
+        }
+        let cleanup = try ComposeDown.parse(["--cwd", project.base.path, "--profile", "keep", "--volumes"])
+        try await cleanup.run()
+        try FileManager.default.removeItem(at: project.base)
+    }
+
     @Test("What goes up must come down - two containers")
     func testUpAndDownComplex() async throws {
-        let yaml = DockerComposeYamlFiles.dockerComposeYaml1
+        let yaml = DockerComposeYamlFiles.dockerComposeYaml1.replacingOccurrences(of: "    ports:\n      - \"8080:80\"\n", with: "")
         let project = try DockerComposeYamlFiles.copyYamlToTemporaryLocation(yaml: yaml)
 
         var composeUp = try ComposeUp.parse([
@@ -71,11 +166,12 @@ struct ComposeDownTests {
               app:
                 image: alpine:latest
                 stop_grace_period: 1s
+                stop_signal: SIGUSR1
                 command:
                   - sh
                   - -c
                   - |
-                    trap 'touch /marker/term; sleep 10; touch /marker/graceful' TERM
+                    trap 'touch /marker/term; sleep 10; touch /marker/graceful' USR1
                     touch /marker/ready
                     while true; do sleep 1; done
                 volumes:

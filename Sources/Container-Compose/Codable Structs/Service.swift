@@ -41,6 +41,9 @@ public struct Service: Codable, Hashable {
     /// Time Compose waits for the container to stop before sending SIGKILL.
     public let stop_grace_period: StopGracePeriod?
 
+    /// Signal sent before the shutdown timeout expires.
+    public let stop_signal: String?
+
     /// Healthcheck configuration
     public let healthcheck: Healthcheck?
 
@@ -134,7 +137,7 @@ public struct Service: Codable, Hashable {
 
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
-        case image, build, deploy, restart, stop_grace_period, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
+        case image, build, deploy, restart, stop_signal, stop_grace_period, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
              container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
              mem_limit, extra_hosts, profiles
     }
@@ -146,6 +149,7 @@ public struct Service: Codable, Hashable {
         deploy: Deploy? = nil,
         restart: String? = nil,
         stop_grace_period: StopGracePeriod? = nil,
+        stop_signal: String? = nil,
         healthcheck: Healthcheck? = nil,
         volumes: [String]? = nil,
         environment: [String: String]? = nil,
@@ -179,6 +183,7 @@ public struct Service: Codable, Hashable {
         self.deploy = deploy
         self.restart = restart
         self.stop_grace_period = stop_grace_period
+        self.stop_signal = stop_signal
         self.healthcheck = healthcheck
         self.volumes = volumes
         self.environment = environment
@@ -221,6 +226,11 @@ public struct Service: Codable, Hashable {
         }
 
         restart = try container.decodeIfPresent(String.self, forKey: .restart)
+        stop_signal = try container.decodeIfPresent(String.self, forKey: .stop_signal)
+        if let stop_signal {
+            do { _ = try ComposeStopOptions.validateSignal(stop_signal) }
+            catch { throw DecodingError.dataCorruptedError(forKey: .stop_signal, in: container, debugDescription: "Invalid stop_signal: \(stop_signal)") }
+        }
         stop_grace_period = try container.decodeIfPresent(StopGracePeriod.self, forKey: .stop_grace_period)
         healthcheck = try container.decodeIfPresent(Healthcheck.self, forKey: .healthcheck)
         volumes = try container.decodeIfPresent([String].self, forKey: .volumes)
