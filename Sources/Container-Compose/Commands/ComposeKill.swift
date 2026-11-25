@@ -18,8 +18,7 @@
 //  ComposeKill.swift
 //  Container-Compose
 //
-//  Implements `kill [SERVICE...]`: force-stop service containers by sending
-//  a signal, SIGKILL by default.
+//  `kill [SERVICE...]`: sends a signal to containers, SIGKILL by default.
 //
 
 import ArgumentParser
@@ -45,11 +44,9 @@ public struct ComposeKill: AsyncParsableCommand {
     @OptionGroup
     var project: ComposeProjectOptions
 
-    /// Maps a signal name (with or without the `SIG` prefix) or a numeric
-    /// string to its signal number.
+    /// Maps a signal name (`TERM` or `SIGTERM`) or number to its signal number.
     ///
-    /// - Returns: The signal number; unrecognized names fall back to
-    ///   SIGKILL (9), `kill`'s default behavior.
+    /// - Returns: The signal number, or SIGKILL (9) for unrecognized names.
     static func signalNumber(for raw: String) -> Int32 {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
 
@@ -79,8 +76,7 @@ public struct ComposeKill: AsyncParsableCommand {
         }
         try Service.validateRequestedServices(services, against: defined)
 
-        // Explicit requests kill only the named services, matching
-        // `docker compose kill <svc>`.
+        // Kill only named services; the shared selection adds dependencies.
         let selected = services.isEmpty
             ? resolved.services
             : resolved.services.filter { services.contains($0.serviceName) }
@@ -89,10 +85,7 @@ public struct ComposeKill: AsyncParsableCommand {
         let snapshots = (try? await client.list()) ?? []
         let signalNumber = Self.signalNumber(for: signal)
 
-        // Kill in reverse dependency order so dependents go down before the
-        // services they depend on. Containers are found via the shared
-        // matching rule: labels are authoritative, candidate names identify
-        // only unlabeled pre-label containers.
+        // Reverse order: dependents stop before their dependencies.
         for target in selected.reversed() {
             let container = snapshots.first { snapshot in
                 target.matches(containerID: snapshot.id, labels: snapshot.configuration.labels, projectName: resolved.projectName)
