@@ -27,7 +27,7 @@ Command support includes both available behavior and known gaps. A command being
 | Command | Support | What works | What is missing or limited |
 | --- | --- | --- | --- |
 | `up` | Partial | Starts enabled or explicitly named services and their dependencies in dependency order. Attempts to stop and remove existing selected containers before starting replacements. Supports detached operation, foreground output, rebuilding with `-b`/`--build`, and `--no-cache`. | Foreground signal handling is installed only after service startup, leaving startup and health-check waits uncovered. Use `down` to stop them. Independent services start sequentially. `--no-cache` only affects a build that runs; use `--build` to rebuild an existing local image. Cleanup errors are printed and startup continues. Other YAML limits are listed below. |
-| `down` | Partial | Attempts to stop selected project containers using `stop_grace_period`. | Does not remove containers, networks or named volumes. Uses the shared profile and dependency selection: inactive-profile services are included when explicitly named or required by a selected service, but otherwise skipped. Container lookup uses candidate names rather than checking project labels. Stop errors are printed and do not fail the command; YAML `stop_signal` is not applied. |
+| `down` | Partial | Attempts to stop selected project containers using `stop_grace_period`. | Does not remove containers, networks or named volumes. Uses the shared profile and dependency selection: inactive-profile services are included when explicitly named or required by a selected service, but otherwise skipped. Stop errors are printed and do not fail the command; YAML `stop_signal` is not applied. |
 | `build` | Partial | Build from a context path or a mapping with `context`, `dockerfile`, dictionary `args` and `target`. The context defaults to `.`. Both `build` and `up` can select a Dockerfile stage with `target`. | List-form arguments are unsupported. |
 | `pull` | Partial | By default, pulls images for enabled services and their dependencies. With explicit service names, pulls only those services unless `--include-deps` is set. Honors an explicit service `platform` and skips build-only services. | No pull-policy selection or option to continue after a pull failure. |
 | `ps` | Partial | Lists running project containers with name, image, status and published ports. `-a`/`--all` includes stopped containers. Uses project/service labels, falling back to names for containers without project labels. | No JSON output, quiet mode or status-filter option. Service selection uses the shared dependency resolver, so selecting a service also includes its dependencies. |
@@ -35,7 +35,9 @@ Command support includes both available behavior and known gaps. A command being
 | `version` | Supported | Prints the Container-Compose version. | - |
 | `run`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | - | These subcommands are not implemented. Use Apple Container directly where appropriate. |
 
-Compose files can be selected with `-f`/`--file` and the working directory with `--cwd`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
+Compose files can be selected with `-f`/`--file`, the working directory with `--cwd`, and the project name with `-p`/`--project-name`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
+
+`up` and `down` leave containers labeled as belonging to another project alone. Unlabeled containers are matched by name.
 
 Unsupported commands are not aliases for Apple Container commands. For example, use the Apple Container CLI directly to inspect logs or execute a process in an existing container.
 
@@ -45,7 +47,7 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 
 | Feature | Support | What works | What is missing or limited |
 | --- | --- | --- | --- |
-| Project name and profiles | Partial | Uses top-level `name` or the directory name. Supports profiles and explicit service selection. | Resource isolation is incomplete. |
+| Project name and profiles | Partial | Uses `--project-name`, `COMPOSE_PROJECT_NAME`, top-level `name`, then the Compose file’s directory name, in that order. Supports profiles and explicit service selection. | Resource isolation is incomplete. |
 | Multiple files, `include`, `extends` | Unsupported | - | No file merging, includes or service inheritance. |
 | `image` and `platform` | Partial | Run services from an image and select their OS and architecture with `platform`. Missing images are pulled automatically. | Local-image matching does not check platform. Pull policies are unsupported. |
 | `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, dictionary `args`, and `target`. Omitted or null context defaults to `.`. Build arguments receive variable substitution. Both `build` and `up` honor `target`. | List-form arguments are unsupported. |
@@ -55,8 +57,8 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Privileges | Partial | Applies `privileged` and `read_only`. | Other security options are not generally implemented. |
 | Labels | Partial | Add container labels using a mapping or a list of `key=value` entries. | Reserved Compose project and service labels are overwritten rather than rejected. |
 | Environment precedence | Supported | Values in `environment` override `env_file` values, even when empty. Later `env_file` files override earlier ones. `.env` supplies values for `${VARIABLE}` expressions without adding them to the container. | - |
-| Environment syntax and loading | Partial | Loads `env_file` and mapping or list `environment` values. | Missing files are ignored. Quoting, null inheritance and interpolation support remain incomplete. |
-| Variable interpolation | Supported | Use `$VARIABLE` or `${VARIABLE}` in Compose YAML values, with defaults, required values and nested expressions. Use `$$` for a literal dollar sign. | - |
+| Environment syntax and loading | Partial | Loads `env_file` and mapping or list `environment` values. | Missing files are ignored. Env-file quoting and interpolation, and null environment inheritance, remain incomplete. |
+| Variable interpolation | Partial | Use `$VARIABLE` or `${VARIABLE}` in Compose YAML values, with defaults, required values and nested expressions. Use `$$` for a literal dollar sign. | Top-level `name` is expanded twice, which can expand escaped or substituted variable references again. |
 | `depends_on` | Partial | Handles started, healthy and successful-completion conditions. | `required: false` and `restart: true` are decoded but ignored; unavailable optional dependencies can still block startup. Independent services launch sequentially. |
 | `healthcheck` | Partial | Runs startup probes with retries, interval and an initial `start_period` delay. Supports `disable: true` and `test: [NONE]`. | Missing or empty tests can count as healthy without probing. No image-inherited probes, probe timeouts or continuous monitoring. |
 | Ports | Partial | Passes short-form mappings to the runtime. | A bare container port publishes the same host port on `0.0.0.0`, rather than requesting an ephemeral host port. Long-form mappings are unsupported. |
@@ -69,9 +71,6 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | External resource declarations | Partial | Accepts boolean `external` values and legacy `{name: shared}` on volumes, networks, configs and secrets. Malformed declarations fail decoding instead of silently falling back to local resources. | Config and secret attachments remain unimplemented. |
 | Configs and secrets | Unsupported | - | Definitions and attachments decode, and service attachments are logged, but resources are not created or attached. |
 | Restart and deployment policies | Unsupported | - | No restart policies, replica management, rolling updates or placement scheduling. Each selected service runs as one container. |
-
-> [!Note]
-> Custom networks and container-to-container networking require macOS 26.0 or later.
 
 See the [Compose specification](https://compose-spec.github.io/compose-spec/spec.html) for YAML syntax and behavior, and Apple's [command reference](https://github.com/apple/container/blob/main/docs/command-reference.md) and [macOS 15 limitations](https://github.com/apple/container/blob/main/docs/technical-overview.md#macos-15-limitations) for upstream capabilities. Features available in Apple Container still need support here.
 
