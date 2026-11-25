@@ -33,7 +33,7 @@ Command support includes both available behavior and known gaps. A command being
 | --- | --- | --- | --- |
 | `up` | Partial | Starts enabled or explicitly named services and their dependencies in dependency order. Attempts to stop and remove existing selected containers before starting replacements. Supports detached operation, foreground output, rebuilding with `-b`/`--build`, and `--no-cache`. | Foreground signal handling is installed only after service startup, leaving startup and health-check waits uncovered. Use `down` to stop them. Independent services start sequentially. `--no-cache` only affects a build that runs; use `--build` to rebuild an existing local image. Cleanup errors are printed and startup continues. Other YAML limits are listed below. |
 | `down` | Partial | Attempts to stop selected project containers using `stop_grace_period`. | Does not remove containers, networks or named volumes. Uses the shared profile and dependency selection: inactive-profile services are included when explicitly named or required by a selected service, but otherwise skipped. Stop errors are printed and do not fail the command; YAML `stop_signal` is not applied. |
-| `build` | Partial | Build from a context path or a mapping with `context`, `dockerfile`, dictionary `args` and `target`. The context defaults to `.`. Both `build` and `up` can select a Dockerfile stage with `target`. | List-form arguments are unsupported. |
+| `build` | Supported | Builds service images with a chosen context, Dockerfile and target stage. Repeat `--build-arg KEY=value` to override build arguments. | - |
 | `pull` | Partial | By default, pulls images for enabled services and their dependencies. With explicit service names, pulls only those services unless `--include-deps` is set. Honors an explicit service `platform` and skips build-only services. | No pull-policy selection or option to continue after a pull failure. |
 | `ps` | Partial | Lists running project containers with name, image, status and published ports. `-a`/`--all` includes stopped containers. Uses project/service labels, falling back to names for containers without project labels. | No JSON output, quiet mode or status-filter option. Service selection uses the shared dependency resolver, so selecting a service also includes its dependencies. |
 | `images` | Partial | Lists service, repository, tag, image ID and size. Uses `<service>:latest` for builds without an explicit image name. Looks up ID and size from local images. | Lists configured service images rather than inspecting the images attached to existing containers. Unavailable local details stay blank. Local matching does not check platform and can match another registry by a short image name. Digest references are split as repository/tag. No JSON or quiet output. Service selection also includes dependencies. |
@@ -55,7 +55,7 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Project name and profiles | Partial | Uses `--project-name`, `COMPOSE_PROJECT_NAME`, top-level `name`, then the Compose file’s directory name, in that order. Supports profiles and explicit service selection. | Resource isolation is incomplete. |
 | Multiple files, `include`, `extends` | Unsupported | - | No file merging, includes or service inheritance. |
 | `image` and `platform` | Partial | Run services from an image and select their OS and architecture with `platform`. Missing images are pulled automatically. | Local-image matching does not check platform. Pull policies are unsupported. |
-| `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, dictionary `args`, and `target`. Omitted or null context defaults to `.`. Build arguments receive variable substitution. Both `build` and `up` honor `target`. | List-form arguments are unsupported. |
+| `build` | Partial | Accepts a context path or a mapping with `context`, `dockerfile`, map or list `args`, and `target`. The context defaults to `.`. Bare or null arguments inherit host values; missing values preserve Dockerfile defaults. | Other Compose build fields are not applied. |
 | Build paths | Partial | Build contexts are relative to the Compose file. Dockerfile paths are relative to the context and default to `Dockerfile`. | Paths beginning with `~` are not expanded. |
 | `command` and `entrypoint` | Partial | Accepts strings or arrays; arrays separate the executable and arguments. | String form is passed as one argument. Empty entrypoint arrays emit no override, so they do not clear the image entrypoint. Empty command arrays emit no arguments and have no distinct clearing behavior. |
 | Process identity and paths | Supported | Set the container user, working directory and name with `user`, `working_dir` and `container_name`. | - |
@@ -148,8 +148,3 @@ If you encounter issues or have questions, please open an [Issue](https://github
 ---
 
 Happy Coding! 🚀
-
-Build arguments accept map or list syntax. Null map values and bare list entries
-inherit from the host environment; missing values preserve Dockerfile defaults.
-`container-compose build --build-arg KEY=value` overrides the compose value and
-can be repeated. Use `KEY=` to explicitly pass an empty value.
