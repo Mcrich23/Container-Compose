@@ -331,3 +331,71 @@ extension Flags.Logging {
         return flags
     }
 }
+
+/// Runs a command, streaming stdout and stderr chunks as they arrive.
+///
+/// - Note: `ComposeUp.streamCommand` duplicates this; merge them once open
+///   PRs reworking `ComposeUp` land.
+/// - Parameters:
+///   - command: The name of the command to run (e.g., `"container"`).
+///   - args: Command-line arguments to pass to the command.
+///   - cwd: The working directory to launch the process in.
+///   - onStdout: Closure called with streamed stdout chunks.
+///   - onStderr: Closure called with streamed stderr chunks.
+/// - Returns: The process's exit code.
+/// - Throws: If the process fails to launch.
+@discardableResult
+public func streamSubprocess(
+    _ command: String,
+    args: [String] = [],
+    cwd: String,
+    onStdout: @escaping (@Sendable (String) -> Void),
+    onStderr: @escaping (@Sendable (String) -> Void)
+) async throws -> Int32 {
+    try await withCheckedThrowingContinuation { continuation in
+        let process = Process()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [command] + args
+        process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        ]) { _, new in new }
+
+        let stdoutHandle = stdoutPipe.fileHandleForReading
+        let stderrHandle = stderrPipe.fileHandleForReading
+
+        stdoutHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            if let string = String(data: data, encoding: .utf8) {
+                onStdout(string)
+            }
+        }
+
+        stderrHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            if let string = String(data: data, encoding: .utf8) {
+                onStderr(string)
+            }
+        }
+
+        process.terminationHandler = { proc in
+            stdoutHandle.readabilityHandler = nil
+            stderrHandle.readabilityHandler = nil
+            continuation.resume(returning: proc.terminationStatus)
+        }
+
+        do {
+            try process.run()
+        } catch {
+            continuation.resume(throwing: error)
+        }
+    }
+}
