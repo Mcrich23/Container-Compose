@@ -54,7 +54,8 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | --- | --- | --- | --- |
 | Project name and profiles | Partial | Uses `--project-name`, `COMPOSE_PROJECT_NAME`, top-level `name`, then the Compose file’s directory name, in that order. Supports profiles and explicit service selection. | Resource isolation is incomplete. |
 | Multiple files, `include`, `extends` | Unsupported | - | No file merging, includes or service inheritance. |
-| `image` and `platform` | Partial | Run services from an image and select their OS and architecture with `platform`. Missing images are pulled automatically. | Local-image matching does not check platform. Pull policies are unsupported. |
+| `image` and `platform` | Partial | Run services from an image and select their OS and architecture with `platform`. Image fetching follows `pull_policy`. | Local-image matching does not check platform. |
+| `pull_policy` | Partial | Supports `always`, `never`, `missing` (`if_not_present`) and `build`. Under `missing`, images tagged `latest` are always pulled. | Time-based policies are unsupported. |
 | `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, dictionary `args`, and `target`. Omitted or null context defaults to `.`. Build arguments receive variable substitution. Both `build` and `up` honor `target`. | List-form arguments are unsupported. |
 | Build paths | Partial | Build contexts are relative to the Compose file. Dockerfile paths are relative to the context and default to `Dockerfile`. | Paths beginning with `~` are not expanded. |
 | `command` and `entrypoint` | Partial | Accepts strings or arrays; arrays separate the executable and arguments. | String form is passed as one argument. Empty entrypoint arrays emit no override, so they do not clear the image entrypoint. Empty command arrays emit no arguments and have no distinct clearing behavior. |
@@ -148,5 +149,3 @@ If you encounter issues or have questions, please open an [Issue](https://github
 ---
 
 Happy Coding! 🚀
-
-Service `pull_policy` supports `always`, `never`, `missing` (`if_not_present`), and `build`. Missing images are pulled by default; `latest` tags are refreshed. Time-based policies are rejected because pull timestamps are not tracked.
