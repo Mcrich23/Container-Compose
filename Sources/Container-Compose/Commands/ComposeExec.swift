@@ -18,8 +18,7 @@
 //  ComposeExec.swift
 //  Container-Compose
 //
-//  Implements `exec SERVICE COMMAND [ARG...]`, mirroring `docker compose exec`:
-//  resolve a single service to its container name and run a command inside it.
+//  `exec SERVICE COMMAND [ARG...]`, like `docker compose exec`.
 //
 
 import ArgumentParser
@@ -51,8 +50,7 @@ public struct ComposeExec: AsyncParsableCommand {
     @OptionGroup
     var logging: Flags.Logging
 
-    /// Accepted for `docker compose exec` parity. Replicas aren't supported, so
-    /// there is only ever one container per service; this value is ignored.
+    /// Ignored; accepted for `docker compose exec` parity. Replicas are unsupported.
     @Option(name: .long, help: "Index of the container if service has multiple replicas (no-op; unsupported)")
     var index: Int = 1
 
@@ -70,8 +68,6 @@ public struct ComposeExec: AsyncParsableCommand {
             throw ValidationError("No command was provided to exec.")
         }
 
-        // Resolve the single requested service, failing fast on an unknown
-        // name with the noSuchService contract #139 established for `up`.
         let resolved = try project.resolve(filteringBy: [service])
         let defined: [(serviceName: String, service: Service)] = resolved.compose.services.compactMap { name, svc in
             svc.map { (name, $0) }
@@ -81,9 +77,6 @@ public struct ComposeExec: AsyncParsableCommand {
             throw ComposeError.noSuchService(service)
         }
 
-        // Find the service's container via the shared matching rule: labels
-        // are authoritative, candidate names identify only unlabeled
-        // pre-label containers.
         let client = ContainerClient()
         let snapshots = (try? await client.list()) ?? []
         let container = snapshots.first { snapshot in
@@ -97,8 +90,6 @@ public struct ComposeExec: AsyncParsableCommand {
         }
         let containerName = container.id
 
-        // Build the `container exec` argument list, mapping our compose-level
-        // process flags onto the flags `container exec` understands.
         var execArgs: [String] = ["exec"]
 
         if project.process.interactive {
@@ -124,20 +115,17 @@ public struct ComposeExec: AsyncParsableCommand {
         execArgs.append(containerName)
         execArgs.append(contentsOf: command)
 
-        // Shell out to the `container` CLI with the terminal's stdio inherited.
-        //
-        // We do NOT reuse ComposeUp's `streamCommand`, which captures stdout/stderr
-        // through pipes — that breaks interactive sessions (no TTY, no live stdin).
-        // Inheriting FileHandle.standardInput/Output/Error gives the child a real
-        // terminal, so `exec -it web sh` behaves like `docker compose exec`.
+        // Inherit the terminal's stdio rather than piping it like `streamCommand`;
+        // pipes leave interactive sessions without a TTY or live stdin.
         let exitCode = try runInheritingTerminal("container", args: execArgs)
         if exitCode != 0 {
             throw ExitCode(exitCode)
         }
     }
 
-    /// Runs a command with the parent process's stdin/stdout/stderr inherited and
-    /// blocks until it exits, returning its exit status.
+    /// Runs a command with inherited stdio and waits for it to exit.
+    ///
+    /// - Returns: The command's exit status.
     private func runInheritingTerminal(_ command: String, args: [String]) throws -> Int32 {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
