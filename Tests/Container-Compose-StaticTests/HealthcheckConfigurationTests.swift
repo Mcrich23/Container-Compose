@@ -133,6 +133,44 @@ struct HealthcheckConfigurationTests {
         #expect(healthcheck.test?.first == "CMD-SHELL")
     }
 
+    @Test("Compose preserves shell quotes in YAML healthchecks", arguments: [
+        #"['CMD-SHELL', 'test "$(cat /data/marker.txt)" = mounted']"#,
+        #"["CMD-SHELL", "test \"$(cat /data/marker.txt)\" = mounted"]"#,
+        #"'test "$(cat /data/marker.txt)" = mounted'"#,
+        #""test \"$(cat /data/marker.txt)\" = mounted""#,
+    ])
+    func quotedShellHealthcheck(test: String) throws {
+        let yaml = """
+        services:
+          marker:
+            image: alpine
+            healthcheck:
+              test: \(test)
+        """
+        let compose = try YAMLDecoder().decode(DockerCompose.self, from: yaml)
+        let healthcheck = try #require(compose.services["marker"]??.healthcheck)
+        let command = #"test "$(cat /data/marker.txt)" = mounted"#
+
+        #expect(healthcheck.test == ["CMD-SHELL", command])
+        #expect(healthcheck.execArguments == ["sh", "-c", command])
+    }
+
+    @Test("Compose rejects shell quotes consumed by Swift multiline escaping")
+    func malformedShellHealthcheck() {
+        // Swift consumes these backslashes, leaving unescaped quotes inside the YAML scalar.
+        let yaml = """
+        services:
+          marker:
+            image: alpine
+            healthcheck:
+              test: ["CMD-SHELL", "test \"$(cat /data/marker.txt)\" = mounted"]
+        """
+
+        #expect(throws: DecodingError.self) {
+            try YAMLDecoder().decode(DockerCompose.self, from: yaml)
+        }
+    }
+
     @Test("Healthcheck CMD translates to exec arguments")
     func healthcheckCmdExecArguments() throws {
         let healthcheck = Healthcheck(test: ["CMD", "curl", "-f", "http://localhost"])
