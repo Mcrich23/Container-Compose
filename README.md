@@ -40,7 +40,7 @@ Command support includes both available behavior and known gaps. A command being
 | `version` | Supported | Prints the Container-Compose version. | - |
 | `run`, `logs`, `exec`, `start`, `stop`, `restart`, `config`, `watch` | Unsupported | - | These subcommands are not implemented. Use Apple Container directly where appropriate. |
 
-Compose files can be selected with `-f`/`--file`, the working directory with `--cwd`, and the project name with `-p`/`--project-name`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
+Compose files can be selected with `-f`/`--file` (repeatable; see Multiple files below), the working directory with `--cwd`, and the project name with `-p`/`--project-name`. Automatic discovery recognizes `compose.yml`, `compose.yaml`, `docker-compose.yml`, and `docker-compose.yaml`.
 
 `up` and `down` leave containers labeled as belonging to another project alone. Unlabeled containers are matched by name.
 
@@ -53,7 +53,8 @@ Decoding a field does not guarantee it is applied at runtime. The table describe
 | Feature | Support | What works | What is missing or limited |
 | --- | --- | --- | --- |
 | Project name and profiles | Partial | Uses `--project-name`, `COMPOSE_PROJECT_NAME`, top-level `name`, then the Compose file’s directory name, in that order. Supports profiles and explicit service selection. | Resource isolation is incomplete. |
-| Multiple files, `include`, `extends` | Unsupported | - | No file merging, includes or service inheritance. |
+| Multiple files | Partial | Repeat `-f`/`--file` to merge files in order: mappings merge key by key and later files win; scalars and sequences are replaced. Relative paths resolve from the first file's directory. | No automatic `compose.override.yml` discovery. Sequences such as `ports` and `volumes` are replaced rather than merged by key. No `!reset`/`!override` tags. |
+| `include`, `extends` | Unsupported | - | No includes or service inheritance. |
 | `image` and `platform` | Partial | Run services from an image and select their OS and architecture with `platform`. Missing images are pulled automatically. | Local-image matching does not check platform. Pull policies are unsupported. |
 | `build` | Partial | Accepts a context string or a mapping with `context`, `dockerfile`, dictionary `args`, and `target`. Omitted or null context defaults to `.`. Build arguments receive variable substitution. Both `build` and `up` honor `target`. | List-form arguments are unsupported. |
 | Build paths | Partial | Build contexts are relative to the Compose file. Dockerfile paths are relative to the context and default to `Dockerfile`. | Paths beginning with `~` are not expanded. |
