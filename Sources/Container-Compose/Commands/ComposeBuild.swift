@@ -45,6 +45,9 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
     @Flag(name: .long, help: "Do not use cache when building")
     var noCache: Bool = false
 
+    @Option(name: .customLong("build-arg"), help: "Set a build argument; repeat for multiple values.")
+    var buildArgs: [String] = []
+
     @OptionGroup
     var logging: Flags.Logging
 
@@ -89,7 +92,7 @@ public struct ComposeBuild: AsyncParsableCommand, @unchecked Sendable {
         let contextURL = URL(fileURLWithPath: buildConfig.context, isDirectory: true, relativeTo: URL(fileURLWithPath: composeDirectory, isDirectory: true))
         var commands = [contextURL.path]
 
-        for (key, value) in buildConfig.args ?? [:] {
+        for (key, value) in try resolvedBuildArguments(buildConfig.args, cli: buildArgs, environment: ProcessInfo.processInfo.environment) {
             commands.append(contentsOf: ["--build-arg", "\(key)=\(value)"])
         }
 
