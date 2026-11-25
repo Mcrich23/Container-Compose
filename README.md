@@ -1,5 +1,7 @@
 # Container-Compose
 
+[![Apple Container version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FMcrich23%2FContainer-Compose%2Fmain%2FPackage.resolved&query=%24.pins%5B%3F%28%40.identity%3D%3D%27container%27%29%5D.state.version&label=Apple+Container&color=blue&logo=apple)](https://github.com/Mcrich23/Container-Compose/blob/main/Package.resolved)
+
 Container-Compose brings (limited) Docker Compose support to [Apple Container](https://github.com/apple/container), allowing you to define and orchestrate multi-container applications on Apple platforms using familiar Compose files. This project is not a Docker or Docker Compose wrapper but a tool to bridge Compose workflows with Apple's container management ecosystem.
 
 > [!Note]
