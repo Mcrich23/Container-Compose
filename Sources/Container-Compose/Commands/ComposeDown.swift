@@ -82,8 +82,7 @@ public struct ComposeDown: AsyncParsableCommand {
             for name in target.candidateContainerNames {
                 guard let container = try? await client.get(id: name) else { continue }
 
-                // A candidate name can collide with a container that belongs
-                // to a different project; its labels are authoritative.
+                // Never stop another project's container on a name collision.
                 guard ComposeProject.ownsContainer(labels: container.configuration.labels, projectName: project.projectName) else {
                     let owner = container.configuration.labels["com.docker.compose.project"] ?? "?"
                     print("Warning: not stopping container '\(name)' — its labels identify it as project '\(owner)'.")

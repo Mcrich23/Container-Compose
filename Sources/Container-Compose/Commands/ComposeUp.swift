@@ -676,11 +676,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             for name in target.candidateContainerNames {
                 guard let container = try? await client.get(id: name) else { continue }
 
-                // A candidate name can collide with a container that belongs to a
-                // different project; its labels are authoritative. Leave it alone —
-                // if this run then needs the same name, creation fails with a name
-                // conflict instead of us silently deleting another project's
-                // container.
+                // Never delete another project's container on a name collision;
+                // reusing the name then fails at creation with a conflict.
                 guard ComposeProject.ownsContainer(labels: container.configuration.labels, projectName: projectName) else {
                     let owner = container.configuration.labels["com.docker.compose.project"] ?? "?"
                     print("Warning: not touching container '\(name)' — its labels identify it as project '\(owner)'.")
