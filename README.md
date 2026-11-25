@@ -1,6 +1,9 @@
 # Container-Compose
 
 [![Apple Container version](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2FMcrich23%2FContainer-Compose%2Fmain%2FPackage.resolved&search=%22identity%22%5Cs%2A%3A%5Cs%2A%22container%22%5B%5E%7D%5D%2A%22version%22%5Cs%2A%3A%5Cs%2A%22%28%5B%5E%22%5D%2B%29%22&replace=%241&label=Apple+Container&color=blue&logo=apple)](https://github.com/Mcrich23/Container-Compose/blob/main/Package.resolved)
+[![Latest release](https://img.shields.io/github/v/release/Mcrich23/Container-Compose?label=release)](https://github.com/Mcrich23/Container-Compose/releases/latest)
+[![Static tests](https://img.shields.io/github/actions/workflow/status/Mcrich23/Container-Compose/tests.yml?branch=main&label=static%20tests)](https://github.com/Mcrich23/Container-Compose/actions/workflows/tests.yml)
+[![Apache 2.0 license](https://img.shields.io/github/license/Mcrich23/Container-Compose)](https://github.com/Mcrich23/Container-Compose/blob/main/LICENSE)
 
 Container-Compose brings (limited) Docker Compose support to [Apple Container](https://github.com/apple/container), allowing you to define and orchestrate multi-container applications on Apple platforms using familiar Compose files. This project is not a Docker or Docker Compose wrapper but a tool to bridge Compose workflows with Apple's container management ecosystem.
 
