@@ -34,6 +34,7 @@ public struct Main: AsyncParsableCommand {
             ComposePull.self,
             ComposePs.self,
             ComposeImages.self,
+            ComposeDoctor.self,
             Version.self
         ])
     
