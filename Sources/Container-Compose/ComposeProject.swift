@@ -60,26 +60,28 @@ public struct ComposeProjectOptions: ParsableArguments {
 
     var cwdURL: URL { URL(fileURLWithPath: cwd) }
 
-    /// Absolute path to the compose file: the explicit `--file` if given,
-    /// otherwise the first supported filename found in `cwd`, otherwise the
-    /// default name (so callers produce a consistent "not found" error).
-    public var composePath: String {
-        if let composeFilename = composeFileOptions.composeFilename {
-            return resolvedPath(for: composeFilename, relativeTo: cwdURL)
+    /// Absolute paths of the `-f` files, or the discovered default file.
+    /// Falls back to the default name so a missing file reports a consistent error.
+    public var composePaths: [String] {
+        if !composeFileOptions.composeFilenames.isEmpty {
+            return composeFileOptions.composeFilenames.map { resolvedPath(for: $0, relativeTo: cwdURL) }
         }
 
         for filename in Self.supportedComposeFilenames {
             let candidate = cwdURL.appending(path: filename).path
             if fileManager.fileExists(atPath: candidate) {
-                return candidate
+                return [candidate]
             }
         }
 
-        return cwdURL.appending(path: Self.supportedComposeFilenames[0]).path
+        return [cwdURL.appending(path: Self.supportedComposeFilenames[0]).path]
     }
 
-    /// Directory containing the compose file (the base for relative `context`,
-    /// `env_file`, etc.).
+    /// The first of `composePaths`.
+    public var composePath: String { composePaths[0] }
+
+    /// Directory of the first compose file; relative paths resolve from here,
+    /// even when merging.
     public var composeDirectory: String {
         URL(fileURLWithPath: composePath).deletingLastPathComponent().path
     }
@@ -91,21 +93,44 @@ public struct ComposeProjectOptions: ParsableArguments {
         return resolvedPath(for: envFile, relativeTo: cwdURL)
     }
 
-    /// Reads the compose file and expands YAML values before decoding.
+    /// Reads the compose file(s), deep-merges them in order (later files win;
+    /// see `mergeYAML`), and expands YAML values before decoding.
     /// Commands receive resolved values and must not interpolate them again.
-    /// - Throws: `YamlError.composeFileNotFound` if the file is missing.
+    /// - Throws: `YamlError.composeFileNotFound` if any file is missing.
     public func loadCompose() throws -> DockerCompose {
-        guard let yamlData = fileManager.contents(atPath: composePath) else {
-            let path = URL(fileURLWithPath: composePath).deletingLastPathComponent().path
-            throw YamlError.composeFileNotFound(path)
+        var merged: Node?
+        for path in composePaths {
+            guard let data = fileManager.contents(atPath: path),
+                  let yaml = String(data: data, encoding: .utf8)
+            else {
+                throw YamlError.composeFileNotFound(URL(fileURLWithPath: path).deletingLastPathComponent().path)
+            }
+            guard let node = try Yams.compose(yaml: yaml) else { continue }
+            merged = merged.map { Self.mergeYAML($0, node) } ?? node
         }
-        let dockerComposeString = String(data: yamlData, encoding: .utf8)!
-        guard let node = try Yams.compose(yaml: dockerComposeString) else {
-            return try YAMLDecoder().decode(DockerCompose.self, from: dockerComposeString)
+        guard let merged else {
+            throw YamlError.composeFileNotFound(composeDirectory)
         }
         let environment = loadEnvFile(path: envFilePath).merging(ProcessInfo.processInfo.environment) { _, process in process }
-        let expanded = try ComposeInterpolation(environment: environment).expandValues(in: node)
+        let expanded = try ComposeInterpolation(environment: environment).expandValues(in: merged)
         return try YAMLDecoder().decode(DockerCompose.self, from: expanded)
+    }
+
+    /// Deep-merges two compose documents: mappings merge key by key; scalars
+    /// and sequences are replaced by `override`.
+    static func mergeYAML(_ base: Node, _ override: Node) -> Node {
+        guard case .mapping(let baseMap) = base, case .mapping(let overrideMap) = override else {
+            return override
+        }
+        var result = baseMap
+        for (key, overrideValue) in overrideMap {
+            if let baseValue = result[key] {
+                result[key] = mergeYAML(baseValue, overrideValue)
+            } else {
+                result[key] = overrideValue
+            }
+        }
+        return .mapping(result)
     }
 
     /// Project name used to namespace containers, resolved with the same

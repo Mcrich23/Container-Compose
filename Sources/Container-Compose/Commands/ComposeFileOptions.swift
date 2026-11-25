@@ -20,8 +20,12 @@ import Foundation
 public struct ComposeFileOptions: ParsableArguments, Sendable {
     public init() {}
 
-    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file")
-    public var composeFilename: String?
+    /// Compose files in merge order; later files win.
+    @Option(name: [.customShort("f"), .customLong("file")], help: "The path to your Docker Compose file (repeat to merge overrides)")
+    public var composeFilenames: [String] = []
+
+    /// The first `-f` file, or `nil` when none was given.
+    public var composeFilename: String? { composeFilenames.first }
 
     @Option(
         name: .long,
