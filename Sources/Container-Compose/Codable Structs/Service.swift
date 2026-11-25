@@ -100,6 +100,7 @@ public struct Service: Codable, Hashable {
 
     /// Platform architecture for the service
     public let platform: String?
+    public var pull_policy: PullPolicy? = nil
 
     /// Service-specific config usage (primarily for Swarm)
     public let configs: [ServiceConfig]?
@@ -135,7 +136,7 @@ public struct Service: Codable, Hashable {
     // Defines custom coding keys to map YAML keys to Swift properties
     enum CodingKeys: String, CodingKey {
         case image, build, deploy, restart, stop_grace_period, healthcheck, volumes, environment, env_file, ports, command, depends_on, user,
-             container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform,
+             container_name, labels, networks, hostname, entrypoint, privileged, read_only, working_dir, configs, secrets, stdin_open, tty, platform, pull_policy,
              mem_limit, extra_hosts, profiles
     }
     
@@ -337,6 +338,7 @@ public struct Service: Codable, Hashable {
         stdin_open = try container.decodeIfPresent(Bool.self, forKey: .stdin_open)
         tty = try container.decodeIfPresent(Bool.self, forKey: .tty)
         platform = try container.decodeIfPresent(String.self, forKey: .platform)
+        pull_policy = try container.decodeIfPresent(PullPolicy.self, forKey: .pull_policy)
         if let s = try? container.decodeIfPresent(String.self, forKey: .mem_limit) {
             mem_limit = s
         } else if let i = try? container.decodeIfPresent(Int.self, forKey: .mem_limit) {

@@ -831,7 +831,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
                 return
             }
             let commands = [actualNetworkName]
-            
+
             let networkCreate = try Application.NetworkCreate.parse(commands + logging.passThroughCommands())
 
             try await networkCreate.run()
@@ -839,27 +839,56 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         }
     }
 
+    /// Prepares the image, forcing a build after a failed missing-policy pull.
+    static func prepareServiceImage(
+        _ service: Service, serviceName: String, rebuild: Bool,
+        isLocal: () async throws -> Bool,
+        pull: () async throws -> Void,
+        build: (Bool) async throws -> String
+    ) async throws -> String {
+        var result: String
+        let policy = service.pull_policy ?? .missing
+        if policy == .build, service.build == nil {
+            throw ValidationError("Service '\(serviceName)' uses pull_policy: build without build configuration")
+        }
+        if service.build != nil, policy == .build || rebuild || service.image == nil {
+            result = try await build(false)
+        } else if let image = service.image {
+            let local = try await isLocal()
+            if policy == .never && !local {
+                throw ValidationError("Image '\(image)' is unavailable locally for the requested platform (pull_policy: never)")
+            }
+            result = image
+            if policy.shouldPull(image: image, local: local) {
+                do { try await pull() }
+                catch {
+                    guard policy == .missing || policy == .ifNotPresent, service.build != nil else { throw error }
+                    result = try await build(true)
+                }
+            }
+        } else {
+            throw ComposeError.imageNotFound(serviceName)
+        }
+
+        return result
+    }
+
     // MARK: Compose Service Level Functions
     private mutating func configService(_ service: Service, serviceName: String, from dockerCompose: DockerCompose) async throws {
         try waitForDependencyConditions(serviceName: serviceName, service: service)
 
         var imageToRun: String
-        
+
         var runCommandArgs: [String] = []
 
-        // Handle 'build' configuration
-        if let buildConfig = service.build {
-            imageToRun = try await buildService(buildConfig, for: service, serviceName: serviceName)
-        } else if let img = service.image {
-            // Use specified image if no build config
-            // Pull image if necessary
-            try await pullImage(img, platform: service.effectivePullPlatform())
-            imageToRun = img
-        } else {
-            // Should not happen due to Service init validation, but as a fallback
-            throw ComposeError.imageNotFound(serviceName)
-        }
-        
+        imageToRun = try await Self.prepareServiceImage(
+            service, serviceName: serviceName, rebuild: rebuild,
+            isLocal: { try await PullPolicy.isLocal(service.image!, platform: service.effectivePullPlatform()) },
+            pull: { try await pullImage(service.image!, platform: service.effectivePullPlatform()) },
+            build: { force in
+                try await buildService(service.build!, for: service, serviceName: serviceName, forceBuild: force)
+            })
+
         // Set Run Platform
         if let platform = service.platform {
             runCommandArgs.append(contentsOf: ["--platform", "\(platform)"])
@@ -1288,29 +1317,12 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     }
 
     private func pullImage(_ imageName: String, platform: String?) async throws {
-        let imageList = try await ClientImage.list()
-        // An image is considered already-local if any of:
-        //   - the stored reference matches `imageName` exactly (multi-path local builds, e.g. `myorg/foo:local`)
-        //   - the stored reference is `imageName` with a registry prefix (`docker.io/library/nginx:latest`
-        //     when the user wrote `nginx:latest` or `library/nginx:latest`)
-        //   - the last `/`-separated component of the stored reference matches `imageName`
-        //     (legacy fallback for short references like `alpine:latest`)
-        let exists = imageList.contains { ref in
-            let stored = ref.description.reference
-            return stored == imageName
-                || stored.hasSuffix("/\(imageName)")
-                || stored.components(separatedBy: "/").last == imageName
-        }
-        guard !exists else {
-            return
-        }
-
         print("Pulling Image \(imageName)...")
-        
+
         var commands = [
             imageName
         ]
-        
+
         if let platform {
             commands.append(contentsOf: ["--platform", platform])
         }
@@ -1327,11 +1339,11 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///   - serviceName: The fallback name for the image
     ///
     /// - Returns: Image Name (`String`)
-    private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
+    private func buildService(_ buildConfig: Build, for service: Service, serviceName: String, forceBuild: Bool = false) async throws -> String {
         // Determine image tag for built image
         let imageToRun = service.image ?? "\(serviceName):latest"
-        let imageList = try await ClientImage.list()
-        if !rebuild, imageList.contains(where: { $0.description.reference.components(separatedBy: "/").last == imageToRun }) {
+        if !forceBuild, !rebuild, service.pull_policy != .build,
+           try await PullPolicy.isLocal(imageToRun, platform: service.effectivePullPlatform()) {
             return imageToRun
         }
 
@@ -1347,7 +1359,7 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
 
         // Add Dockerfile path
         commands.append(contentsOf: ["--file", URL(fileURLWithPath: buildConfig.dockerfile ?? "Dockerfile", relativeTo: contextURL).path])
-        
+
         if let target = buildConfig.target, !target.isEmpty {
             commands.append(contentsOf: ["--target", target])
         }
@@ -1356,13 +1368,13 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
         if noCache {
             commands.append("--no-cache")
         }
-        
+
         // Add OS/Arch
         commands.append(contentsOf: ["--platform", service.platform ?? "linux/arm64"])
-        
+
         // Add image name
         commands.append(contentsOf: ["--tag", imageToRun])
-        
+
         // Add CPU & Memory
         let cpuCount = Int64(service.deploy?.resources?.limits?.cpus ?? "2") ?? 2
         let memoryLimit = service.deploy?.resources?.limits?.memory ?? "2048MB"
