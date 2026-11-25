@@ -862,8 +862,8 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
             if policy.shouldPull(image: image, local: local) {
                 do { try await pullImage(image, platform: service.effectivePullPlatform()) }
                 catch {
-                    guard service.pull_policy == nil, let build = service.build else { throw error }
-                    imageToRun = try await buildService(build, for: service, serviceName: serviceName)
+                    guard policy == .missing || policy == .ifNotPresent, let build = service.build else { throw error }
+                    imageToRun = try await buildService(build, for: service, serviceName: serviceName, forceBuild: true)
                 }
             }
         } else {
@@ -1320,10 +1320,10 @@ public struct ComposeUp: AsyncParsableCommand, @unchecked Sendable {
     ///   - serviceName: The fallback name for the image
     ///
     /// - Returns: Image Name (`String`)
-    private func buildService(_ buildConfig: Build, for service: Service, serviceName: String) async throws -> String {
+    private func buildService(_ buildConfig: Build, for service: Service, serviceName: String, forceBuild: Bool = false) async throws -> String {
         // Determine image tag for built image
         let imageToRun = service.image ?? "\(serviceName):latest"
-        if !rebuild, service.pull_policy != .build,
+        if !forceBuild, !rebuild, service.pull_policy != .build,
            try await PullPolicy.isLocal(imageToRun, platform: service.effectivePullPlatform()) {
             return imageToRun
         }
