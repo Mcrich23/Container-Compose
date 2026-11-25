@@ -1,0 +1,874 @@
+Building for debugging...
+[Computing dependencies]
+[Provisioning 2 / 184]
+[Using on-disk description]
+[10 / 352]
+[12 / 54] Container-Compose-StaticTests-product
+[34 / 56] Container-Compose-DynamicTests-product
+[35 / 78]
+[48 / 78] Container-Compose-DynamicTests-product
+[49 / 78] Container-Compose-StaticTests-product
+[52 / 78] Container-Compose-DynamicTests-product
+[58 / 78] Container-Compose-DynamicTests-product
+[61 / 78] Container-Compose-StaticTests-product
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-de61002f-19316fd859235936/Tests/Container-Compose-DynamicTests/ComposeUpEntrypointTests.swift:31:13: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+29 | 
+30 |     func stopInstance(location: URL) async throws {
+31 |         var composeDown = try ComposeDown.parse(["--cwd", location.path(percentEncoded: false)])
+   |             `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+32 |         try await composeDown.run()
+33 |     }
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-de61002f-19316fd859235936/Tests/Container-Compose-DynamicTests/ComposeUpDnsTests.swift:34:13: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+ 32 | 
+ 33 |     func stopInstance(location: URL) async throws {
+ 34 |         var composeDown = try ComposeDown.parse(["--cwd", location.path(percentEncoded: false)])
+    |             `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+ 35 |         try await composeDown.run()
+ 36 |     }
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+[62 / 78] Container-Compose-StaticTests-product
+[66 / 78] Container-Compose-StaticTests-product
+[66 / 78] Container-Compose-DynamicTests-product
+[66 / 78] Container-Compose-StaticTests-product
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-de61002f-19316fd859235936/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:28:13: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+ 26 |     
+ 27 |     func stopInstance(location: URL) async throws {
+ 28 |         var composeDown = try ComposeDown.parse(["--cwd", location.path(percentEncoded: false)])
+    |             `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+ 29 |         try await composeDown.run()
+ 30 |     }
+
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-de61002f-19316fd859235936/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:125:17: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+123 |             #expect(container.status == .running)
+124 | 
+125 |             var composeDown = try ComposeDown.parse(arguments)
+    |                 `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+126 |             try await composeDown.run()
+127 |         } catch {
+
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-de61002f-19316fd859235936/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:128:17: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+126 |             try await composeDown.run()
+127 |         } catch {
+128 |             var composeDown = try? ComposeDown.parse(arguments)
+    |                 `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+129 |             try? await composeDown?.run()
+130 |             try? FileManager.default.removeItem(at: projectRoot)
+
+/Users/mcrich/.t3/worktrees/Container-Compose/t3-de61002f-19316fd859235936/Tests/Container-Compose-DynamicTests/ComposeUpTests.swift:355:13: warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+353 |         #expect(webContainer.configuration.publishedPorts.map({ "\($0.hostAddress):\($0.hostPort):\($0.containerPort)" }) == ["127.0.0.1:18081:80"])
+354 |         
+355 |         var composeDown = try ComposeDown.parse(["--cwd", project.base.path(percentEncoded: false)])
+    |             `- warning: variable 'composeDown' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+356 |         try await composeDown.run()
+357 |         
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+[68 / 78] Container-Compose-DynamicTests-product
+[72 / 78] Container-Compose-DynamicTests-product
+[74 / 78] Container-Compose-StaticTests-product
+[76 / 78] Container-Compose-StaticTests-product
+Build complete! (5.53 sec)
+objc[58277]: Class _TtC12UniversalHID17FluidTouchGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1501c8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28a5a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID23FluidTouchGestureFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150268) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28a6a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID15RotationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1503e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28a860). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID20GameControllerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150488) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28aa40). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID18TranslationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150568) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28ab68). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID21HIDVirtualServicePool is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150608) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28af88). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtCC12UniversalHID21HIDVirtualServicePool14VirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1506d0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28b088). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID14PointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150830) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28b5d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID12ScaleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150998) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28b798). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID16DigitizerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150dc0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28bec8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID12ScrollFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150e88) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28c120). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID14KeyboardFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150f40) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28c230). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID27TouchSensitiveButtonGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28c3d0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID21GameControllerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1511b0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28c7b0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID17HIDVirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151258) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28c970). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHIDP33_77F0A1D2252CCF67CE1080DE620C755225HIDVirtualServiceDelegate is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28a360). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID22AbsolutePointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1513a0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28cc70). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID13PointerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151468) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28cd80). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID22NavigationSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151560) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28ce78). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID21GenericGestureGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151628) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28d3c0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID16DockSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1516e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28d480). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID19HIDReportDispatcher is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151788) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28d580). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID26TouchSensitiveButtonFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151848) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28d6f0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID15DigitizerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151900) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28d7b8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID13ScrollGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1519f8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28d938). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58277]: Class _TtC12UniversalHID17ZoomToggleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151ad8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10a28da28). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite "Project name precedence" started.
+􀟈  Suite "Build context defaults" started.
+􀟈  Suite "Service labels" started.
+􀟈  Suite "Compose Project Resolution Tests" started.
+􀟈  Suite ComposeInterpolationTests started.
+􀟈  Suite "Service Dependency Resolution Tests" started.
+􀟈  Suite "Environment Variable Resolution Tests" started.
+􀟈  Suite "Stop Grace Period Tests" started.
+􀟈  Suite "Compose command parsing" started.
+􀟈  Suite "Compose Build Parsing Tests" started.
+􀟈  Suite "Entrypoint + Command Translation" started.
+􀟈  Suite "Environment File Loading Tests" started.
+􀟈  Suite "Requested service validation" started.
+􀟈  Suite "Helper Functions Tests" started.
+􀟈  Suite "Compose images Tests" started.
+􀟈  Suite "Healthcheck Configuration Tests" started.
+􀟈  Suite "Compose Volume Tests" started.
+􀟈  Suite "Network Configuration Tests" started.
+􀟈  Suite "mem_limit and extra_hosts parsing" started.
+􀟈  Suite "Compose pull Tests" started.
+􀟈  Suite "Project Name Resolution Tests" started.
+􀟈  Suite "Service Environment List Form" started.
+􀟈  Suite "Shared container matching Tests" started.
+􀟈  Suite "Foreground wait CPU usage" started.
+􀟈  Suite ResourceExternalTests started.
+􀟈  Suite "Effective pull platform Tests" started.
+􀟈  Suite "DNS Domain Helpers" started.
+􀟈  Suite "ActivityClock" started.
+􀟈  Suite "Compose profiles support" started.
+􀟈  Suite "Build Configuration Tests" started.
+􀟈  Suite "Compose ps Tests" started.
+􀟈  Suite "env_file dict-form parsing" started.
+􀟈  Suite "DockerCompose YAML Parsing Tests" started.
+􀟈  Suite "Parallel Scheduler Levels" started.
+􀟈  Suite ServiceEnvironmentAssemblyTests started.
+􀟈  Test "compose name: is used when no --project-name is given" started.
+􀟈  Test preservesDockerfile() started.
+􀟈  Test "Default name derives from the compose file's directory, not the process cwd" started.
+􀟈  Test invalidLabels(value:) started.
+􀟈  Test omittedContext(_:) started.
+􀟈  Test "--project-name override wins over compose name:" started.
+􀟈  Test listLabels() started.
+􀟈  Test rejectsInvalidContext(_:) started.
+􀟈  Test mappingAndNull(value:) started.
+􀟈  Test "orderedServices filters to the requested service names" started.
+􀟈  Test "falls back to sanitized directory name with neither override nor compose name:" started.
+􀟈  Test "composePath discovers the first supported filename in cwd" started.
+􀟈  Test "orderedServices returns dependencies before dependents" started.
+􀟈  Test "Candidates cover both <project>-<service> and dotted <service>.<dnsDomain> (#97)" started.
+􀟈  Test "composePath discovers docker-compose.yml when higher-priority names are absent" started.
+􀟈  Test "Dotted candidate uses the DNS-sanitized project name" started.
+􀟈  Test "Candidates try explicit container_name first, then both naming conventions" started.
+􀟈  Test yamlValuesPreserveKeysAnchorsAndInsertedText() started.
+􀟈  Test invalidOrRequired(input:) started.
+􀟈  Test "loadCompose throws composeFileNotFound when no compose file exists" started.
+􀟈  Test "orderedServices gates default selection by active Compose profiles" started.
+􀟈  Test "composePath honors explicit --file over discovery" started.
+􀟈  Test "composePath returns default compose.yml path when none exist" started.
+􀟈  Test "Project name falls back to derived cwd name when name: absent" started.
+􀟈  Test typedValuesDecodeAfterExpansion() started.
+􀟈  Test missingVariablesWarnAndDoNotStopLaterExpansion() started.
+􀟈  Test "Project name uses compose name: when present" started.
+􀟈  Test "orderedServices pulls in transitive dependencies of requested services" started.
+􀟈  Test "orderedServices bypasses profile gating for explicitly requested services" started.
+􀟈  Test operators(input:expected:) started.
+􀟈  Test "No dependencies - services should maintain order" started.
+􀟈  Test "Complex dependency chain - web -> app -> db" started.
+􀟈  Test "Truncate subsecond stop grace periods for the runtime" started.
+􀟈  Test projectResolutionExpandsNamesAndRuntimeValuesOnce() started.
+􀟈  Test "Stopped service non-zero exit code fails startup" started.
+􀟈  Test "Single service with no dependencies" started.
+􀟈  Test "Diamond dependency - web and api both depend on db" started.
+􀟈  Test "Reject invalid stop grace periods" started.
+􀟈  Test "Accept a leading-decimal stop grace period" started.
+􀟈  Test "Simple dependency chain - web depends on db" started.
+􀟈  Test "Explicit container_name matching a convention is not duplicated" started.
+􀟈  Test "Cyclic dependency should throw error" started.
+􀟈  Test "Use Compose's ten-second default when omitted" started.
+􀟈  Test "Selecting service keeps transitive dependency closure" started.
+􀟈  Test "Parse a combined stop grace period" started.
+􀟈  Test "Main+ComposeUp command accepts -f flag for compose file from root" started.
+􀟈  Test "Resolve variable with default value when variable exists" started.
+􀟈  Test "Multiple dependencies - app depends on db and redis" started.
+􀟈  Test "Resolve complex string with mixed content" started.
+􀟈  Test "Build explicit stop options" started.
+􀟈  Test "Parse nanosecond stop grace periods" started.
+􀟈  Test "Service depends on non-existent service - should not crash" started.
+􀟈  Test "Resolve multiple variables in string" started.
+􀟈  Test "Variable names are case-sensitive" started.
+􀟈  Test "Resolve variables with underscores and numbers" started.
+􀟈  Test "Use an empty string when no variable or default is provided" started.
+􀟈  Test "Resolve simple variable" started.
+􀟈  Test "Resolve with empty default value" started.
+􀟈  Test "Process environment takes precedence over provided envVars" started.
+􀟈  Test "Build target is passed through from compose file" started.
+􀟈  Test "No variables to resolve returns original string" started.
+􀟈  Test "network aliases emit service name and Apple alias properties when supported" started.
+􀟈  Test "ComposeBuild command accepts -f flag for compose file" started.
+􀟈  Test "nil entrypoint and nil command → no flag, no positional args" started.
+􀟈  Test "Handle values with equals signs" started.
+􀟈  Test "Resolve variable that is part of larger text" started.
+􀟈  Test "Services with build config are selected for building" started.
+􀟈  Test "entrypoint AND command both set → combined (regression for issue #77)" started.
+􀟈  Test "issue #77: bash -c + multi-line heredoc command" started.
+􀟈  Test "ComposeBuild command parses --no-cache flag" started.
+􀟈  Test "ComposeBuild command accepts service name arguments" started.
+􀟈  Test "Explicit image field is used as the build tag" started.
+􀟈  Test "Handle values with spaces" started.
+􀟈  Test "Handle mixed content" started.
+􀟈  Test "network aliases warn when Apple alias properties are unsupported" started.
+􀟈  Test "Mixed compose file — only build services are selected" started.
+􀟈  Test "error message matches docker compose wording and names the service" started.
+􀟈  Test "empty entrypoint array → treated as nil" started.
+􀟈  Test "Load simple key-value pairs from .env file" started.
+􀟈  Test "passes when every requested service exists" started.
+􀟈  Test "Handle empty values" started.
+􀟈  Test "Image tag defaults to serviceName:latest when image field is absent" started.
+􀟈  Test "command only → no flag, command as positional" started.
+􀟈  Test "single-element entrypoint, no command → flag set, no positional" started.
+􀟈  Test "passes when no services are requested" started.
+􀟈  Test "Build without target leaves it nil, matching pre-target-support compose files" started.
+􀟈  Test "Build args are passed through from compose file" started.
+􀟈  Test "Compose port - explicit IP binding IPv6" started.
+􀟈  Test "network aliases do not duplicate explicit service name alias" started.
+􀟈  Test "no alias warning when only the implicit service-name alias is present" started.
+􀟈  Test "throws for an unknown requested service" started.
+􀟈  Test "Use default value when variable does not exist" started.
+􀟈  Test "Services without build config are excluded" started.
+􀟈  Test "Return empty dict for non-existent file" started.
+􀟈  Test "hostname does not emit unsupported container run flag" started.
+􀟈  Test "Ignore empty lines in .env file" started.
+􀟈  Test "Digest shortens to 12 hex chars without the algorithm prefix" started.
+􀟈  Test "reports the first unknown service when several are requested" started.
+􀟈  Test "Ignore comments in .env file" started.
+􀟈  Test "Reference without tag defaults to latest" started.
+􀟈  Test "Compose port - simple container port" started.
+􀟈  Test "Colon in a registry host:port is not treated as a tag separator" started.
+􀟈  Test "network aliases emit service name when no explicit aliases are configured" started.
+􀟈  Test "ComposeBuild command defaults no-cache to false" started.
+􀟈  Test "Sizes render with sensible units" started.
+􀟈  Test "multi-element entrypoint, no command → first goes to flag, rest positional" started.
+􀟈  Test "Named volume uses explicit top-level volume name" started.
+􀟈  Test "Resolve absolute and tilde paths without rebasing" started.
+􀟈  Test "Parse healthcheck with test command" started.
+􀟈  Test "Merged PATH preserves a custom user directory" started.
+􀟈  Test "empty command array → just empty positional" started.
+􀟈  Test "Merged PATH keeps user order and contains all fallback dirs without duplicates" started.
+􀟈  Test "Compose port - explicit IP with protocol" started.
+􀟈  Test "Compose port - host:container same port" started.
+􀟈  Test "Reference with tag splits on the last colon" started.
+􀟈  Test "Healthcheck CMD translates to exec arguments" started.
+􀟈  Test "Directory bind mount is forwarded" started.
+􀟈  Test "Missing host path is auto-created as a directory" started.
+􀟈  Test "Parse healthcheck with timeout" started.
+􀟈  Test "Disable controls the production health gate and exec arguments" started.
+􀟈  Test "Parse healthcheck with start_period" started.
+􀟈  Test "Compose port - explicit IP binding IPv4" started.
+􀟈  Test "Parse healthcheck with interval" started.
+􀟈  Test "Invalid volume format returns empty array" started.
+􀟈  Test "Compose port - with protocol tcp" started.
+􀟈  Test "Derive project name from current working directory - contains dot" started.
+􀟈  Test "Disable without a test skips the health gate" started.
+􀟈  Test "External named volume without explicit name keeps source name" started.
+􀟈  Test "Named volume preserves nested destination and mode" started.
+􀟈  Test "Parse complete healthcheck configuration" started.
+􀟈  Test "images accepts service arguments alongside the project option group" started.
+􀟈  Test "Merged PATH falls back to the standard dirs when PATH is empty or unset" started.
+􀟈  Test "Resolve explicit relative paths against base URL" started.
+􀟈  Test "Parse service with single network" started.
+􀟈  Test "parseMemoryToBytes returns nil for garbage" started.
+􀟈  Test "Relative parent-path bind mount resolves from the compose directory" started.
+􀟈  Test "Variable defaults apply when the variable is unset" started.
+􀟈  Test "Parse network with driver_opts" started.
+􀟈  Test "Healthcheck CMD-SHELL translates to shell exec arguments" started.
+􀟈  Test "Compose port - explicit IP already with 0.0.0.0" started.
+􀟈  Test "Disable healthcheck" started.
+􀟈  Test "pull accepts the shared -f/--cwd project options" started.
+􀟈  Test "parseMemoryToBytes handles byte/k/m/g units (binary)" started.
+􀟈  Test "parseMemoryToBytes is case-insensitive and tolerates whitespace" started.
+􀟈  Test "mem_limit string form parses" started.
+􀟈  Test "Service with healthcheck" started.
+􀟈  Test "clampMemoryLimit passes unparseable values through verbatim" started.
+􀟈  Test "clampMemoryLimit leaves >=200m values untouched" started.
+􀟈  Test "mem_limit absent when not set" started.
+􀟈  Test "mem_limit gigabyte value parses" started.
+􀟈  Test "Directory bind mount with :ro mode preserves mode" started.
+􀟈  Test "Parse healthcheck with retries" started.
+􀟈  Test "Process environment beats .env file for COMPOSE_PROJECT_NAME" started.
+􀟈  Test "Service without explicit networks uses default" started.
+􀟈  Test "NONE remains disabled with disable false" started.
+􀟈  Test "Single-file bind mount without mode is forwarded" started.
+􀟈  Test "Single-file bind mount with :ro mode is forwarded" started.
+􀟈  Test "Plain references pass through and build-only services resolve to nil" started.
+􀟈  Test "extra_hosts map form normalised to list" started.
+􀟈  Test "Interpolate variable in 'name' field from .env file" started.
+􀟈  Test "Parse network with labels" started.
+􀟈  Test "External named volume uses explicit external name" started.
+􀟈  Test "Map form decodes (regression — already-working path)" started.
+􀟈  Test "Helper: empty value after = decodes as empty string" started.
+􀟈  Test "Explicitly requested services do not pull their dependencies" started.
+􀟈  Test "Helper: only the first = splits, rest stays in value" started.
+􀟈  Test "Empty COMPOSE_PROJECT_NAME is ignored" started.
+􀟈  Test "Relative file bind mount resolves to an absolute path against the compose directory" started.
+􀟈  Test "Compose port - host:container different ports" started.
+􀟈  Test "extra_hosts list form parses" started.
+􀟈  Test "Named volume is forwarded using project-scoped native container volume syntax" started.
+􀟈  Test "No requested services pulls the whole selection" started.
+􀟈  Test "Named volume mounts at its declared single-segment destination" started.
+􀟈  Test "mem_limit integer bytes form parses to string" started.
+􀟈  Test "COMPOSE_PROJECT_NAME from .env file is used when no 'name' field" started.
+􀟈  Test "Parse network with driver" started.
+􀟈  Test "Literal 'name' field is used as-is" started.
+􀟈  Test "COMPOSE_PROJECT_NAME overrides 'name' field" started.
+􀟈  Test "Parse service network object form with aliases" started.
+􀟈  Test "Parse healthcheck with CMD-SHELL" started.
+􀟈  Test "resolveHostGatewayIP returns a non-empty string" started.
+􀟈  Test "Helper: bare key with no host env value decodes as empty string" started.
+􀟈  Test "extra_hosts multiple entries all parsed" started.
+􀟈  Test "Variables in image references resolve from the environment" started.
+􀟈  Test "Parse service with multiple networks" started.
+􀟈  Test "pull accepts service arguments alongside the project option group" started.
+􀟈  Test "Labeled containers match by service label, regardless of name" started.
+􀟈  Test "extra_hosts absent when not set" started.
+􀟈  Test "Healthcheck duration parser supports combined units" started.
+􀟈  Test "pull accepts --include-deps" started.
+􀟈  Test "Project name flag beats environment and 'name' field" started.
+􀟈  Test "Parse network with external flag" started.
+􀟈  Test "Helper: empty list returns empty dict" started.
+􀟈  Test "List form with no environment key decodes as nil" started.
+􀟈  Test "Parse healthcheck with test command (string)" started.
+􀟈  Test "--include-deps pulls the expanded dependency set" started.
+􀟈  Test "Interpolate variable with default in 'name' field when variable is unset" started.
+􀟈  Test "List form decodes (the issue #2 case)" started.
+􀟈  Test "Falls back to directory name when nothing else is provided" started.
+􀟈  Test "clampMemoryLimit raises sub-200m values to 200m" started.
+􀟈  Test "extra_hosts list form with host-gateway token parses" started.
+􀟈  Test "mem_limit takes precedence over deploy.resources.limits.memory in run args" started.
+􀟈  Test "Foreign-project label beats a candidate-name collision" started.
+􀟈  Test "Helper: bare key inherits from process env when set" started.
+􀟈  Test "Helper: KEY=value splits at first =" started.
+􀟈  Test "A container labeled for another project is never ours" started.
+􀟈  Test "Empty networks definition" started.
+􀟈  Test "Unlabeled containers fall back to candidate names" started.
+􀟈  Test "Explicit service platform wins" started.
+􀟈  Test "Multiple networks in compose" started.
+􀟈  Test "Mixed forms across services in the same file" started.
+􀟈  Test malformedExternal(_:) started.
+􀟈  Test "foreground wait does not pin a CPU core (regression for #27)" started.
+􀟈  Test "touch() and lastActivity are safe under concurrent access" started.
+􀟈  Test validExternal(_:) started.
+􀟈  Test "Helper: duplicate keys — last wins (matches docker compose precedence)" started.
+􀟈  Test "Default is the host platform, not the full multi-arch index" started.
+􀟈  Test "sanitize - lowercases mixed case" started.
+􀟈  Test "CONTAINER_DEFAULT_PLATFORM defers to container's own resolution" started.
+􀟈  Test "sanitize - returns nil for unusable input" started.
+􀟈  Test "Matching-label and unlabeled containers are ours" started.
+􀟈  Test "sanitize - collapses runs of separators" started.
+􀟈  Test "sanitize - already valid label is unchanged" started.
+􀟈  Test "dns list - header-only output (no domains)" started.
+􀟈  Test "Parse build with context only" started.
+􀟈  Test "touch() captures the injected clock's current time" started.
+􀟈  Test "sanitize - replaces underscores, dots, spaces with hyphens" started.
+􀟈  Test "Parse build with target" started.
+􀟈  Test case passing 1 argument value → "[{nested: value}]" to invalidLabels(value:) started.
+􀟈  Test case passing 1 argument yaml → "{}" to omittedContext(_:) started.
+􀟈  Test "Parse build with context and dockerfile" started.
+􀟈  Test "Service with build configuration" started.
+􀟈  Test "seeds lastActivity from the injected clock" started.
+􀟈  Test case passing 1 argument value → "{role: [nested]}" to invalidLabels(value:) started.
+􀟈  Test case passing 1 argument value → "scalar" to invalidLabels(value:) started.
+􀟈  Test case passing 1 argument yaml → "context: null" to omittedContext(_:) started.
+􀟈  Test case passing 1 argument yaml → "dockerfile: custom.Dockerfile" to omittedContext(_:) started.
+􀟈  Test "sanitize - clamps to 63 chars and re-trims" started.
+􀟈  Test "Shorthand build: <context> form has no target" started.
+􀟈  Test "idle window reflects time since the last touch" started.
+􀟈  Test "profiles list form parses" started.
+􀟈  Test "Build with no target defaults to nil" started.
+􀟈  Test "dns list - matches a registered domain" started.
+􀟈  Test "Unlabeled containers fall back to candidate-name matching" started.
+􀟈  Test "dns list - empty output means not registered" started.
+􀟈  Test "ps accepts -a and service arguments alongside the project option group" started.
+􀟈  Test "Absolute context path" started.
+􀟈  Test case passing 1 argument yaml → "context: []" to rejectsInvalidContext(_:) started.
+􀟈  Test "dns list - exact match only (no substring)" started.
+􀟈  Test case passing 1 argument yaml → "context: {}" to rejectsInvalidContext(_:) started.
+􀟈  Test "sanitize - trims leading and trailing hyphens" started.
+􀟈  Test "Service with both image and build" started.
+􀟈  Test "Table columns align and the trailing column is unpadded" started.
+􀟈  Test "Parse build with build args" started.
+􀟈  Test case passing 1 argument value → "null" to mappingAndNull(value:) started.
+􀟈  Test case passing 1 argument value → "{}" to mappingAndNull(value:) started.
+􀟈  Test "dict entry without required field extracts path" started.
+􀟈  Test "Labeled containers filter by project and service labels, not by name" started.
+􀟈  Test case passing 1 argument value → "{role: web}" to mappingAndNull(value:) started.
+􀟈  Test "Relative context path resolution" started.
+􀟈  Test "A container labeled for another project is excluded even when its name collides with a candidate" started.
+􀟈  Test "Stopped containers are hidden by default and shown with --all" started.
+􀟈  Test "single dict entry extracts path" started.
+􀟈  Test "Reject deploy replicas mapping value" started.
+􀟈  Test "Parse compose with restart policy" started.
+􀟈  Test case passing 1 argument input → "${EMPTY:?required}" to invalidOrRequired(input:) started.
+􀟈  Test "plain string env_file still parses" started.
+􀟈  Test case passing 1 argument input → "${MISSING?required}" to invalidOrRequired(input:) started.
+􀟈  Test "mixed array of strings and dict entries extracts all paths" started.
+􀟈  Test case passing 1 argument input → "${SET/replacement}" to invalidOrRequired(input:) started.
+􀟈  Test "array of plain strings env_file still parses" started.
+􀟈  Test case passing 1 argument input → "${SET" to invalidOrRequired(input:) started.
+􀟈  Test "dict entry with required: true extracts path" started.
+􀟈  Test case passing 1 argument input → "${}" to invalidOrRequired(input:) started.
+􀟈  Test "Parse compose with read-only filesystem" started.
+􀟈  Test "multiple dict entries extract all paths in order" started.
+􀟈  Test "Parse compose with secrets and configs" started.
+􀟈  Test "Parse compose with command as string" started.
+􀟈  Test "Parse three-tier web application" started.
+􀟈  Test "Parse compose with platform" started.
+􀟈  Test case passing 2 arguments input → "$SET/${SET}", expected → "value/value" to operators(input:expected:) started.
+􀟈  Test case passing 2 arguments input → "${EMPTY:-fallback}/${EMPTY-fallback}", expected → "fallback/" to operators(input:expected:) started.
+􀟈  Test case passing 2 arguments input → "${MISSING:-fallback}/${MISSING-fallback}", expected → "fallback/fallback" to operators(input:expected:) started.
+􀟈  Test "Parse compose with complex dependency chain" started.
+􀟈  Test case passing 2 arguments input → "${SET:+yes}/${SET+yes}", expected → "yes/yes" to operators(input:expected:) started.
+􀟈  Test case passing 2 arguments input → "${EMPTY:+yes}/${EMPTY+yes}", expected → "/yes" to operators(input:expected:) started.
+􀟈  Test case passing 2 arguments input → "${MISSING:+yes}/${MISSING+yes}", expected → "/" to operators(input:expected:) started.
+􀟈  Test case passing 2 arguments input → "${MISSING:-${OTHER:-$SET}}", expected → "value" to operators(input:expected:) started.
+􀟈  Test "Parse compose with container name" started.
+􀟈  Test case passing 2 arguments input → "$$SET/$${SET}/$$/$5", expected → "$SET/${SET}/$/$5" to operators(input:expected:) started.
+􀟈  Test case passing 2 arguments input → "$OPAQUE", expected → "${SET}" to operators(input:expected:) started.
+􀟈  Test "Parse deploy replicas as quoted numeric scalar" started.
+􀟈  Test case passing 2 arguments input → "${EMPTY?required}", expected → "" to operators(input:expected:) started.
+􀟈  Test "Parse compose with environment variables" started.
+􀟈  Test case passing 2 arguments input → "${SET:?required}", expected → "value" to operators(input:expected:) started.
+􀟈  Test case passing 2 arguments input → "${SET:-${MISSING:?unused}}", expected → "value" to operators(input:expected:) started.
+􀟈  Test "Parse compose with hostname" started.
+􀟈  Test "Parse compose with volumes" started.
+􀟈  Test "Parse deploy replicas as env-var expression" started.
+􀟈  Test "Parse compose with networks" started.
+Warning: Variable 'UNDEFINED_VAR' is not set; using an empty string.
+􀟈  Test "Parse WordPress with MySQL compose file" started.
+􀟈  Test "Parse compose with build context" started.
+􀟈  Test "Parse deploy resources limits (cpus and memory)" started.
+􀟈  Test "Parse multi-service compose with deploy replicas env-var expression" started.
+􀟈  Test "Parse deploy replicas as integer" started.
+􀟈  Test "Parse compose with user" started.
+􀟈  Test "Parse compose with depends_on map form (condition syntax)" started.
+􀟈  Test "Parse compose with working directory" started.
+􀟈  Test "Parse compose with privileged mode" started.
+􀟈  Test "Parse compose with ports" started.
+􀟈  Test "Parse compose file with project name" started.
+􀟈  Test "Parse microservices architecture" started.
+􀟈  Test "Parse basic docker-compose.yml with single service" started.
+􀟈  Test "Parse development environment with build" started.
+􀟈  Test "Service must have image or build - should fail without either" started.
+􀟈  Test "Parse compose with env_file" started.
+􀟈  Test "Parse compose with stdin_open and tty" started.
+􀟈  Test "Parse compose with multiple services" started.
+􀟈  Test "Parse compose with command as array" started.
+􀟈  Test "Parse compose with healthchecks and restart policies" started.
+􀟈  Test "Parse compose with depends_on" started.
+Info: Created missing host directory for volume: /var/folders/jz/p0kjhsjd5hs2yr3ll64fmdc00000gn/T/499896DA-36F1-43CB-B4DE-3E77C7B889B5/new-volume
+Warning: Volume entry 'nodestination' has an invalid format (expected 'source:destination'). Skipping.
+􀟈  Test case passing 2 arguments setting → "disable: true", disabled → true to "Disable controls the production health gate and exec arguments" started.
+􀟈  Test case passing 2 arguments setting → "disable: false", disabled → false to "Disable controls the production health gate and exec arguments" started.
+􀟈  Test case passing 2 arguments setting → "", disabled → false to "Disable controls the production health gate and exec arguments" started.
+􀟈  Test "A self-dependency throws" started.
+􀟈  Test "Linear chain is not parallelized: web -> app -> db" started.
+􀟈  Test "A dependency cycle throws instead of deadlocking" started.
+􀟈  Test "Independent services form a single wave (the #128 case)" started.
+􀟈  Test "depends_on naming a service outside the set is ignored" started.
+􀟈  Test "Diamond graph groups siblings into the same wave" started.
+􀟈  Test filesAndExplicitValuesUseSeparateInterpolationSources() started.
+􀟈  Test case passing 1 argument value → "[]" to malformedExternal(_:) started.
+􀟈  Test case passing 1 argument value → "42" to malformedExternal(_:) started.
+􀟈  Test case passing 1 argument value → "unexpected" to malformedExternal(_:) started.
+􀟈  Test case passing 1 argument value → "{}" to malformedExternal(_:) started.
+􀟈  Test case passing 1 argument value → "{other: shared}" to malformedExternal(_:) started.
+􀟈  Test case passing 1 argument value → "{name: shared, other: ignored}" to malformedExternal(_:) started.
+􀟈  Test case passing 1 argument value → "{name: ''}" to malformedExternal(_:) started.
+􀟈  Test case passing 1 argument value → "true" to validExternal(_:) started.
+􀟈  Test case passing 1 argument value → "false" to validExternal(_:) started.
+􀟈  Test case passing 1 argument value → "null" to validExternal(_:) started.
+􀟈  Test case passing 1 argument value → "{name: shared}" to validExternal(_:) started.
+􁁛  Test omittedContext(_:) with 3 test cases passed after 0.122 seconds.
+􁁛  Test preservesDockerfile() passed after 0.122 seconds.
+􁁛  Test mappingAndNull(value:) with 3 test cases passed after 0.123 seconds.
+􁁛  Test listLabels() passed after 0.123 seconds.
+􁁛  Test rejectsInvalidContext(_:) with 2 test cases passed after 0.123 seconds.
+􁁛  Test invalidLabels(value:) with 3 test cases passed after 0.123 seconds.
+􁁛  Test "Dotted candidate uses the DNS-sanitized project name" passed after 0.123 seconds.
+􁁛  Test "Candidates cover both <project>-<service> and dotted <service>.<dnsDomain> (#97)" passed after 0.123 seconds.
+􁁛  Test "Candidates try explicit container_name first, then both naming conventions" passed after 0.123 seconds.
+􁁛  Test invalidOrRequired(input:) with 5 test cases passed after 0.123 seconds.
+􁁛  Test yamlValuesPreserveKeysAnchorsAndInsertedText() passed after 0.123 seconds.
+􁁛  Test "loadCompose throws composeFileNotFound when no compose file exists" passed after 0.123 seconds.
+􁁛  Test "composePath honors explicit --file over discovery" passed after 0.124 seconds.
+􁁛  Test missingVariablesWarnAndDoNotStopLaterExpansion() passed after 0.123 seconds.
+􁁛  Test typedValuesDecodeAfterExpansion() passed after 0.123 seconds.
+􁁛  Test "--project-name override wins over compose name:" passed after 0.124 seconds.
+􁁛  Test "orderedServices filters to the requested service names" passed after 0.124 seconds.
+􁁛  Test "Project name falls back to derived cwd name when name: absent" passed after 0.124 seconds.
+􁁛  Test "No dependencies - services should maintain order" passed after 0.124 seconds.
+􁁛  Test operators(input:expected:) with 12 test cases passed after 0.124 seconds.
+􁁛  Test "Complex dependency chain - web -> app -> db" passed after 0.124 seconds.
+􁁛  Test "Truncate subsecond stop grace periods for the runtime" passed after 0.124 seconds.
+􁁛  Test "compose name: is used when no --project-name is given" passed after 0.124 seconds.
+􁁛  Test "falls back to sanitized directory name with neither override nor compose name:" passed after 0.124 seconds.
+􁁛  Test "Single service with no dependencies" passed after 0.124 seconds.
+􁁛  Test "Stopped service non-zero exit code fails startup" passed after 0.124 seconds.
+􁁛  Test "composePath discovers docker-compose.yml when higher-priority names are absent" passed after 0.124 seconds.
+􁁛  Test "Diamond dependency - web and api both depend on db" passed after 0.124 seconds.
+􁁛  Test "Accept a leading-decimal stop grace period" passed after 0.124 seconds.
+􁁛  Test "Simple dependency chain - web depends on db" passed after 0.124 seconds.
+􁁛  Test "Use Compose's ten-second default when omitted" passed after 0.124 seconds.
+􁁛  Test "Explicit container_name matching a convention is not duplicated" passed after 0.125 seconds.
+􁁛  Test "Cyclic dependency should throw error" passed after 0.125 seconds.
+􁁛  Test "Selecting service keeps transitive dependency closure" passed after 0.125 seconds.
+􁁛  Test "Parse a combined stop grace period" passed after 0.125 seconds.
+􁁛  Test "Resolve variable with default value when variable exists" passed after 0.125 seconds.
+􁁛  Test "Resolve complex string with mixed content" passed after 0.125 seconds.
+􁁛  Test "Multiple dependencies - app depends on db and redis" passed after 0.125 seconds.
+􁁛  Test "Build explicit stop options" passed after 0.125 seconds.
+􁁛  Test "Parse nanosecond stop grace periods" passed after 0.125 seconds.
+􁁛  Test "Service depends on non-existent service - should not crash" passed after 0.125 seconds.
+􁁛  Test "Resolve multiple variables in string" passed after 0.125 seconds.
+􁁛  Test "Variable names are case-sensitive" passed after 0.125 seconds.
+􁁛  Test "Resolve variables with underscores and numbers" passed after 0.125 seconds.
+􁁛  Test "Use an empty string when no variable or default is provided" passed after 0.125 seconds.
+􁁛  Test "Reject invalid stop grace periods" passed after 0.125 seconds.
+􁁛  Test "Resolve with empty default value" passed after 0.125 seconds.
+􁁛  Test "orderedServices returns dependencies before dependents" passed after 0.125 seconds.
+􁁛  Test "Process environment takes precedence over provided envVars" passed after 0.125 seconds.
+􁁛  Test "Resolve simple variable" passed after 0.125 seconds.
+􁁛  Test "nil entrypoint and nil command → no flag, no positional args" passed after 0.125 seconds.
+􁁛  Test "No variables to resolve returns original string" passed after 0.125 seconds.
+􁁛  Test "Build target is passed through from compose file" passed after 0.125 seconds.
+􁁛  Test "network aliases emit service name and Apple alias properties when supported" passed after 0.126 seconds.
+􁁛  Test "Handle values with equals signs" passed after 0.126 seconds.
+􁁛  Test "entrypoint AND command both set → combined (regression for issue #77)" passed after 0.126 seconds.
+􁁛  Test "Resolve variable that is part of larger text" passed after 0.126 seconds.
+􁁛  Test "Services with build config are selected for building" passed after 0.126 seconds.
+􁁛  Test "composePath discovers the first supported filename in cwd" passed after 0.126 seconds.
+􁁛  Test "Explicit image field is used as the build tag" passed after 0.126 seconds.
+􁁛  Test "issue #77: bash -c + multi-line heredoc command" passed after 0.126 seconds.
+􁁛  Test "Handle values with spaces" passed after 0.126 seconds.
+􁁛  Test "Handle mixed content" passed after 0.126 seconds.
+􁁛  Test "Mixed compose file — only build services are selected" passed after 0.126 seconds.
+􁁛  Test "network aliases warn when Apple alias properties are unsupported" passed after 0.126 seconds.
+􁁛  Test "error message matches docker compose wording and names the service" passed after 0.126 seconds.
+􁁛  Test "empty entrypoint array → treated as nil" passed after 0.126 seconds.
+􁁛  Test "Load simple key-value pairs from .env file" passed after 0.126 seconds.
+􁁛  Test "passes when every requested service exists" passed after 0.126 seconds.
+􁁛  Test "Handle empty values" passed after 0.126 seconds.
+􁁛  Test "Image tag defaults to serviceName:latest when image field is absent" passed after 0.126 seconds.
+􁁛  Test "command only → no flag, command as positional" passed after 0.126 seconds.
+􁁛  Test "single-element entrypoint, no command → flag set, no positional" passed after 0.126 seconds.
+􁁛  Test "passes when no services are requested" passed after 0.126 seconds.
+􁁛  Test "Build without target leaves it nil, matching pre-target-support compose files" passed after 0.126 seconds.
+􁁛  Test "Compose port - explicit IP binding IPv6" passed after 0.126 seconds.
+􁁛  Test "network aliases do not duplicate explicit service name alias" passed after 0.126 seconds.
+􁁛  Test "no alias warning when only the implicit service-name alias is present" passed after 0.127 seconds.
+􁁛  Test "Build args are passed through from compose file" passed after 0.127 seconds.
+􁁛  Test "Use default value when variable does not exist" passed after 0.127 seconds.
+􁁛  Test "Services without build config are excluded" passed after 0.127 seconds.
+􁁛  Test "throws for an unknown requested service" passed after 0.127 seconds.
+􁁛  Test "hostname does not emit unsupported container run flag" passed after 0.127 seconds.
+􁁛  Test "Ignore empty lines in .env file" passed after 0.127 seconds.
+􁁛  Test "Return empty dict for non-existent file" passed after 0.127 seconds.
+􁁛  Test "Digest shortens to 12 hex chars without the algorithm prefix" passed after 0.127 seconds.
+􁁛  Test "reports the first unknown service when several are requested" passed after 0.127 seconds.
+􁁛  Test "Ignore comments in .env file" passed after 0.127 seconds.
+􁁛  Test "Reference without tag defaults to latest" passed after 0.127 seconds.
+􁁛  Test "Compose port - simple container port" passed after 0.127 seconds.
+􁁛  Test "Colon in a registry host:port is not treated as a tag separator" passed after 0.127 seconds.
+􁁛  Test "composePath returns default compose.yml path when none exist" passed after 0.128 seconds.
+􁁛  Test "network aliases emit service name when no explicit aliases are configured" passed after 0.127 seconds.
+􁁛  Test "Sizes render with sensible units" passed after 0.127 seconds.
+􁁛  Test "multi-element entrypoint, no command → first goes to flag, rest positional" passed after 0.127 seconds.
+􁁛  Test "Named volume uses explicit top-level volume name" passed after 0.127 seconds.
+􁁛  Test "Resolve absolute and tilde paths without rebasing" passed after 0.127 seconds.
+􁁛  Test "Parse healthcheck with test command" passed after 0.127 seconds.
+􁁛  Test "Merged PATH keeps user order and contains all fallback dirs without duplicates" passed after 0.127 seconds.
+􁁛  Test "Merged PATH preserves a custom user directory" passed after 0.127 seconds.
+􁁛  Test "empty command array → just empty positional" passed after 0.128 seconds.
+􁁛  Test "Compose port - explicit IP with protocol" passed after 0.128 seconds.
+􁁛  Test "Compose port - host:container same port" passed after 0.128 seconds.
+􁁛  Test "Reference with tag splits on the last colon" passed after 0.128 seconds.
+􁁛  Test "Directory bind mount is forwarded" passed after 0.128 seconds.
+􁁛  Test "Project name uses compose name: when present" passed after 0.128 seconds.
+􁁛  Test "Missing host path is auto-created as a directory" passed after 0.128 seconds.
+􁁛  Test "Healthcheck CMD translates to exec arguments" passed after 0.128 seconds.
+􁁛  Test "Parse healthcheck with timeout" passed after 0.128 seconds.
+􁁛  Test "Parse healthcheck with start_period" passed after 0.128 seconds.
+􁁛  Test "Compose port - explicit IP binding IPv4" passed after 0.128 seconds.
+􁁛  Test "Parse healthcheck with interval" passed after 0.128 seconds.
+􁁛  Test "Invalid volume format returns empty array" passed after 0.128 seconds.
+􁁛  Test "Derive project name from current working directory - contains dot" passed after 0.128 seconds.
+􁁛  Test "External named volume without explicit name keeps source name" passed after 0.128 seconds.
+􁁛  Test "Disable without a test skips the health gate" passed after 0.128 seconds.
+􁁛  Test "Compose port - with protocol tcp" passed after 0.128 seconds.
+􁁛  Test "Named volume preserves nested destination and mode" passed after 0.128 seconds.
+􁁛  Test "Disable controls the production health gate and exec arguments" with 3 test cases passed after 0.128 seconds.
+􁁛  Test "Parse complete healthcheck configuration" passed after 0.128 seconds.
+􁁛  Test "Parse service with single network" passed after 0.128 seconds.
+􁁛  Test "Resolve explicit relative paths against base URL" passed after 0.128 seconds.
+􁁛  Test "parseMemoryToBytes returns nil for garbage" passed after 0.128 seconds.
+􁁛  Test "Relative parent-path bind mount resolves from the compose directory" passed after 0.128 seconds.
+􁁛  Test "Parse network with driver_opts" passed after 0.128 seconds.
+􁁛  Test "Variable defaults apply when the variable is unset" passed after 0.128 seconds.
+􁁛  Test "Healthcheck CMD-SHELL translates to shell exec arguments" passed after 0.128 seconds.
+􁁛  Test "Compose port - explicit IP already with 0.0.0.0" passed after 0.128 seconds.
+􁁛  Test "orderedServices bypasses profile gating for explicitly requested services" passed after 0.128 seconds.
+􁁛  Test "parseMemoryToBytes handles byte/k/m/g units (binary)" passed after 0.128 seconds.
+􁁛  Test "Disable healthcheck" passed after 0.128 seconds.
+􁁛  Test "parseMemoryToBytes is case-insensitive and tolerates whitespace" passed after 0.128 seconds.
+􁁛  Test "mem_limit string form parses" passed after 0.128 seconds.
+􁁛  Test "clampMemoryLimit passes unparseable values through verbatim" passed after 0.128 seconds.
+􁁛  Test "clampMemoryLimit leaves >=200m values untouched" passed after 0.128 seconds.
+􁁛  Test "mem_limit absent when not set" passed after 0.128 seconds.
+􁁛  Test "Service with healthcheck" passed after 0.128 seconds.
+􁁛  Test "mem_limit gigabyte value parses" passed after 0.128 seconds.
+􁁛  Test "Parse healthcheck with retries" passed after 0.128 seconds.
+􁁛  Test "Directory bind mount with :ro mode preserves mode" passed after 0.128 seconds.
+􁁛  Test "Service without explicit networks uses default" passed after 0.128 seconds.
+􁁛  Test "NONE remains disabled with disable false" passed after 0.128 seconds.
+􁁛  Test "Process environment beats .env file for COMPOSE_PROJECT_NAME" passed after 0.128 seconds.
+􁁛  Test "Single-file bind mount without mode is forwarded" passed after 0.128 seconds.
+􁁛  Test "Plain references pass through and build-only services resolve to nil" passed after 0.128 seconds.
+􁁛  Test "Single-file bind mount with :ro mode is forwarded" passed after 0.128 seconds.
+􁁛  Test "extra_hosts map form normalised to list" passed after 0.128 seconds.
+􁁛  Test "Interpolate variable in 'name' field from .env file" passed after 0.128 seconds.
+􁁛  Test "Merged PATH falls back to the standard dirs when PATH is empty or unset" passed after 0.128 seconds.
+􁁛  Test "Parse network with labels" passed after 0.128 seconds.
+􁁛  Test "External named volume uses explicit external name" passed after 0.128 seconds.
+􁁛  Test "orderedServices pulls in transitive dependencies of requested services" passed after 0.129 seconds.
+􁁛  Test "Helper: empty value after = decodes as empty string" passed after 0.128 seconds.
+􁁛  Test "Helper: only the first = splits, rest stays in value" passed after 0.128 seconds.
+􁁛  Test "Empty COMPOSE_PROJECT_NAME is ignored" passed after 0.128 seconds.
+􁁛  Test "Explicitly requested services do not pull their dependencies" passed after 0.128 seconds.
+􁁛  Test "Relative file bind mount resolves to an absolute path against the compose directory" passed after 0.128 seconds.
+􁁛  Test "Compose port - host:container different ports" passed after 0.128 seconds.
+􁁛  Test "Named volume is forwarded using project-scoped native container volume syntax" passed after 0.128 seconds.
+􁁛  Test "Map form decodes (regression — already-working path)" passed after 0.128 seconds.
+􁁛  Test "No requested services pulls the whole selection" passed after 0.128 seconds.
+􁁛  Test "COMPOSE_PROJECT_NAME from .env file is used when no 'name' field" passed after 0.128 seconds.
+􁁛  Test "Named volume mounts at its declared single-segment destination" passed after 0.128 seconds.
+􁁛  Test "extra_hosts list form parses" passed after 0.128 seconds.
+􁁛  Test "mem_limit integer bytes form parses to string" passed after 0.128 seconds.
+􁁛  Test "Parse network with driver" passed after 0.128 seconds.
+􁁛  Test "COMPOSE_PROJECT_NAME overrides 'name' field" passed after 0.128 seconds.
+􁁛  Test "Literal 'name' field is used as-is" passed after 0.128 seconds.
+􁁛  Test projectResolutionExpandsNamesAndRuntimeValuesOnce() passed after 0.129 seconds.
+􁁛  Test "Parse healthcheck with CMD-SHELL" passed after 0.128 seconds.
+􁁛  Test "Helper: bare key with no host env value decodes as empty string" passed after 0.128 seconds.
+􁁛  Test "Parse service network object form with aliases" passed after 0.128 seconds.
+􁁛  Test "extra_hosts multiple entries all parsed" passed after 0.128 seconds.
+􁁛  Test "Variables in image references resolve from the environment" passed after 0.128 seconds.
+􁁛  Test "Parse service with multiple networks" passed after 0.128 seconds.
+􁁛  Test "Labeled containers match by service label, regardless of name" passed after 0.128 seconds.
+􁁛  Test "extra_hosts absent when not set" passed after 0.128 seconds.
+􁁛  Test "Healthcheck duration parser supports combined units" passed after 0.128 seconds.
+􁁛  Test "ComposeBuild command parses --no-cache flag" passed after 0.129 seconds.
+􁁛  Test "Project name flag beats environment and 'name' field" passed after 0.128 seconds.
+􁁛  Test "Parse network with external flag" passed after 0.128 seconds.
+􁁛  Test "Helper: empty list returns empty dict" passed after 0.128 seconds.
+􁁛  Test "Parse healthcheck with test command (string)" passed after 0.128 seconds.
+􁁛  Test "Interpolate variable with default in 'name' field when variable is unset" passed after 0.128 seconds.
+􁁛  Test "List form with no environment key decodes as nil" passed after 0.128 seconds.
+􁁛  Test "--include-deps pulls the expanded dependency set" passed after 0.128 seconds.
+􁁛  Test "List form decodes (the issue #2 case)" passed after 0.128 seconds.
+􁁛  Test "clampMemoryLimit raises sub-200m values to 200m" passed after 0.128 seconds.
+􁁛  Test "extra_hosts list form with host-gateway token parses" passed after 0.128 seconds.
+􁁛  Test "Foreign-project label beats a candidate-name collision" passed after 0.128 seconds.
+􁁛  Test "mem_limit takes precedence over deploy.resources.limits.memory in run args" passed after 0.128 seconds.
+􁁛  Test "Helper: KEY=value splits at first =" passed after 0.128 seconds.
+􁁛  Test "Helper: bare key inherits from process env when set" passed after 0.128 seconds.
+􁁛  Test "Empty networks definition" passed after 0.128 seconds.
+􁁛  Test "A container labeled for another project is never ours" passed after 0.128 seconds.
+􁁛  Test "Unlabeled containers fall back to candidate names" passed after 0.128 seconds.
+􁁛  Test "Explicit service platform wins" passed after 0.128 seconds.
+􁁛  Test "Multiple networks in compose" passed after 0.128 seconds.
+􁁛  Test "Mixed forms across services in the same file" passed after 0.128 seconds.
+􁁛  Test "Falls back to directory name when nothing else is provided" passed after 0.128 seconds.
+􁁛  Test malformedExternal(_:) with 7 test cases passed after 0.128 seconds.
+􁁛  Test "orderedServices gates default selection by active Compose profiles" passed after 0.129 seconds.
+􁁛  Test "ComposeBuild command accepts service name arguments" passed after 0.129 seconds.
+􁁛  Test "Default name derives from the compose file's directory, not the process cwd" passed after 0.153 seconds.
+􁁛  Test "Helper: duplicate keys — last wins (matches docker compose precedence)" passed after 0.151 seconds.
+􁁛  Test "Default is the host platform, not the full multi-arch index" passed after 0.152 seconds.
+􁁛  Test "sanitize - lowercases mixed case" passed after 0.152 seconds.
+􁁛  Test "CONTAINER_DEFAULT_PLATFORM defers to container's own resolution" passed after 0.152 seconds.
+􁁛  Test validExternal(_:) with 4 test cases passed after 0.152 seconds.
+􁁛  Test "sanitize - returns nil for unusable input" passed after 0.152 seconds.
+􁁛  Test "Matching-label and unlabeled containers are ours" passed after 0.152 seconds.
+􁁛  Test "sanitize - collapses runs of separators" passed after 0.152 seconds.
+􁁛  Test "sanitize - already valid label is unchanged" passed after 0.152 seconds.
+􁁛  Test "dns list - header-only output (no domains)" passed after 0.152 seconds.
+􁁛  Test "Parse build with context only" passed after 0.152 seconds.
+􁁛  Test "touch() captures the injected clock's current time" passed after 0.152 seconds.
+􁁛  Test "sanitize - replaces underscores, dots, spaces with hyphens" passed after 0.152 seconds.
+􁁛  Test "Parse build with target" passed after 0.152 seconds.
+􁁛  Test "seeds lastActivity from the injected clock" passed after 0.152 seconds.
+􁁛  Test "sanitize - clamps to 63 chars and re-trims" passed after 0.152 seconds.
+􁁛  Test "Parse build with context and dockerfile" passed after 0.152 seconds.
+􁁛  Test "idle window reflects time since the last touch" passed after 0.151 seconds.
+􁁛  Test "Shorthand build: <context> form has no target" passed after 0.151 seconds.
+􁁛  Test "dns list - matches a registered domain" passed after 0.151 seconds.
+􁁛  Test "Service with build configuration" passed after 0.152 seconds.
+􁁛  Test "dns list - empty output means not registered" passed after 0.151 seconds.
+􁁛  Test "Build with no target defaults to nil" passed after 0.151 seconds.
+􁁛  Test "Absolute context path" passed after 0.151 seconds.
+􁁛  Test "profiles list form parses" passed after 0.151 seconds.
+􁁛  Test "dns list - exact match only (no substring)" passed after 0.150 seconds.
+􁁛  Test "sanitize - trims leading and trailing hyphens" passed after 0.150 seconds.
+􁁛  Test "ComposeBuild command defaults no-cache to false" passed after 0.153 seconds.
+􁁛  Test "Table columns align and the trailing column is unpadded" passed after 0.150 seconds.
+􁁛  Test "Unlabeled containers fall back to candidate-name matching" passed after 0.152 seconds.
+􁁛  Test "Parse build with build args" passed after 0.150 seconds.
+􁁛  Test "Service with both image and build" passed after 0.150 seconds.
+􁁛  Test "Relative context path resolution" passed after 0.147 seconds.
+􁁛  Test "ComposeBuild command accepts -f flag for compose file" passed after 0.153 seconds.
+􁁛  Test "dict entry without required field extracts path" passed after 0.147 seconds.
+􁁛  Test "Labeled containers filter by project and service labels, not by name" passed after 0.147 seconds.
+􁁛  Test "A container labeled for another project is excluded even when its name collides with a candidate" passed after 0.146 seconds.
+􁁛  Test "single dict entry extracts path" passed after 0.146 seconds.
+􁁛  Test "Parse compose with restart policy" passed after 0.146 seconds.
+􁁛  Test "plain string env_file still parses" passed after 0.146 seconds.
+􁁛  Test "Reject deploy replicas mapping value" passed after 0.146 seconds.
+􁁛  Test "array of plain strings env_file still parses" passed after 0.141 seconds.
+􁁛  Test "Stopped containers are hidden by default and shown with --all" passed after 0.147 seconds.
+􁁛  Test "dict entry with required: true extracts path" passed after 0.108 seconds.
+􁁛  Test "mixed array of strings and dict entries extracts all paths" passed after 0.146 seconds.
+􁁛  Test "Parse compose with read-only filesystem" passed after 0.108 seconds.
+􁁛  Test "multiple dict entries extract all paths in order" passed after 0.106 seconds.
+􁁛  Test "Parse compose with platform" passed after 0.100 seconds.
+􁁛  Test "Parse compose with container name" passed after 0.089 seconds.
+􁁛  Test "Parse compose with complex dependency chain" passed after 0.100 seconds.
+􁁛  Test "Parse deploy replicas as quoted numeric scalar" passed after 0.089 seconds.
+􁁛  Test "Parse compose with environment variables" passed after 0.089 seconds.
+􁁛  Test "Parse three-tier web application" passed after 0.103 seconds.
+􁁛  Test "Parse compose with secrets and configs" passed after 0.103 seconds.
+􁁛  Test "Parse compose with hostname" passed after 0.089 seconds.
+􁁛  Test "Parse compose with volumes" passed after 0.088 seconds.
+􁁛  Test "Parse compose with networks" passed after 0.087 seconds.
+􁁛  Test "Parse compose with build context" passed after 0.087 seconds.
+􁁛  Test "Parse deploy replicas as env-var expression" passed after 0.087 seconds.
+􁁛  Test "Parse deploy resources limits (cpus and memory)" passed after 0.086 seconds.
+􁁛  Test "Parse deploy replicas as integer" passed after 0.086 seconds.
+􁁛  Test "Parse WordPress with MySQL compose file" passed after 0.087 seconds.
+􁁛  Test "Parse compose with user" passed after 0.083 seconds.
+􁁛  Test "Parse multi-service compose with deploy replicas env-var expression" passed after 0.086 seconds.
+􁁛  Test "Parse compose with working directory" passed after 0.082 seconds.
+􁁛  Test "Parse compose with privileged mode" passed after 0.082 seconds.
+􁁛  Test "Parse compose with ports" passed after 0.081 seconds.
+􁁛  Test "Parse compose file with project name" passed after 0.081 seconds.
+􁁛  Test "Parse compose with depends_on map form (condition syntax)" passed after 0.083 seconds.
+􁁛  Test "Parse basic docker-compose.yml with single service" passed after 0.080 seconds.
+􁁛  Test "Parse development environment with build" passed after 0.081 seconds.
+􁁛  Test "Parse microservices architecture" passed after 0.081 seconds.
+􁁛  Test "Service must have image or build - should fail without either" passed after 0.080 seconds.
+􁁛  Test "Parse compose with env_file" passed after 0.080 seconds.
+􁁛  Test "Parse compose with stdin_open and tty" passed after 0.066 seconds.
+􁁛  Test "Parse compose with command as array" passed after 0.065 seconds.
+􁁛  Test "Parse compose with multiple services" passed after 0.066 seconds.
+􁁛  Test "Parse compose with depends_on" passed after 0.061 seconds.
+􁁛  Test "Parse compose with command as string" passed after 0.104 seconds.
+􁁛  Test "Parse compose with healthchecks and restart policies" passed after 0.065 seconds.
+􁁛  Test "A self-dependency throws" passed after 0.052 seconds.
+􁁛  Test "Linear chain is not parallelized: web -> app -> db" passed after 0.049 seconds.
+􁁛  Test "A dependency cycle throws instead of deadlocking" passed after 0.049 seconds.
+􁁛  Test "Independent services form a single wave (the #128 case)" passed after 0.049 seconds.
+􁁛  Test "depends_on naming a service outside the set is ignored" passed after 0.047 seconds.
+􁁛  Test "Diamond graph groups siblings into the same wave" passed after 0.046 seconds.
+􁁛  Test filesAndExplicitValuesUseSeparateInterpolationSources() passed after 0.046 seconds.
+􁁛  Test "pull accepts the shared -f/--cwd project options" passed after 0.154 seconds.
+􁁛  Test "images accepts service arguments alongside the project option group" passed after 0.154 seconds.
+􁁛  Test "pull accepts service arguments alongside the project option group" passed after 0.153 seconds.
+􁁛  Suite "Build context defaults" passed after 0.155 seconds.
+􁁛  Suite "Service labels" passed after 0.155 seconds.
+􁁛  Suite "Compose Project Resolution Tests" passed after 0.155 seconds.
+􁁛  Suite ComposeInterpolationTests passed after 0.155 seconds.
+􁁛  Suite "Project name precedence" passed after 0.155 seconds.
+􁁛  Suite "Service Dependency Resolution Tests" passed after 0.155 seconds.
+􁁛  Suite "Stop Grace Period Tests" passed after 0.155 seconds.
+􁁛  Suite "Environment Variable Resolution Tests" passed after 0.155 seconds.
+􁁛  Suite "Entrypoint + Command Translation" passed after 0.155 seconds.
+􁁛  Suite "Compose Build Parsing Tests" passed after 0.155 seconds.
+􁁛  Suite "Environment File Loading Tests" passed after 0.155 seconds.
+􁁛  Suite "Requested service validation" passed after 0.155 seconds.
+􁁛  Suite "Helper Functions Tests" passed after 0.155 seconds.
+􁁛  Suite "Compose Volume Tests" passed after 0.155 seconds.
+􁁛  Suite "Healthcheck Configuration Tests" passed after 0.155 seconds.
+􁁛  Suite "Network Configuration Tests" passed after 0.155 seconds.
+􁁛  Suite "Project Name Resolution Tests" passed after 0.155 seconds.
+􁁛  Suite "Service Environment List Form" passed after 0.155 seconds.
+􁁛  Suite "Shared container matching Tests" passed after 0.155 seconds.
+􁁛  Suite "Effective pull platform Tests" passed after 0.155 seconds.
+􁁛  Suite ResourceExternalTests passed after 0.155 seconds.
+􁁛  Suite "DNS Domain Helpers" passed after 0.155 seconds.
+􁁛  Suite "Build Configuration Tests" passed after 0.155 seconds.
+􁁛  Suite "env_file dict-form parsing" passed after 0.155 seconds.
+􁁛  Suite "DockerCompose YAML Parsing Tests" passed after 0.155 seconds.
+􁁛  Suite ServiceEnvironmentAssemblyTests passed after 0.155 seconds.
+􁁛  Suite "Parallel Scheduler Levels" passed after 0.155 seconds.
+􀟈  Test "profiles absent when not set" started.
+􁁛  Suite "Compose images Tests" passed after 0.156 seconds.
+􁁛  Test "profiles absent when not set" passed after 0.001 seconds.
+􀟈  Test "service with no profiles is always eligible" started.
+􁁛  Test "service with no profiles is always eligible" passed after 0.001 seconds.
+􀟈  Test "service with empty profiles list is always eligible" started.
+􁁛  Test "service with empty profiles list is always eligible" passed after 0.001 seconds.
+􀟈  Test "profiled service is ineligible when its profile is not active" started.
+􁁛  Test "profiled service is ineligible when its profile is not active" passed after 0.001 seconds.
+􀟈  Test "profiled service is eligible when one of its profiles is active" started.
+􁁛  Test "profiled service is eligible when one of its profiles is active" passed after 0.001 seconds.
+􀟈  Test "default selection excludes profiled services when no profile is active" started.
+􁁛  Test "default selection excludes profiled services when no profile is active" passed after 0.001 seconds.
+􀟈  Test "default selection includes profiled services when their profile is active" started.
+􁁛  Test "default selection includes profiled services when their profile is active" passed after 0.001 seconds.
+􀟈  Test "explicitly requested service starts even if its profile is inactive" started.
+􁁛  Test "explicitly requested service starts even if its profile is inactive" passed after 0.001 seconds.
+􀟈  Test "dependency of an eligible service starts even if its own profile is inactive" started.
+􁁛  Test "dependency of an eligible service starts even if its own profile is inactive" passed after 0.001 seconds.
+􀟈  Test "ComposeUp command accepts repeated --profile flags" started.
+􁁛  Test "Main+ComposeUp command accepts -f flag for compose file from root" passed after 0.159 seconds.
+􁁛  Suite "Compose command parsing" passed after 0.160 seconds.
+􁁛  Test "pull accepts --include-deps" passed after 0.158 seconds.
+􁁛  Suite "Compose pull Tests" passed after 0.160 seconds.
+􁁛  Test "touch() and lastActivity are safe under concurrent access" passed after 0.159 seconds.
+􁁛  Suite "ActivityClock" passed after 0.161 seconds.
+􁁛  Test "ps accepts -a and service arguments alongside the project option group" passed after 0.159 seconds.
+􁁛  Suite "Compose ps Tests" passed after 0.162 seconds.
+􁁛  Test "resolveHostGatewayIP returns a non-empty string" passed after 0.163 seconds.
+􁁛  Suite "mem_limit and extra_hosts parsing" passed after 0.165 seconds.
+􁁛  Test "ComposeUp command accepts repeated --profile flags" passed after 0.019 seconds.
+􀟈  Test "ComposeUp command defaults profile to empty" started.
+􁁛  Test "ComposeUp command defaults profile to empty" passed after 0.015 seconds.
+􀟈  Test "ComposeBuild command accepts --profile flag" started.
+􁁛  Test "ComposeBuild command accepts --profile flag" passed after 0.012 seconds.
+􀟈  Test "ComposeDown command accepts --profile flag" started.
+􁁛  Test "ComposeDown command accepts --profile flag" passed after 0.013 seconds.
+􀟈  Test "activeProfiles merges --profile flags with COMPOSE_PROFILES env var" started.
+􁁛  Test "activeProfiles merges --profile flags with COMPOSE_PROFILES env var" passed after 0.014 seconds.
+􀟈  Test "activeProfiles is empty when neither --profile nor COMPOSE_PROFILES is set" started.
+􁁛  Test "activeProfiles is empty when neither --profile nor COMPOSE_PROFILES is set" passed after 0.013 seconds.
+􁁛  Suite "Compose profiles support" passed after 0.244 seconds.
+􁁛  Test "foreground wait does not pin a CPU core (regression for #27)" passed after 0.534 seconds.
+􁁛  Suite "Foreground wait CPU usage" passed after 0.536 seconds.
+􁁛  Test run with 315 tests in 35 suites passed after 0.536 seconds.
+objc[58279]: Class _TtC12UniversalHID17FluidTouchGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1501c8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082965a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID23FluidTouchGestureFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150268) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082966a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID15RotationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1503e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108296860). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID20GameControllerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150488) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108296a40). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID18TranslationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150568) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108296b68). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID21HIDVirtualServicePool is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150608) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108296f88). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtCC12UniversalHID21HIDVirtualServicePool14VirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1506d0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108297088). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID14PointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150830) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082975d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID12ScaleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150998) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108297798). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID16DigitizerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150dc0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108297ec8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID12ScrollFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150e88) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108298120). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID14KeyboardFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150f40) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108298230). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID27TouchSensitiveButtonGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082983d0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID21GameControllerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1511b0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082987b0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID17HIDVirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151258) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108298970). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHIDP33_77F0A1D2252CCF67CE1080DE620C755225HIDVirtualServiceDelegate is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108296360). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID22AbsolutePointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1513a0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108298c70). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID13PointerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151468) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108298d80). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID22NavigationSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151560) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108298e78). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID21GenericGestureGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151628) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082993c0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID16DockSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1516e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108299480). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID19HIDReportDispatcher is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151788) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108299580). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID26TouchSensitiveButtonFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151848) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082996f0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID15DigitizerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151900) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x1082997b8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID13ScrollGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1519f8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108299938). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[58279]: Class _TtC12UniversalHID17ZoomToggleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151ad8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x108299a28). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.

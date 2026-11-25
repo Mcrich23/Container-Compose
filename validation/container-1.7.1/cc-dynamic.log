@@ -1,0 +1,1239 @@
+Building for debugging...
+[Computing dependencies]
+[Provisioning 1 / 184]
+[Using on-disk description]
+[1 / 6]
+[1 / 5] CAsyncHTTPClient
+Build complete! (1.84 sec)
+objc[59117]: Class _TtC12UniversalHID17FluidTouchGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1501c8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1a5a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID23FluidTouchGestureFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150268) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1a6a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID15RotationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1503e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1a860). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID20GameControllerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150488) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1aa40). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID18TranslationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150568) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1ab68). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID21HIDVirtualServicePool is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150608) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1af88). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtCC12UniversalHID21HIDVirtualServicePool14VirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1506d0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1b088). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID14PointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150830) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1b5d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID12ScaleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150998) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1b798). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID16DigitizerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150dc0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1bec8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID12ScrollFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150e88) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1c120). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID14KeyboardFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150f40) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1c230). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID27TouchSensitiveButtonGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1c3d0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID21GameControllerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1511b0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1c7b0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID17HIDVirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151258) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1c970). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHIDP33_77F0A1D2252CCF67CE1080DE620C755225HIDVirtualServiceDelegate is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1a360). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID22AbsolutePointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1513a0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1cc70). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID13PointerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151468) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1cd80). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID22NavigationSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151560) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1ce78). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID21GenericGestureGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151628) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1d3c0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID16DockSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1516e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1d480). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID19HIDReportDispatcher is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151788) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1d580). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID26TouchSensitiveButtonFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151848) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1d6f0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID15DigitizerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151900) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1d7b8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID13ScrollGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1519f8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1d938). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59117]: Class _TtC12UniversalHID17ZoomToggleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151ad8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x106b1da28). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID17FluidTouchGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1501c8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf25a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID23FluidTouchGestureFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150268) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf26a0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID15RotationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1503e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf2860). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID20GameControllerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150488) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf2a40). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID18TranslationGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150568) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf2b68). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID21HIDVirtualServicePool is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150608) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf2f88). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtCC12UniversalHID21HIDVirtualServicePool14VirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1506d0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf3088). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID14PointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150830) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf35d8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID12ScaleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150998) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf3798). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID16DigitizerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150dc0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf3ec8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID12ScrollFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150e88) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf4120). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID14KeyboardFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150f40) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf4230). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID27TouchSensitiveButtonGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf43d0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID21GameControllerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1511b0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf47b0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID17HIDVirtualService is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151258) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf4970). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHIDP33_77F0A1D2252CCF67CE1080DE620C755225HIDVirtualServiceDelegate is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea150050) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf2360). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID22AbsolutePointerGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1513a0) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf4c70). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID13PointerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151468) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf4d80). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID22NavigationSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151560) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf4e78). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID21GenericGestureGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151628) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf53c0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID16DockSwipeGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1516e8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf5480). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID19HIDReportDispatcher is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151788) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf5580). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID26TouchSensitiveButtonFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151848) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf56f0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID15DigitizerFilter is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151900) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf57b8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID13ScrollGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea1519f8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf5938). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[59118]: Class _TtC12UniversalHID17ZoomToggleGesture is implemented in both /System/Library/PrivateFrameworks/UniversalHID.framework/Versions/A/UniversalHID (0x2ea151ad8) and /Library/Developer/PrivateFrameworks/CoreDevice.framework/Versions/A/Frameworks/UniversalHID.framework/Versions/A/UniversalHID (0x10abf5a28). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+Launching container-apiserver...
+Launching container-apiserver...
+Launching container-apiserver...
+Launching container-apiserver...
+Launching container-apiserver...
+Testing access to container-apiserver...
+Testing access to container-apiserver...
+Testing access to container-apiserver...
+Testing access to container-apiserver...
+Verifying machine API server is running...
+Testing access to container-apiserver...
+Verifying machine API server is running...
+Verifying machine API server is running...
+Verifying machine API server is running...
+Verifying machine API server is running...
+􀟈  Suite "Compose Build Tests" started.
+􀟈  Suite "Compose Up Tests - Real DNS path" started.
+􀟈  Suite "Compose Up Tests - Real-World Compose Files" started.
+􀟈  Suite "Compose Up Tests - Entrypoint + Command" started.
+􀟈  Test "Test WordPress with MySQL compose file" started.
+􀟈  Test "With DNS available, services use dotted names and skip /etc/hosts patching" started.
+􀟈  Test "build preserves the platform architecture and variant" started.
+􀟈  Test "sh -c + multi-line command runs the script (regression for #77)" started.
+􀟈  Suite "Compose Down Tests" started.
+􀟈  Test "What goes up must come down - two containers" started.
+Skipping: requires 'dnstest' to be registered.
+Enable with: sudo container system dns create dnstest
+􁁛  Test "With DNS available, services use dotted names and skip /etc/hosts patching" passed after 0.017 seconds.
+􁁛  Suite "Compose Up Tests - Real DNS path" passed after 0.017 seconds.
+Building services
+
+----------------------------------------
+Building app -> compose-platform-474c13e1-6357-4d1c-a85c-510d646e5c71:latest
+Info: Docker Compose file version parsed as: 3.8
+Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_53110D2F
+Info: Docker Compose project name parsed as: cc-entrypoint-test
+Note: The 'name' field affects generated container names and default named-volume names. Full project-level isolation for other resources is not implemented by this tool.
+Info: Docker Compose file version parsed as: 3.8
+Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_08E4E2DF
+Note: DNS domain 'container-compose-tests-53110d2f' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-53110d2f
+Note: DNS domain 'cc-entrypoint-test' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create cc-entrypoint-test
+
+--- Processing Volumes ---
+
+--- Processing Services ---
+["probe"]
+Pulling Image alpine:latest...
+Creating volume: wordpress_data (Actual name: Container-Compose_Tests_53110D2F_wordpress_data)
+Note: DNS domain 'container-compose-tests-08e4e2df' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-08e4e2df
+
+--- Processing Volumes ---
+[1/2] Fetching image [0s]
+Volume 'Container-Compose_Tests_53110D2F_wordpress_data' created
+Creating volume: db_data (Actual name: Container-Compose_Tests_08E4E2DF_db_data)
+Creating volume: db_data (Actual name: Container-Compose_Tests_53110D2F_db_data)
+Volume 'Container-Compose_Tests_08E4E2DF_db_data' created
+Volume 'Container-Compose_Tests_53110D2F_db_data' created
+--- Volumes Processed ---
+
+
+--- Processing Services ---
+["db", "wordpress"]
+Creating volume: wordpress_data (Actual name: Container-Compose_Tests_08E4E2DF_wordpress_data)
+Pulling Image mysql:8.0...
+[1/2] Fetching image [0s]
+[1/2] Fetching image [1s]
+Volume 'Container-Compose_Tests_08E4E2DF_wordpress_data' created
+--- Volumes Processed ---
+
+
+--- Processing Services ---
+["db", "wordpress"]
+Pulling Image mysql:8.0...
+[1/2] Fetching image [0s]
+[1/2] Fetching image [1s]
+[1/2] Fetching image 0% (2 of 4 blobs, 10 KB/4.0 MB, 7 KB/s) [2s]
+[1/2] Fetching image [1s]
+[2/2] Unpacking image [2s]
+[2/2] Unpacking image for platform linux/arm64 [2s]
+[1/2] Fetching image 0% (2 of 14 blobs, 6 KB/218.5 MB, 2 KB/s) [2s]
+[2/2] Unpacking image for platform linux/arm64 100% (514 entries, 8.3 MB) [3s]
+Note: Service 'probe' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: probe
+Starting probe
+----------------------------------------
+
+probe: [0/6] [0s]
+
+probe: [1/6] Fetching image [0s]
+
+probe: [2/6] Unpacking image [0s]
+
+probe: [3/6] Fetching kernel [0s]
+
+probe: [4/6] Fetching init image [0s]
+
+probe: [5/6] Unpacking init image [0s]
+
+probe: [6/6] Starting container [0s]
+
+[1/2] Fetching image 0% (2 of 14 blobs, 6 KB/218.5 MB, 2 KB/s) [2s]
+probe: [6/6] Starting container [0s]
+
+[1/2] Fetching image 11% (5 of 14 blobs, 26.0/218.5 MB, 51 KB/s) [3s]
+probe: cc-entrypoint-test-probe
+
+[1/2] Fetching image 14% (5 of 14 blobs, 30.7/218.5 MB, 433 KB/s) [3s]
+Info: Docker Compose project name parsed as: cc-entrypoint-test
+Note: The 'name' field currently only affects container naming (e.g., 'cc-entrypoint-test-serviceName'). Full project-level isolation for other resources (networks, implicit volumes) is not implemented by this tool.
+Stopping container: cc-entrypoint-test-probe
+[1/2] Fetching image 28% (10 of 14 blobs, 61.3/218.5 MB, 44.9 MB/s) [4s]
+[1/2] Fetching image 27% (10 of 14 blobs, 60.7/218.5 MB, 36.5 MB/s) [4s]
+[1/2] Fetching image 51% (11 of 14 blobs, 112.7/218.5 MB, 36.8 MB/s) [5s]
+#1 [resolver] fetching image...docker.io/library/alpine:3.20
+[1/2] Fetching image 49% (11 of 14 blobs, 107.6/218.5 MB, 32.3 MB/s) [5s]
+[1/2] Fetching image 72% (13 of 14 blobs, 158.7/218.5 MB, 44.9 MB/s) [6s]
+[1/2] Fetching image 74% (13 of 14 blobs, 163.1/218.5 MB, 48.8 MB/s) [6s]
+[1/2] Fetching image 92% (13 of 14 blobs, 202.6/218.5 MB, 46.9 MB/s) [7s]
+[2/2] Unpacking image [7s]
+[2/2] Unpacking image for platform linux/arm64 [7s]
+[1/2] Fetching image 99% (13 of 14 blobs, 218.5/218.5 MB, 42.7 MB/s) [8s]
+[2/2] Unpacking image [8s]
+[2/2] Unpacking image for platform linux/arm64 [8s]
+#1 DONE 0.0s
+[2/2] Unpacking image for platform linux/arm64 16% (5,399 of 25,661 entries, 126.0/758.0 MB, 12 bytes/s) [8s]
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 185B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+#4 resolve docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc 0.0s done
+#4 sha256:3f26bc2dec0b515f1c2818f6e13a8f1da1f88179a008445d4e587233386bff78 4.09MB / 4.09MB 0.0s done
+#4 extracting sha256:3f26bc2dec0b515f1c2818f6e13a8f1da1f88179a008445d4e587233386bff78 0.0s done
+#4 DONE 0.1s
+
+#5 [linux/arm64 1/2] RUN test "linux" = linux && test "arm64" = arm64 && test -z ""
+#5 DONE 0.0s
+
+#6 exporting to oci image format
+#6 exporting layers 0.0s done
+#6 exporting manifest sha256:831b5434aa9b6a5201b7c877693d794c0aa894600fdae0e7ebf82a02e67e2a9a
+#6 exporting manifest sha256:831b5434aa9b6a5201b7c877693d794c0aa894600fdae0e7ebf82a02e67e2a9a done
+#6 exporting config sha256:92aa2aca657fe3dccfe6bc67513e645418c27a959df691e58b709159fff42dcc done
+#6 exporting manifest list sha256:5e3a41f4a5fc750b7b68709a705c02b148c24094ce3aac3035889af2ce8b8c4e done
+#6 sending tarball 0.0s done
+#6 DONE 0.1s
+[2/2] Unpacking image for platform linux/arm64 2% (1,617 of 25,661 entries, 19.3/758.0 MB, 10 bytes/s) [9s]
+[2/2] Unpacking image for platform linux/arm64 58% (14,437 of 25,661 entries, 441.5/758.0 MB, 401.8 MB/s) [9s]
+compose-platform-474c13e1-6357-4d1c-a85c-510d646e5c71:latest
+Built app successfully.
+----------------------------------------
+Build complete
+Reclaimed 1.17 GB in disk space
+compose-platform-474c13e1-6357-4d1c-a85c-510d646e5c71:latest
+􁁛  Test "build preserves the platform architecture and variant" passed after 11.055 seconds.
+􀟈  Test "Build produces an image in the local store" started.
+Building services
+
+----------------------------------------
+Building simple -> simple:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+[2/2] Unpacking image for platform linux/arm64 49% (9,430 of 25,661 entries, 375.8/758.0 MB, 357.1 MB/s) [10s]
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf 0.1s done
+#4 DONE 0.1s
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 0.0s done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 0.0s done
+#5 sending tarball 0.0s done
+#5 DONE 0.1s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 sha256:b90627b8f4292fd3cb63f0f27f0b11c37f04ba88ef3b78d4948ea0ace18c85e9 4.19MB / 4.19MB 0.0s done
+#4 DONE 0.1s
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, 302.8 MB/s) [10s]
+[2/2] Unpacking image for platform linux/arm64 69% (22,154 of 25,661 entries, 527.7/758.0 MB, 166.0 MB/s) [11s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, 302.8 MB/s) [11s]
+[2/2] Unpacking image for platform linux/arm64 74% (25,560 of 25,661 entries, 561.2/758.0 MB, 166.0 MB/s) [12s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [12s]
+[2/2] Unpacking image for platform linux/arm64 74% (25,560 of 25,661 entries, 561.2/758.0 MB, Zero KB/s) [13s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [13s]
+[2/2] Unpacking image for platform linux/arm64 74% (25,560 of 25,661 entries, 561.2/758.0 MB, Zero KB/s) [14s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [14s]
+Successfully stopped container: cc-entrypoint-test-probe
+􁁛  Test "sh -c + multi-line command runs the script (regression for #77)" passed after 15.624 seconds.
+􁁛  Suite "Compose Up Tests - Entrypoint + Command" passed after 15.624 seconds.
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, 63.4 MB/s) [15s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [15s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, 63.4 MB/s) [16s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [16s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [17s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [17s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [18s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [18s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [19s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [19s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [20s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [20s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [21s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [21s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [22s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [22s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [23s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [23s]
+simple:latest
+Built simple successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build produces an image in the local store" passed after 14.187 seconds.
+􀟈  Test "Build uses explicit image tag from compose file" started.
+Building services
+
+----------------------------------------
+Building app -> compose-build-test-tagged:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [24s]
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+compose-build-test-tagged:latest
+Built app successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build uses explicit image tag from compose file" passed after 0.238 seconds.
+􀟈  Test "Build with service filter only builds specified service" started.
+Building services
+
+----------------------------------------
+Building included -> included:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+included:latest
+Built included successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build with service filter only builds specified service" passed after 0.116 seconds.
+􀟈  Test "Build with explicit service filter also builds its depends_on dependency" started.
+Building services
+
+----------------------------------------
+Building worker -> worker:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+worker:latest
+Built worker successfully.
+----------------------------------------
+
+----------------------------------------
+Building app -> app:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [24s]
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+app:latest
+Built app successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build with explicit service filter also builds its depends_on dependency" passed after 0.212 seconds.
+􀟈  Test "Build passes build args to Dockerfile" started.
+Building services
+
+----------------------------------------
+Building app -> compose-build-test-args:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 entries, 758.0 MB) [24s]
+Note: Service 'db' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: db
+Starting db
+----------------------------------------
+
+db: [0/6] [0s]
+
+db: [1/6] Fetching image [0s]
+
+db: [2/6] Unpacking image [0s]
+
+db: [3/6] Fetching kernel [0s]
+
+db: [4/6] Fetching init image [0s]
+
+db: [5/6] Unpacking init image [0s]
+
+db: [6/6] Starting container [0s]
+
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 112B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:526db60c16bb1e212caca599857e6457abc90a0bbb58f581d11fda62b92fbb9c 0.0s done
+#5 exporting config sha256:d60bc09912993bfaf132b2daee5b250f6576e26aade3460d66c36255543c2787 0.0s done
+#5 exporting manifest list sha256:a34f37de13d642f142db22966da75e8410900abd9f7e0bc85713da6448d834d4 0.0s done
+#5 sending tarball 0.0s done
+#5 DONE 0.1s
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [25s]
+db: [6/6] Starting container [1s]
+
+db: [6/6] Starting container [1s]
+
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [26s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [27s]
+db: Container-Compose_Tests_08E4E2DF-db
+
+Pulling Image wordpress:latest...
+[1/2] Fetching image [0s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [28s]
+[1/2] Fetching image [1s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 of 25,661 entries, 758.0/758.0 MB, Zero KB/s) [29s]
+[2/2] Unpacking image for platform linux/arm64 100% (25,661 entries, 758.0 MB) [29s]
+Note: Service 'db' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: db
+Starting db
+----------------------------------------
+
+db: [0/6] [0s]
+
+db: [1/6] Fetching image [0s]
+
+db: [2/6] Unpacking image [0s]
+
+db: [3/6] Fetching kernel [0s]
+
+db: [4/6] Fetching init image [0s]
+
+db: [5/6] Unpacking init image [0s]
+
+db: [6/6] Starting container [0s]
+
+[1/2] Fetching image (1 of 2 blobs) [2s]
+db: [6/6] Starting container [1s]
+
+db: [6/6] Starting container [1s]
+
+db: Container-Compose_Tests_53110D2F-db
+
+[1/2] Fetching image 0% (2 of 27 blobs, 16 KB/255.6 MB, 5 KB/s) [3s]
+compose-build-test-args:latest
+Built app successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build passes build args to Dockerfile" passed after 6.859 seconds.
+􀟈  Test "Build with no buildable services prints message and exits cleanly" started.
+No services with a 'build' configuration found.
+􁁛  Test "Build with no buildable services prints message and exits cleanly" passed after 0.014 seconds.
+􀟈  Test "Build with subdirectory context resolves default Dockerfile inside the context" started.
+Building services
+
+----------------------------------------
+Building ctxsub -> ctxsub:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+Pulling Image wordpress:latest...
+[1/2] Fetching image [0s]
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+ctxsub:latest
+Built ctxsub successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build with subdirectory context resolves default Dockerfile inside the context" passed after 0.122 seconds.
+􀟈  Test "Build with parent-relative context resolves Dockerfile in the sibling dir" started.
+Building services
+
+----------------------------------------
+Building ctxsibling -> ctxsibling:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+ctxsibling:latest
+Built ctxsibling successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build with parent-relative context resolves Dockerfile in the sibling dir" passed after 0.137 seconds.
+􀟈  Test "Build with custom dockerfile filename resolves it inside the context" started.
+Building services
+
+----------------------------------------
+Building ctxcustom -> ctxcustom:latest
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+ctxcustom:latest
+Built ctxcustom successfully.
+----------------------------------------
+Build complete
+􁁛  Test "Build with custom dockerfile filename resolves it inside the context" passed after 0.117 seconds.
+􁁛  Suite "Compose Build Tests" passed after 33.062 seconds.
+[1/2] Fetching image 9% (5 of 27 blobs, 25.2/255.6 MB, 10.4 MB/s) [4s]
+[1/2] Fetching image [1s]
+[1/2] Fetching image 44% (8 of 27 blobs, 113.1/255.6 MB, 80.6 MB/s) [5s]
+[1/2] Fetching image 0% (2 of 27 blobs, 16 KB/255.6 MB, 7 KB/s) [2s]
+[1/2] Fetching image 60% (13 of 27 blobs, 154.3/255.6 MB, 51.5 MB/s) [6s]
+[1/2] Fetching image 9% (4 of 27 blobs, 23.0/255.6 MB, 23 KB/s) [3s]
+[1/2] Fetching image 63% (18 of 27 blobs, 161.5/255.6 MB, 51.5 MB/s) [7s]
+[1/2] Fetching image 35% (8 of 27 blobs, 90.8/255.6 MB, 47.4 MB/s) [4s]
+[1/2] Fetching image 70% (19 of 27 blobs, 181.3/255.6 MB, 8.5 MB/s) [8s]
+[1/2] Fetching image 57% (11 of 27 blobs, 147.5/255.6 MB, 67.5 MB/s) [5s]
+[1/2] Fetching image 86% (22 of 27 blobs, 221.8/255.6 MB, 28.4 MB/s) [9s]
+[1/2] Fetching image 63% (17 of 27 blobs, 161.5/255.6 MB, 40.0 MB/s) [6s]
+[1/2] Fetching image 87% (25 of 27 blobs, 224.9/255.6 MB, 30.7 MB/s) [10s]
+[1/2] Fetching image 81% (19 of 27 blobs, 207.7/255.6 MB, 18.5 MB/s) [7s]
+[2/2] Unpacking image [10s]
+[2/2] Unpacking image for platform linux/arm64 [10s]
+[1/2] Fetching image 93% (26 of 27 blobs, 239.3/255.6 MB, 37.6 MB/s) [8s]
+[2/2] Unpacking image [8s]
+[2/2] Unpacking image for platform linux/arm64 [8s]
+[2/2] Unpacking image for platform linux/arm64 12% (3,047 of 20,802 entries, 94.3/758.4 MB, 8 bytes/s) [11s]
+[2/2] Unpacking image for platform linux/arm64 8% (769 of 20,802 entries, 63.8/758.4 MB, 10 bytes/s) [9s]
+[2/2] Unpacking image for platform linux/arm64 84% (15,858 of 20,802 entries, 644.5/758.4 MB, 530.1 MB/s) [12s]
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, 530.1 MB/s) [13s]
+[2/2] Unpacking image for platform linux/arm64 39% (9,032 of 20,802 entries, 298.1/758.4 MB, 10 bytes/s) [10s]
+[2/2] Unpacking image for platform linux/arm64 79% (15,842 of 20,802 entries, 605.6/758.4 MB, 264.7 MB/s) [11s]
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [14s]
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 entries, 758.4 MB) [14s]
+Note: Service 'wordpress' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: wordpress
+Starting wordpress
+----------------------------------------
+
+wordpress: [0/6] [0s]
+
+wordpress: [1/6] Fetching image [0s]
+
+wordpress: [2/6] Unpacking image [0s]
+
+wordpress: [3/6] Fetching kernel [0s]
+
+wordpress: [4/6] Fetching init image [0s]
+
+wordpress: [5/6] Unpacking init image [0s]
+
+wordpress: [6/6] Starting container [0s]
+
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, 339.0 MB/s) [12s]
+wordpress: [6/6] Starting container [1s]
+
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, 339.0 MB/s) [13s]
+wordpress: [6/6] Starting container [2s]
+
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [14s]
+wordpress: [6/6] Starting container [2s]
+
+wordpress: Container-Compose_Tests_08E4E2DF-wordpress
+
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [15s]
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_08E4E2DF
+Stopping container: Container-Compose_Tests_08E4E2DF-db
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [16s]
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [17s]
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [18s]
+Successfully stopped container: Container-Compose_Tests_08E4E2DF-db
+Stopping container: Container-Compose_Tests_08E4E2DF-wordpress
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [19s]
+Successfully stopped container: Container-Compose_Tests_08E4E2DF-wordpress
+􁁛  Test "What goes up must come down - two containers" passed after 53.202 seconds.
+􀟈  Test "stop_grace_period controls the graceful stop deadline" started.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_9797128B
+Note: DNS domain 'container-compose-tests-9797128b' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-9797128b
+
+--- Processing Services ---
+["app"]
+Note: Service 'app' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: app
+Starting app
+----------------------------------------
+
+app: [0/6] [0s]
+
+app: [1/6] Fetching image [0s]
+
+app: [2/6] Unpacking image [0s]
+
+app: [3/6] Fetching kernel [0s]
+
+app: [4/6] Fetching init image [0s]
+
+app: [5/6] Unpacking init image [0s]
+
+app: [6/6] Starting container [0s]
+
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [20s]
+app: [6/6] Starting container [1s]
+
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 of 20,802 entries, 758.4/758.4 MB, Zero KB/s) [21s]
+[2/2] Unpacking image for platform linux/arm64 100% (20,802 entries, 758.4 MB) [21s]
+Note: Service 'wordpress' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: wordpress
+Starting wordpress
+----------------------------------------
+
+wordpress: [0/6] [0s]
+
+wordpress: [1/6] Fetching image [0s]
+
+wordpress: [2/6] Unpacking image [0s]
+
+wordpress: [3/6] Fetching kernel [0s]
+
+wordpress: [4/6] Fetching init image [0s]
+
+wordpress: [5/6] Unpacking init image [0s]
+
+wordpress: [6/6] Starting container [0s]
+
+app: [6/6] Starting container [1s]
+
+app: Container-Compose_Tests_9797128B-app
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_9797128B
+Stopping container: Container-Compose_Tests_9797128B-app
+wordpress: [6/6] Starting container [1s]
+
+wordpress: [6/6] Starting container [1s]
+
+wordpress: Container-Compose_Tests_53110D2F-wordpress
+
+Successfully stopped container: Container-Compose_Tests_9797128B-app
+􁁛  Test "stop_grace_period controls the graceful stop deadline" passed after 4.539 seconds.
+􀟈  Test "What goes up must come down - container_name" started.
+Info: Docker Compose file version parsed as: 3.8
+Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_22FF696A
+Note: DNS domain 'container-compose-tests-22ff696a' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-22ff696a
+
+--- Processing Services ---
+["web"]
+Pulling Image nginx:alpine...
+[1/2] Fetching image [0s]
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_53110D2F
+Stopping container: Container-Compose_Tests_53110D2F-db
+[1/2] Fetching image [1s]
+Successfully stopped container: Container-Compose_Tests_53110D2F-db
+Stopping container: Container-Compose_Tests_53110D2F-wordpress
+[1/2] Fetching image (1 of 2 blobs) [2s]
+Successfully stopped container: Container-Compose_Tests_53110D2F-wordpress
+􁁛  Test "Test WordPress with MySQL compose file" passed after 60.875 seconds.
+􀟈  Test "Relative bind mount resolves from the compose file when up runs from the project root" started.
+􀢄  Test "Relative bind mount resolves from the compose file when up runs from the project root" recorded an issue at ComposeUpTests.swift:94:6: Caught error: 7:34: error: parser: while parsing a flow sequence in line 7, column 13
+did not find expected ',' or ']':
+      test: ["CMD-SHELL", "test "$(cat /data/marker.txt)" = mounted"]
+                                 ^
+􀢄  Test "Relative bind mount resolves from the compose file when up runs from the project root" failed after 0.034 seconds with 1 issue.
+􀟈  Test "Test compose with complex dependency chain" started.
+Info: Docker Compose file version parsed as: 3.8
+Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_393CEA03
+[1/2] Fetching image 19% (5 of 11 blobs, 5.4/27.7 MB, 3.8 MB/s) [3s]
+Note: DNS domain 'container-compose-tests-393cea03' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-393cea03
+
+--- Processing Services ---
+["db", "app", "web"]
+Pulling Image postgres:14...
+[1/2] Fetching image [0s]
+[1/2] Fetching image [1s]
+[1/2] Fetching image 30% (10 of 11 blobs, 8.6/27.7 MB, 3.8 MB/s) [4s]
+[2/2] Unpacking image [4s]
+[2/2] Unpacking image for platform linux/arm64 [4s]
+[1/2] Fetching image (1 of 2 blobs) [2s]
+[2/2] Unpacking image for platform linux/arm64 100% (2,192 of 2,192 entries, 65.3/65.3 MB, 192 KB/s) [5s]
+[2/2] Unpacking image for platform linux/arm64 100% (2,192 entries, 65.3 MB) [5s]
+Info: Using explicit container_name: B0E73BD8-79FE-483F-818C-A97124BA725A
+Note: Service 'web' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: web
+Starting web
+----------------------------------------
+
+web: [0/6] [0s]
+
+web: [1/6] Fetching image [0s]
+
+web: [2/6] Unpacking image [0s]
+
+web: [3/6] Fetching kernel [0s]
+
+web: [4/6] Fetching init image [0s]
+
+web: [5/6] Unpacking init image [0s]
+
+web: [6/6] Starting container [0s]
+
+[1/2] Fetching image 0% (4 of 17 blobs, 57 KB/154.2 MB, 4 KB/s) [3s]
+web: [6/6] Starting container [1s]
+
+[1/2] Fetching image 0% (4 of 17 blobs, 833 KB/154.2 MB, 722 KB/s) [4s]
+web: [6/6] Starting container [1s]
+
+web: B0E73BD8-79FE-483F-818C-A97124BA725A
+
+[1/2] Fetching image 1% (4 of 17 blobs, 2.6/154.2 MB, 1.7 MB/s) [5s]
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_22FF696A
+Stopping container: B0E73BD8-79FE-483F-818C-A97124BA725A
+Successfully stopped container: B0E73BD8-79FE-483F-818C-A97124BA725A
+􁁛  Test "What goes up must come down - container_name" passed after 8.473 seconds.
+􁁛  Suite "Compose Down Tests" passed after 66.215 seconds.
+[1/2] Fetching image 3% (4 of 17 blobs, 5.1/154.2 MB, 2.4 MB/s) [6s]
+[1/2] Fetching image 4% (4 of 17 blobs, 7.0/154.2 MB, 2.4 MB/s) [7s]
+[1/2] Fetching image 5% (4 of 17 blobs, 8.8/154.2 MB, 1.6 MB/s) [8s]
+[1/2] Fetching image 6% (4 of 17 blobs, 10.7/154.2 MB, 2.0 MB/s) [9s]
+[1/2] Fetching image 8% (4 of 17 blobs, 12.9/154.2 MB, 1.9 MB/s) [10s]
+[1/2] Fetching image 10% (4 of 17 blobs, 16.0/154.2 MB, 2.0 MB/s) [11s]
+[1/2] Fetching image 14% (6 of 17 blobs, 22.3/154.2 MB, 3.4 MB/s) [12s]
+[1/2] Fetching image 24% (6 of 17 blobs, 37.8/154.2 MB, 6.9 MB/s) [13s]
+[1/2] Fetching image 34% (12 of 17 blobs, 53.4/154.2 MB, 17.3 MB/s) [14s]
+[1/2] Fetching image 74% (16 of 17 blobs, 115.0/154.2 MB, 17.6 MB/s) [15s]
+[2/2] Unpacking image [16s]
+[2/2] Unpacking image for platform linux/arm64 [16s]
+[2/2] Unpacking image for platform linux/arm64 65% (5,165 of 10,532 entries, 302.3/462.5 MB, 6 bytes/s) [17s]
+[2/2] Unpacking image for platform linux/arm64 100% (10,532 of 10,532 entries, 462.5/462.5 MB, 6 bytes/s) [18s]
+[2/2] Unpacking image for platform linux/arm64 100% (10,532 entries, 462.5 MB) [18s]
+Note: Service 'db' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: db
+Starting db
+----------------------------------------
+
+db: [0/6] [0s]
+
+db: [1/6] Fetching image [0s]
+
+db: [2/6] Unpacking image [0s]
+
+db: [3/6] Fetching kernel [0s]
+
+db: [4/6] Fetching init image [0s]
+
+db: [5/6] Unpacking init image [0s]
+
+db: [6/6] Starting container [0s]
+
+db: [6/6] Starting container [0s]
+
+db: Container-Compose_Tests_393CEA03-db
+
+Pulling Image python:3.12-alpine...
+[1/2] Fetching image [0s]
+[1/2] Fetching image [1s]
+[1/2] Fetching image 22% (3 of 7 blobs, 4.0/17.7 MB, 8 KB/s) [2s]
+[2/2] Unpacking image [2s]
+[2/2] Unpacking image for platform linux/arm64 [2s]
+[2/2] Unpacking image for platform linux/arm64 100% (3,391 entries, 50.7 MB) [3s]
+Note: Service 'app' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: app
+Starting app
+----------------------------------------
+
+app: [0/6] [0s]
+
+app: [1/6] Fetching image [0s]
+
+app: [2/6] Unpacking image [0s]
+
+app: [3/6] Fetching kernel [0s]
+
+app: [4/6] Fetching init image [0s]
+
+app: [5/6] Unpacking init image [0s]
+
+app: [6/6] Starting container [0s]
+
+app: [6/6] Starting container [0s]
+
+app: Container-Compose_Tests_393CEA03-app
+
+Note: Service 'web' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: web
+Starting web
+----------------------------------------
+
+web: [0/6] [0s]
+
+web: [1/6] Fetching image [0s]
+
+web: [2/6] Unpacking image [0s]
+
+web: [3/6] Fetching kernel [0s]
+
+web: [4/6] Fetching init image [0s]
+
+web: [5/6] Unpacking init image [0s]
+
+web: [6/6] Starting container [0s]
+
+web: [6/6] Starting container [0s]
+
+web: Container-Compose_Tests_393CEA03-web
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_393CEA03
+Stopping container: Container-Compose_Tests_393CEA03-db
+Successfully stopped container: Container-Compose_Tests_393CEA03-db
+Stopping container: Container-Compose_Tests_393CEA03-app
+Successfully stopped container: Container-Compose_Tests_393CEA03-app
+Stopping container: Container-Compose_Tests_393CEA03-web
+Successfully stopped container: Container-Compose_Tests_393CEA03-web
+􁁛  Test "Test compose with complex dependency chain" passed after 36.232 seconds.
+􀟈  Test "Test container created with non-default CPU and memory limits" started.
+Info: Docker Compose file version parsed as: 3.8
+Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_719640EA
+Note: DNS domain 'container-compose-tests-719640ea' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-719640ea
+
+--- Processing Services ---
+["app"]
+Note: The 'deploy' configuration for service 'app' was parsed successfully.
+However, this 'container-compose' tool does not currently support 'deploy' functionality (e.g., replicas, resources, update strategies) as it is primarily for orchestration platforms like Docker Swarm or Kubernetes, not direct 'container run' commands.
+The service will be run as a single container based on other configurations.
+Note: Service 'app' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: app
+Starting app
+----------------------------------------
+
+app: [0/6] [0s]
+
+app: [1/6] Fetching image [0s]
+
+app: [2/6] Unpacking image [0s]
+
+app: [3/6] Fetching kernel [0s]
+
+app: [4/6] Fetching init image [0s]
+
+app: [5/6] Unpacking init image [0s]
+
+app: [6/6] Starting container [0s]
+
+app: [6/6] Starting container [0s]
+
+app: Container-Compose_Tests_719640EA-app
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_719640EA
+Stopping container: Container-Compose_Tests_719640EA-app
+Successfully stopped container: Container-Compose_Tests_719640EA-app
+􁁛  Test "Test container created with non-default CPU and memory limits" passed after 1.305 seconds.
+􀟈  Test "Test compose up with explicit IP port mapping" started.
+Info: Docker Compose file version parsed as: 3.8
+Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_9D254EE0
+Note: DNS domain 'container-compose-tests-9d254ee0' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-9d254ee0
+
+--- Processing Services ---
+["web"]
+Note: Service 'web' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: web
+Starting web
+----------------------------------------
+
+web: [0/6] [0s]
+
+web: [1/6] Fetching image [0s]
+
+web: [2/6] Unpacking image [0s]
+
+web: [3/6] Fetching kernel [0s]
+
+web: [4/6] Fetching init image [0s]
+
+web: [5/6] Unpacking init image [0s]
+
+web: [6/6] Starting container [0s]
+
+web: [6/6] Starting container [0s]
+
+web: Container-Compose_Tests_9D254EE0-web
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_9D254EE0
+Stopping container: Container-Compose_Tests_9D254EE0-web
+Successfully stopped container: Container-Compose_Tests_9D254EE0-web
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_9D254EE0
+Stopping container: Container-Compose_Tests_9D254EE0-web
+Successfully stopped container: Container-Compose_Tests_9D254EE0-web
+􁁛  Test "Test compose up with explicit IP port mapping" passed after 1.436 seconds.
+􀟈  Test "Compose up with a locally-built multi-path image does not attempt a registry pull" started.
+Building services
+
+----------------------------------------
+Building foo -> containercompose-localpullttest/foo:local
+#1 [resolver] fetching image...docker.io/library/alpine:latest
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 53B done
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 oci-layout://docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#4 resolve docker.io/library/alpine:latest@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#4 CACHED
+
+#5 exporting to oci image format
+#5 exporting layers done
+#5 exporting manifest sha256:e828a818277b73d04d2f100572012ccfa0f744e6319b55946b1ce50047b31379 done
+#5 exporting config sha256:4e0c030cc791740844bac714ba476286052b69d6ca1657673579d7a6e48a36a4 done
+#5 exporting manifest list sha256:4eeac9f7fb2ac2387c61585550012960a4595fb6d7d1f8626f9cae4eaec42730 done
+#5 sending tarball 0.0s done
+#5 DONE 0.0s
+containercompose-localpullttest/foo:local
+Built foo successfully.
+----------------------------------------
+Build complete
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_950A93F7
+Note: DNS domain 'container-compose-tests-950a93f7' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-950a93f7
+
+--- Processing Services ---
+["app"]
+Note: Service 'app' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: app
+Starting app
+----------------------------------------
+
+app: [0/6] [0s]
+
+app: [1/6] Fetching image [0s]
+
+app: [2/6] Unpacking image [0s]
+
+app: [3/6] Fetching kernel [0s]
+
+app: [4/6] Fetching init image [0s]
+
+app: [5/6] Unpacking init image [0s]
+
+app: [6/6] Starting container [0s]
+
+app: [6/6] Starting container [0s]
+
+app: Container-Compose_Tests_950A93F7-app
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_950A93F7
+Stopping container: Container-Compose_Tests_950A93F7-app
+Successfully stopped container: Container-Compose_Tests_950A93F7-app
+􁁛  Test "Compose up with a locally-built multi-path image does not attempt a registry pull" passed after 12.133 seconds.
+􀟈  Test "up builds the selected Dockerfile stage" started.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_7CA759CE
+Note: DNS domain 'container-compose-tests-7ca759ce' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-7ca759ce
+
+--- Processing Services ---
+["app"]
+
+----------------------------------------
+Building image for service: app (Tag: compose-target-5fd8bdd6-1d2e-47c2-a2eb-ac7d7f1d629e:latest)
+#1 [resolver] fetching image...docker.io/library/alpine:3.20
+#1 DONE 0.0s
+
+#2 [resolver] fetching image...docker.io/library/alpine:3.20
+#2 DONE 0.0s
+
+#3 [internal] load build definition from Dockerfile
+#3 transferring dockerfile: 131B done
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 oci-layout://docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+#5 resolve docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc done
+#5 CACHED
+
+#6 exporting to oci image format
+#6 exporting layers done
+#6 exporting manifest sha256:62a48e4a31f7b3312d33ed73cc0d23bfc19a47a59d66cff7273f8b719eac4444 done
+#6 exporting config sha256:0fa02197c649dc9f73e89fed28b9769db8a3eb00b5ff02b113cc07ae5b0d5de6 done
+#6 exporting manifest list sha256:1e929660cc38178eb1241fddc39355c575b8cddbe7fa6638cc31784a918a1253 done
+#6 sending tarball 0.0s done
+#6 DONE 0.0s
+compose-target-5fd8bdd6-1d2e-47c2-a2eb-ac7d7f1d629e:latest
+Image build for app completed.
+----------------------------------------
+Info: Using explicit container_name: compose-target-5fd8bdd6-1d2e-47c2-a2eb-ac7d7f1d629e
+Note: Service 'app' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: app
+Starting app
+----------------------------------------
+
+app: [0/6] [0s]
+
+app: [1/6] Fetching image [0s]
+
+app: [2/6] Unpacking image [0s]
+
+app: [3/6] Fetching kernel [0s]
+
+app: [4/6] Fetching init image [0s]
+
+app: [5/6] Unpacking init image [0s]
+
+app: [6/6] Starting container [0s]
+
+app: [6/6] Starting container [0s]
+
+app: compose-target-5fd8bdd6-1d2e-47c2-a2eb-ac7d7f1d629e
+
+compose-target-5fd8bdd6-1d2e-47c2-a2eb-ac7d7f1d629e
+Reclaimed 1.17 GB in disk space
+compose-target-5fd8bdd6-1d2e-47c2-a2eb-ac7d7f1d629e:latest
+􁁛  Test "up builds the selected Dockerfile stage" passed after 2.262 seconds.
+􀟈  Test "up stamps compose project/service labels and passes user labels through" started.
+Info: Docker Compose file version parsed as: 3.8
+Note: The 'version' field influences how a Docker Compose CLI interprets the file, but this custom 'container-compose' tool directly interprets the schema.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_BFA9C73E
+Note: DNS domain 'container-compose-tests-bfa9c73e' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-bfa9c73e
+
+--- Processing Services ---
+["web"]
+Info: Using explicit container_name: container-compose-test-Container-Compose_Tests_74B2E359
+Note: Service 'web' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: web
+Starting web
+----------------------------------------
+
+web: [0/6] [0s]
+
+web: [1/6] Fetching image [0s]
+
+web: [2/6] Unpacking image [0s]
+
+web: [3/6] Fetching kernel [0s]
+
+web: [4/6] Fetching init image [0s]
+
+web: [5/6] Unpacking init image [0s]
+
+web: [6/6] Starting container [0s]
+
+web: [6/6] Starting container [0s]
+
+web: container-compose-test-Container-Compose_Tests_74B2E359
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_BFA9C73E
+Stopping container: container-compose-test-Container-Compose_Tests_74B2E359
+Successfully stopped container: container-compose-test-Container-Compose_Tests_74B2E359
+􁁛  Test "up stamps compose project/service labels and passes user labels through" passed after 1.308 seconds.
+􀟈  Test "healthcheck execs against the resolved container name, not <project>-<service>" started.
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_BAB8D8B9
+Note: DNS domain 'container-compose-tests-bab8d8b9' is not registered. Inter-container hostname
+      resolution will fall back to /etc/hosts patching. For real DNS:
+          sudo container system dns create container-compose-tests-bab8d8b9
+
+--- Processing Services ---
+["web"]
+Info: Using explicit container_name: container-compose-test-Container-Compose_Tests_CB0B4BA6
+Note: Service 'web' is not explicitly connected to any networks. It will likely use the default bridge network.
+
+Starting service: web
+Starting web
+----------------------------------------
+
+web: [0/6] [0s]
+
+web: [1/6] Fetching image [0s]
+
+web: [2/6] Unpacking image [0s]
+
+web: [3/6] Fetching kernel [0s]
+
+web: [4/6] Fetching init image [0s]
+
+web: [5/6] Unpacking init image [0s]
+
+web: [6/6] Starting container [0s]
+
+web: [6/6] Starting container [0s]
+
+web: container-compose-test-Container-Compose_Tests_CB0B4BA6
+
+Info: No 'name' field found in docker-compose.yml. Using directory name as project name: Container-Compose_Tests_BAB8D8B9
+Stopping container: container-compose-test-Container-Compose_Tests_CB0B4BA6
+Successfully stopped container: container-compose-test-Container-Compose_Tests_CB0B4BA6
+􁁛  Test "healthcheck execs against the resolved container name, not <project>-<service>" passed after 1.486 seconds.
+􀢄  Suite "Compose Up Tests - Real-World Compose Files" failed after 117.075 seconds with 1 issue.
+􀢄  Test run with 24 tests in 5 suites failed after 117.105 seconds with 1 issue.
+Note: Some test targets reported failures:
+  - Container-Compose-DynamicTests (Swift Testing)
