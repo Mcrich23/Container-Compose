@@ -60,10 +60,8 @@ public struct ComposeProjectOptions: ParsableArguments {
 
     var cwdURL: URL { URL(fileURLWithPath: cwd) }
 
-    /// Absolute paths to the compose files to load, in order: every explicit
-    /// `--file` if any were given, otherwise the first supported filename found
-    /// in `cwd` (or the default name, so callers get a consistent "not found"
-    /// error). Multiple files are deep-merged by `loadCompose()`.
+    /// Absolute paths of the `-f` files, or the discovered default file.
+    /// Falls back to the default name so a missing file reports a consistent error.
     public var composePaths: [String] {
         if !composeFileOptions.composeFilenames.isEmpty {
             return composeFileOptions.composeFilenames.map { resolvedPath(for: $0, relativeTo: cwdURL) }
@@ -79,13 +77,11 @@ public struct ComposeProjectOptions: ParsableArguments {
         return [cwdURL.appending(path: Self.supportedComposeFilenames[0]).path]
     }
 
-    /// The primary compose file (first `-f`, or the discovered default). Used for
-    /// the base directory of relative paths and for "not found" messages.
+    /// The first of `composePaths`.
     public var composePath: String { composePaths[0] }
 
-    /// Directory containing the primary compose file (the base for relative
-    /// `context`, `env_file`, etc.). Per the Compose spec, relative paths are
-    /// resolved against the first file's directory even when merging.
+    /// Directory of the first compose file; relative paths resolve from here,
+    /// even when merging.
     public var composeDirectory: String {
         URL(fileURLWithPath: composePath).deletingLastPathComponent().path
     }
@@ -109,7 +105,6 @@ public struct ComposeProjectOptions: ParsableArguments {
             else {
                 throw YamlError.composeFileNotFound(URL(fileURLWithPath: path).deletingLastPathComponent().path)
             }
-            // An empty override file parses to nil; skip it.
             guard let node = try Yams.compose(yaml: yaml) else { continue }
             merged = merged.map { Self.mergeYAML($0, node) } ?? node
         }
