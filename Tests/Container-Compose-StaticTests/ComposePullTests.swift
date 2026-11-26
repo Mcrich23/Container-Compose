@@ -16,6 +16,7 @@
 
 import Testing
 import Yams
+import TerminalProgress
 @testable import ContainerComposeCore
 
 @Suite("Compose pull Tests")
@@ -108,5 +109,65 @@ struct ComposePullTests {
         let cmd = try ComposePull.parse(["-f", "my-compose.yaml", "--cwd", "/tmp"])
         #expect(cmd.project.composeFileOptions.composeFilename == "my-compose.yaml")
         #expect(cmd.project.cwd == "/tmp")
+    }
+}
+
+extension ComposePullTests {
+
+    private func target(_ name: String, image: String?) -> ComposeProject.ServiceTarget {
+        ComposeProject.ServiceTarget(
+            serviceName: name,
+            service: Service(image: image),
+            candidateContainerNames: ["demo-\(name)"])
+    }
+
+    @Test("Services sharing an image pull it once, order preserved")
+    func planDeduplicatesSharedImages() {
+        let (items, buildOnly) = ComposePull.pullPlan(
+            for: [target("a", image: "alpine:3"), target("b", image: "nginx:1"), target("c", image: "alpine:3")])
+        #expect(items.map(\.image) == ["alpine:3", "nginx:1"])
+        #expect(items[0].services == ["a", "c"])
+        #expect(buildOnly.isEmpty)
+    }
+
+    @Test("Build-only services are reported separately, not pulled")
+    func planSeparatesBuildOnly() {
+        let (items, buildOnly) = ComposePull.pullPlan(
+            for: [target("web", image: "nginx:1"), target("builder", image: nil)])
+        #expect(items.map(\.image) == ["nginx:1"])
+        #expect(buildOnly == ["builder"])
+    }
+
+    // MARK: - Progress rendering
+
+    @Test("Progress line shows a bar, percent and sizes")
+    func renderSizeProgress() {
+        var line = PullProgressDisplay.Line(label: "web (nginx:1)")
+        line.phase = "Fetching"
+        line.size = 50
+        line.totalSize = 100
+        let out = PullProgressDisplay.render(line)
+        #expect(out.hasPrefix("web (nginx:1)  Fetching [=========="))
+        #expect(out.contains("50%"))
+    }
+
+    @Test("Progress events accumulate into the line")
+    func applyEvents() {
+        var line = PullProgressDisplay.Line(label: "x")
+        for event: ProgressUpdateEvent in [.addTotalSize(200), .addSize(50), .addSize(50), .setTotalItems(4), .addItems(1)] {
+            PullProgressDisplay.apply(event, to: &line)
+        }
+        #expect(line.size == 100)
+        #expect(line.totalSize == 200)
+        #expect(line.items == 1 && line.totalItems == 4)
+    }
+
+    @Test("Finished and failed lines replace the bar")
+    func renderTerminalStates() {
+        var line = PullProgressDisplay.Line(label: "x")
+        line.done = true
+        #expect(PullProgressDisplay.render(line) == "x  done")
+        line.error = "boom"
+        #expect(PullProgressDisplay.render(line) == "x  failed: boom")
     }
 }
